@@ -11,6 +11,8 @@ import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import com.example.videolearn.utils.FileUtils
 import com.example.videolearn.utils.ResultUtils
+import com.example.videolearn.video.NAL_I
+import com.example.videolearn.video.NAL_SPS
 import java.nio.ByteBuffer
 
 class ProjectionH264Push(private val context: Context, private val prot: String) : Runnable {
@@ -34,7 +36,6 @@ class ProjectionH264Push(private val context: Context, private val prot: String)
                 socketPush.start()
                 mediaProjection = mediaProjectionManager.getMediaProjection(resultCode, data)
                 initMediaConfig()
-                Toast.makeText(context, "开始推流", Toast.LENGTH_SHORT).show()
                 Thread(this).start()
             }
         }
@@ -103,8 +104,6 @@ class ProjectionH264Push(private val context: Context, private val prot: String)
     }
 
     private var spsData: ByteArray? = null
-    private val NAL_I = 5
-    private val NAL_SPS = 7
     private fun parseData(outputBuffer: ByteBuffer, bufferInfo: MediaCodec.BufferInfo) {
 
         var offset = 4

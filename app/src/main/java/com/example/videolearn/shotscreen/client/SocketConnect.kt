@@ -1,6 +1,8 @@
 package com.example.videolearn.shotscreen.client
 
 import android.util.Log
+import android.widget.Toast
+import com.example.videolearn.App
 import org.java_websocket.client.WebSocketClient
 import org.java_websocket.handshake.ServerHandshake
 import java.net.URI
@@ -29,6 +31,9 @@ class SocketConnect(
     private inner class MyWebSocketClient(serverURI: URI?) : WebSocketClient(serverURI) {
         override fun onOpen(serverHandshake: ServerHandshake) {
             Log.i(TAG, "打开 socket  onOpen: ")
+            App.runOnUi{
+            Toast.makeText(App.application, "start receive", Toast.LENGTH_SHORT).show()
+            }
         }
 
         override fun onMessage(s: String) {}

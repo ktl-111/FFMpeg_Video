@@ -6,6 +6,7 @@ import android.view.View
 import androidx.activity.ComponentActivity
 import com.example.videolearn.shotscreen.ShotScreenActivity
 import com.example.videolearn.test.TestActivity
+import com.example.videolearn.video.VideoActivity
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -20,5 +21,9 @@ class MainActivity : ComponentActivity() {
 
     fun ShotScreen(v: View) {
         startActivity(Intent(this, ShotScreenActivity::class.java))
+    }
+
+    fun video(v: View) {
+        startActivity(Intent(this, VideoActivity::class.java))
     }
 }

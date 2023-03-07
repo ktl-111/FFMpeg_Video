@@ -37,6 +37,7 @@
         <activity android:name=".shotscreen.ShotScreenActivity" />
         <activity android:name=".shotscreen.service.ServiceActivity" />
         <activity android:name=".shotscreen.client.ClientActivity" />
+        <activity android:name=".video.VideoActivity" />
 
         <service
             android:name=".MediaService"

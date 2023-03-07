@@ -1,29 +1,27 @@
-package com.example.videolearn.shotscreen.client
+package com.example.videolearn.video
 
 import android.media.MediaCodec
 import android.media.MediaCodecInfo
 import android.media.MediaFormat
 import android.util.Log
 import android.view.Surface
-import android.widget.Toast
-import com.example.videolearn.App
-import com.example.videolearn.utils.FileUtils
+import com.example.videolearn.shotscreen.client.SocketConnect
 
-private const val TAG ="ProjectionH264Connect"
-class ProjectionH264Connect(
+class H264Receive(
     surface: Surface,
     private val ip: String,
     private val prot: String
 ) :
     SocketConnect.SocketCallback {
-    private val mediaCodec: MediaCodec = MediaCodec.createDecoderByType(MediaFormat.MIMETYPE_VIDEO_AVC)
-    var socketConnect: SocketConnect? = null
-
+    private val mediaCodec: MediaCodec =
+        MediaCodec.createDecoderByType(MediaFormat.MIMETYPE_VIDEO_AVC)
+    private var socketConnect: SocketConnect? = null
+    private val TAG = "H264Receive"
     init {
-        val format = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, 720, 1280)
-        format.setInteger(MediaFormat.KEY_BIT_RATE, 720 * 1280)
-        format.setInteger(MediaFormat.KEY_FRAME_RATE, 30)
-        //来源
+        val format = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, WIDTH, HEIGHT)
+        format.setInteger(MediaFormat.KEY_BIT_RATE, WIDTH * HEIGHT)
+        format.setInteger(MediaFormat.KEY_FRAME_RATE, RATE)
+        format.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 5) //IDR帧刷新时间
         format.setInteger(
             MediaFormat.KEY_COLOR_FORMAT,
             MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420Flexible
@@ -37,7 +35,7 @@ class ProjectionH264Connect(
         mediaCodec.start()
     }
 
-    fun start() {
+    fun startConnect() {
         socketConnect = SocketConnect(ip, prot, this).apply {
             start()
         }
@@ -45,7 +43,6 @@ class ProjectionH264Connect(
 
     override fun callBack(data: ByteArray) {
         kotlin.runCatching {
-
             Log.i(TAG, "callBack: ${data.size}")
             val dequeueInputBuffer = mediaCodec.dequeueInputBuffer(10_000)
             if (dequeueInputBuffer >= 0) {
@@ -63,7 +60,6 @@ class ProjectionH264Connect(
                     0
                 )
             }
-            FileUtils.writeContent(data,"CONNECT")
             val bufferInfo = MediaCodec.BufferInfo()
             var dequeueOutputBuffer = mediaCodec.dequeueOutputBuffer(bufferInfo, 10_000)
             //阻塞回调,一直等待解码完成

@@ -15,4 +15,9 @@
         android:layout_height="wrap_content"
         android:onClick="ShotScreen"
         android:text="投屏" />
+    <Button
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:onClick="video"
+        android:text="视频通话" />
 </LinearLayout>

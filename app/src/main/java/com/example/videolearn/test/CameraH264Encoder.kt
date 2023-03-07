@@ -26,6 +26,7 @@ class CameraH264Encoder(private val context: Context, private val surfaceView: S
         camera.setPreviewCallbackWithBuffer { data, camera ->
             //数据未旋转
             encoder(data)
+            camera.addCallbackBuffer(data)
         }
 
         val createVideoFormat =
