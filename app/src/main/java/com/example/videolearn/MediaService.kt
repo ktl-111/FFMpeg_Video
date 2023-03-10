@@ -24,7 +24,7 @@ class MediaService : Service() {
             //Call Start foreground with notification
             val notificationIntent = Intent(this, MediaService::class.java)
             val pendingIntent: PendingIntent =
-                PendingIntent.getActivity(this, 0, notificationIntent, 0)
+                PendingIntent.getActivity(this, 0, notificationIntent, PendingIntent.FLAG_IMMUTABLE)
             val notificationBuilder: NotificationCompat.Builder =
                 NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_ID)
                     .setLargeIcon(

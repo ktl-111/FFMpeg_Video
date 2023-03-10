@@ -16,8 +16,8 @@ class ProjectionH264Encoder(private val context: Context) : Runnable {
     private lateinit var mediaCodec: MediaCodec
     private lateinit var mediaProjection: MediaProjection
 
-    private val width = 720
-    private val height = 1080
+    private val width = 16
+    private val height = 16
     fun startProjection() {
         val mediaProjectionManager =
             context.getSystemService(AppCompatActivity.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
