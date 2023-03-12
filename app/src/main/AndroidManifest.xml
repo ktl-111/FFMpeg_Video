@@ -38,6 +38,7 @@
         <activity android:name=".shotscreen.service.ServiceActivity" />
         <activity android:name=".shotscreen.client.ClientActivity" />
         <activity android:name=".video.VideoActivity" />
+        <activity android:name=".test.ParseDataActivity" />
 
         <service
             android:name=".MediaService"

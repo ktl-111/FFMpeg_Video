@@ -4,11 +4,14 @@ import android.content.Intent
 import android.os.Bundle
 import android.view.View
 import androidx.activity.ComponentActivity
+import androidx.appcompat.app.AppCompatActivity
 import com.example.videolearn.shotscreen.ShotScreenActivity
+import com.example.videolearn.test.ParseDataActivity
 import com.example.videolearn.test.TestActivity
+import com.example.videolearn.utils.ResultUtils
 import com.example.videolearn.video.VideoActivity
 
-class MainActivity : ComponentActivity() {
+class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
@@ -25,5 +28,9 @@ class MainActivity : ComponentActivity() {
 
     fun video(v: View) {
         startActivity(Intent(this, VideoActivity::class.java))
+    }
+
+    fun parsedata(v: View) {
+        startActivity(Intent(this, ParseDataActivity::class.java))
     }
 }

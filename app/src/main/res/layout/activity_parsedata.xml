@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical">
@@ -7,24 +8,19 @@
     <Button
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:onClick="test"
-        android:text="test" />
+        android:layout_margin="10dp"
+        android:onClick="fore"
+        android:text="遍历裸流每一帧,未按照PTS排序" />
 
     <Button
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:onClick="ShotScreen"
-        android:text="投屏" />
+        android:layout_margin="10dp"
+        android:onClick="first"
+        android:text="显示第一帧" />
 
-    <Button
+    <SurfaceView
+        android:id="@+id/parse_sv"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:onClick="video"
-        android:text="视频通话" />
-
-    <Button
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:onClick="parsedata"
-        android:text="读取流显示" />
+        android:layout_height="match_parent" />
 </LinearLayout>

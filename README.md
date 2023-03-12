@@ -335,7 +335,7 @@ doc/H.264视频编码官方中文帮助文档.pdf
 > u(1+1+1+1+4)扩展  
 >
 > 1F:00011111  
-> u(8) 最大支持码流范围,十进制31,Supports 720p HD format  
+> level_idc u(8) 最大支持码流范围,十进制31,Supports 720p HD format  
 >
 > AC:10101100  
 > seq_parameter_set_id ue(v)1:序列参数集的id,解码后为0  
@@ -462,6 +462,15 @@ doc/H.264视频编码官方中文帮助文档.pdf
 > 1F:00011111  
 > pic_height_in_map_units_minus1 ue(v):000000010000111->134,(134+1)*16=2160
 > ![](img/Snipaste_2023-03-10_23-53-31.png)
+
+
+#### 区分I,P,B  
+![](img/Snipaste_2023-03-12_17-22-51.png)
+* I,type:5
+* PB,type:1
+需要读取rbsp里的slice_type区分P,B  
+![](img/Snipaste_2023-03-12_17-29-25.png)
+
 
 h264visa工具分析  
 ![](img/Snipaste_2023-03-12_00-42-44.png)  
