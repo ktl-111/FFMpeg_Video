@@ -26,20 +26,13 @@
 
 | 名称            | 场景                                                                                                                                                                                                                                                                                                   |
 | --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **HEVC(
-H.265)** | 高效率视频编码(High Efficiency Video Coding，简称 HEVC)是一种视频压缩标准，是 H.264 的继任者。HEVC 被认为不仅提升图像质量，同时也能达到 H.264 两倍的压缩率（等同于同样画面质量下比特率减少了 50%），可支持 4K 分辨率甚至到超高画质电视，最高分辨率可达到 8192×4320（8K 分辨率），这是目前发展的趋势。 |
-| **AVC(
-H.264)**  | 等同于 MPEG-4 第十部分，也被称为高级视频编码(Advanced Video Coding，简称 AVC)，是一种视频压缩标准，一种被广泛使用的高精度视频的录制、压缩和发布格式。该标准引入了一系列新的能够大大提高压缩性能的技术，并能够同时在高码率端和低码率端大大超越以前的诸标准。                                            |
-| **
-MPEG4**       | 等同于`H.264`，是这两个编码组织合作诞生的标准。                                                                                                                                                                                                                                                        |
-| **
-MPEG2**       | 等同于`H.262`，使用在 DVD、SVCD 和大多数数字视频广播系统和有线分布系统中。                                                                                                                                                                                                                             |
-| **
-VP9**         |                                                                                                                                                                                                                                                                                                        |
-| **
-VP8**         |                                                                                                                                                                                                                                                                                                        |
-| **
-VC-1**        |                                                                                                                                                                                                                                                                                                        |
+| **HEVC(H.265)** | 高效率视频编码(High Efficiency Video Coding，简称 HEVC)是一种视频压缩标准，是 H.264 的继任者。HEVC 被认为不仅提升图像质量，同时也能达到 H.264 两倍的压缩率（等同于同样画面质量下比特率减少了 50%），可支持 4K 分辨率甚至到超高画质电视，最高分辨率可达到 8192×4320（8K 分辨率），这是目前发展的趋势。 |
+| **AVC(H.264)**  | 等同于 MPEG-4 第十部分，也被称为高级视频编码(Advanced Video Coding，简称 AVC)，是一种视频压缩标准，一种被广泛使用的高精度视频的录制、压缩和发布格式。该标准引入了一系列新的能够大大提高压缩性能的技术，并能够同时在高码率端和低码率端大大超越以前的诸标准。                                            |
+| **MPEG4**       | 等同于`H.264`，是这两个编码组织合作诞生的标准。                                                                                                                                                                                                                                                        |
+| **MPEG2**       | 等同于`H.262`，使用在 DVD、SVCD 和大多数数字视频广播系统和有线分布系统中。                                                                                                                                                                                                                             |
+| **VP9**         |                                                                                                                                                                                                                                                                                                        |
+| **VP8**         |                                                                                                                                                                                                                                                                                                        |
+| **VC-1**        |                                                                                                                                                                                                                                                                                                        |
 
 #### **不选择H265的原因**
 
@@ -101,12 +94,17 @@ Format，编码方式是 H.264。
 **两个I帧之间称为GOP,图像序列**
 ![](img\31.png)
 
+### 场
+>CRT(大屁股)显示器传输频宽不够，逐行扫描的方法通常从上到下地扫描每帧图像。这个过程消耗的时间比较长，阴极射线的荧光衰减将造成人视觉的闪烁感觉。当频宽受限，以至于不可能快到使用逐行扫描而且没有闪烁效应时，通常采用一种折衷的办法，即每次只传输和显示一半的扫描线，即场。一场只包含偶数行（即偶场）或者奇数行（即奇场）扫描线。由于视觉暂留效应，人眼不会注意到两场只有一半的扫描行，而会看到完整的一帧。
+>抖音搜索crt逐行扫描和隔行扫描了解
+>[参考](https://zhuanlan.zhihu.com/p/439780995)
+
 ### 码流
 
 > 其实就是视频数据
 > **I帧**后面跟着**P帧**,接着再是**B帧**,但实际播放的顺序是根据**pts**,解码顺序根据**dts**
 
-![](img/QQ截图20230302213055.png)
+![](img/Snipaste_2023-03-11_17-49-45.png)
 
 ### 编码流程
 
@@ -295,16 +293,16 @@ doc/H.264视频编码官方中文帮助文档.pdf
 [参考](https://zhuanlan.zhihu.com/p/27896239)
 > **videlfile/16.h264 16*16**
 >
-> 42:01000010
+> 42:01000010  
 > profile_idc u(8):66,编码等级,直播
 >
-> C0:11000000
+> C0:11000000  
 > flag u(1+1+1+1+4):
 >
-> 29:00101001
+> 29:00101001  
 > level_idc u(8):41,最大支持码流范围,Supports 2Kx1K format
 >
-> 8D:10001101
+> 8D:10001101  
 > seq_parameter_set_id ue(v):1->0,sps id,通过该id值,图像参数集pps可以引用其代表的sps中的参数  
 > log2_max_frame_num_minus4 ue(v):0001101->12,用于计算MaxFrameNum的值  
 > ``计算公式为MaxFrameNum = 2^(log2_max_frame_num_minus4 + 4)。MaxFrameNum是frame_num的上限值，frame_num是图像序号的一种表示方法，在帧间编码中常用作一种参考帧标记的手段。``
@@ -319,9 +317,119 @@ doc/H.264视频编码官方中文帮助文档.pdf
 > E9:11101001  
 > pic_height_in_map_units_minus1 ue(v):1->0,(0+1)*16=16,高度  
 > frame_mbs_only_flag u(1):1,当该标识位为0时，宏块可能为帧编码或场编码；该标识位为1时，所有宏块都采用帧编码  
+> direct_8x8_inference_flag u(1):1,  
+> frame_cropping_flag u(1):0,没有额外裁切  
 > ![](img/Snipaste_2023-03-10_23-28-12.png)
 
-> **videlfile/test.h264 3840*2160**
+> **videofile/24.h264 24*24**  
+>
+> 67:01100111  
+> f(1)0:可用  
+> u(2)11:高  
+> u(5)00111:十进制7,序列集参数
+>
+> 64:01100100  
+> u(8)编码等级,十进制100,hight  
+>
+> 00:00000000  
+> u(1+1+1+1+4)扩展  
+>
+> 1F:00011111  
+> u(8) 最大支持码流范围,十进制31,Supports 720p HD format  
+>
+> AC:10101100  
+> seq_parameter_set_id ue(v)1:序列参数集的id,解码后为0  
+> chroma_format_idc ue(v):010->1,与亮度取样对应的色度取样,4:2:0,**如果profileidc不成立,chroma_format_idc默认值id为1**  
+> bit_depth_luma_minus8 ue(v):1->0,视频位深,High 只支持8bit  
+> bit_depth_chroma_minus8 ue(v)1:profile定义  
+> qpprime_y_zero_transform_bypass_flag u(1)0:??  
+> seq_scaling_matrix_present_flag u(1)0:  
+>
+> 2C:00101100  
+> log2_max_frame_num_minus4 ue(v):00101->4  
+> pic_order_cnt_type ue(v):1->0  
+>
+> A5:10100101  
+> log2_max_pic_order_cnt_lsb_minus4 ue(v):00(前一个字节的00)101  
+> num_ref_frames ue(v):00101->4  
+>
+> 25:00100101  
+> gaps_in_frame_num_value_allowed_flag u(1)0:  
+> pic_width_in_mbs_minus1 ue(v):010->1,(1+1) * 16=32,由于24不是16的倍数,所以还需要获取frame_crop_xxx的值进行计算  
+> pic_height_in_map_units_minus1 ue(v):010->1,(1+1)*16=32,由于24不是16的倍数,所以还需要获取frame_crop_xxx的值进行计算  
+> ```
+> 由于出现需要裁切的情况,需要考虑几点
+> 1.在场编码中,一帧等于两场,高度是帧的一半,所以裁切时,crop 1 一像素，相当于对帧 crop 2 个像素???
+> 2.yuv格式,在yuv420情况下,无法去除单个行,所以只能去除偶数个行,所以在yuv420上需要crop*2
+> 3.ChromaArrayType,非语法表格中的内容,residual_colour_transform_flag(默认值为0) 和 chroma_format_idc 共同作用推导出来的
+>   if (residual_colour_transform_flag == 0){
+>       ChromaArrayType = chroma_format_idc;
+>   }else{
+>     ChromaArrayType = 0;
+>   }
+> 4.SubWidthC 和 SubHeightC 表示的是 YUV 分量中，Y 分量和 UV 分量在水平和竖直方向上的比值。
+> 当 ChromaArrayType 等于 0 的时候，表示只有 Y 分量或者表示 YUV 444 的独立模式，所以 SubWidthC 和 SubHeightC 没有意义。
+>   if (ChromaArrayType == 1) {
+>     SubWidthC = 2;
+>     SubHeightC = 2;
+>   }
+>   else if (ChromaArrayType == 2) {
+>     SubWidthC = 2;
+>     SubHeightC = 1;
+>   }
+>   else if (ChromaArrayType == 3) {
+>     SubWidthC = 1;
+>     SubHeightC = 1;
+>   }
+> 
+> 最终宽高计算公式为
+> width = (pic_width_in_mbs_minus1 + 1) * 16;
+> height = (2 - frame_mbs_only_flag) * (pic_height_in_map_units_minus1 + 1) * 16;  
+> if(frame_cropping_flag){
+>   int crop_unit_x = 0;
+>   int crop_unit_y = 0;
+> 
+>     if(ChromaArrayType == 0){
+>         crop_unit_x = 1;
+>         crop_unit_y = 2 - frame_mbs_only_flag;
+>     }
+>     else if(ChromaArrayType == 1 || ChromaArrayType == 2 || ChromaArrayType == 3){
+>         crop_unit_x = SubWidthC;
+>         crop_unit_y = SubHeightC * (2 - frame_mbs_only_flag);
+>     }
+> 
+>     width -= crop_unit_x * (frame_crop_left_offset + frame_crop_right_offset);
+>     height -= crop_unit_y * (frame_crop_top_offset + frame_crop_bottom_offset);
+> }
+> 
+> width:32 = (1+1)*16
+> height:32 = (2-1)*(1+1)*16
+> if(1){
+>   int crop_unit_x = 0;
+>   int crop_unit_y = 0;
+>   int ChromaArrayType = 1;//由于residual_colour_transform_flag=0,所以ChromaArrayType=chroma_format_idc=1
+>   SubWidthC = 2
+>   SubHeightC = 2*(2-1)
+>   width:32-=SubWidthC*(4+0)
+>   height:32-=SubHeightC*(4+0)
+> }
+> 
+>```
+> frame_mbs_only_flag u(1):1, 等于 1 的时候，表示都是帧编码，等于0的时候，表示有可能存在场编码
+>
+> E5:11100101  
+> direct_8x8_inference_flag u(1):1,  
+> frame_cropping_flag u(1):1,是否需要对输出的图像帧进行裁剪  
+> frame_crop_left_offset ue(v):1->0  
+> frame_crop_right_offset ue(v):00101->4  
+>
+> 96:10010110  
+> frame_crop_top_offset ue(v):1->0  
+> frame_crop_bottom_offset ue(v):00101->4  
+
+> ![](img/Snipaste_2023-03-11_23-09-28.png)
+
+> **videofile/test.h264 3840*2160**
 >
 > 64:01100100  
 > profile_idc u(8):100,编码等级,High (FRExt)
@@ -355,19 +463,22 @@ doc/H.264视频编码官方中文帮助文档.pdf
 > pic_height_in_map_units_minus1 ue(v):000000010000111->134,(134+1)*16=2160
 > ![](img/Snipaste_2023-03-10_23-53-31.png)
 
+h264visa工具分析  
+![](img/Snipaste_2023-03-12_00-42-44.png)  
+对于宽高非16整数倍需要结合其他信息进行计算[参考](https://juejin.cn/post/6956445593933709319)
 #### 参考链接
-
+**[手写解码器](https://www.zzsin.com/catalog/write_avc_decoder.html)**  
 [参考](https://blog.csdn.net/houxiaoni01/article/details/99844945)    
 [参考](https://blog.51cto.com/u_12204415/3804218)    
 [参考](https://blog.51cto.com/u_13267193/5377091)
 
-### 音频
+## 音频
 
 [维基百科](https://zh.wikipedia.org/wiki/%E5%90%AC%E8%A7%89)
 [声音长什么样](https://maintao.com/2021/sound/)
 [声音图形并茂](https://www.lyratone.net/blog/about-sound-1015)
 
-#### 声音的产生
+### 声音的产生
 
 > 声音是由物体振动产生的，通过空气、固体、液体等介质进行传输的一种声波，可以被人耳识别的声波的范围是 20Hz~20000Hz
 > 之间，也叫做可听声波，这种声波称之为声音，根据声波频率的不同可以主要分为:
@@ -377,7 +488,7 @@ doc/H.264视频编码官方中文帮助文档.pdf
 >
 >波长越短,间距越小,人的发声范围一般是85Hz~1100Hz,人耳能够听到的频率范围是20hz(17米的波长)-20Khz(1.7厘米的波长),部分特殊人群能听到22.05khz
 
-#### 声音的三要素
+### 声音的三要素
 
 > 声音的三要素分别是音调、音量、音色，具体如下：
 > * 音调：指的是声音**频率**(声音1秒内周期性变化的次数)的高低，表示人的听觉分辨一个声音的调子高低的程度，物体振动的快，发出的声音的音调就高，振动的慢，发出的音调就低。
@@ -385,12 +496,12 @@ doc/H.264视频编码官方中文帮助文档.pdf
 > *
 音色：又称音品，指不同声音表现在波形方面总是有与众不同的特性，不同的物体振动都有不同的特点，反映每个物体发出的声音的特有的品质，音色具体由谐波决定，好听的声音绝不仅仅是一个正弦波，而是谐波。[音色由什么决定?](https://zhuanlan.zhihu.com/p/62835952)
 
-#### 模数转换
+### 模数转换
 
 > 声音是一个模拟音频信号，如果要将声音数字化，则需要将模拟音频信号转换为数字信号，这就是模数转换，主要流程包括采样、量化、编码
 ![](img/Snipaste_2023-03-11_15-43-44.png)
 
-##### 采样率
+#### 采样率
 
 ![](img/Snipaste_2023-03-11_15-49-16.png)
 > 1s多少个点,采样率44.1Khz,1s采样44100个点,该采样率为音频cd所用  
@@ -398,7 +509,7 @@ doc/H.264视频编码官方中文帮助文档.pdf
 > **为什么是44.1?**   
 > 根据采样定理,按比人能听到的最大频率的2倍进行采样可以保证声音在被数字化处理后,还能有质量保障
 
-##### 量化格式
+#### 量化格式
 
 ![](img/Snipaste_2023-03-11_15-50-09.png)
 >
@@ -407,7 +518,7 @@ doc/H.264视频编码官方中文帮助文档.pdf
 > 那么CD的量化标准是什么呢？采用16bit(short)，也就是2的16次方，总共65536，然后为了由于振膜是可以发生正向和负向位移，所以用[-32767,32768]进行量化。  
 > 所以图中虚线范围就代表了量化的数字范围，最终的红色曲线就是量化的结果，数字信号
 
-##### 编码
+#### 编码
 
 > 经过量化后，每一个采样都是一个数字，那这么多的数字该如何存储呢？这就需要第三个概念：「编码」，所谓编码，就是按照一定的格式记录采样和量化后的数据，比如顺序存储或压缩存储等。  
 > 这里涉及很多种格式，通常所说的音频的裸数据格式就是脉冲编码调制数据，简称 PCM （Pulse Code Modulation)。描述一段 PCM 通常需要以下三个概念
@@ -416,14 +527,14 @@ doc/H.264视频编码官方中文帮助文档.pdf
 > * 声道数（Channel)  
     > 平时所谓的双声道、单声道其实可以理解为需要记录几个信号，比如磁带，双声道就是同一时刻记录两个轨道的信息，一个负责记录左耳机振膜位置，一个负责记录右耳机振膜位置，以此类推，多个声道也是类似
 
-###### 大小,称为数据比特率（bitRate),即1s内的比特数目,单位为千比特每秒kbps(kb per second)
+##### 大小,称为数据比特率（bitRate),即1s内的比特数目,单位为千比特每秒kbps(kb per second)
 
 公式=采样率*量化格式*声道数  
 如:采样率 44.1KHz,量化格式为 16bit,双声道  
 44.1*16*2=1411.2kbps,1s0.17m+,一分钟10m  
 大小对于磁盘来说可以接受,但是对于网络传输不行,所以需要压缩
 
-##### 压缩编码
+#### 压缩编码
 > pcm,一种编码方式，在音视频领域则理解为原始音频数据裸流  
 > Android 中使用 AudioRecord、MediaRecord等采集到的音频数据就是 PCM 数据
 
@@ -436,7 +547,7 @@ doc/H.264视频编码官方中文帮助文档.pdf
 相当于高dB声音覆盖了低dB声音
 ![](img/Snipaste_2023-03-11_16-20-02.png)
 
-##### 压缩编码格式
+#### 压缩编码格式
 
 |编码    |实现简介|    特点|    适用场景|
 |---|---|---|---|
@@ -445,7 +556,7 @@ doc/H.264视频编码官方中文帮助文档.pdf
 |AAC|    新一代有损压缩技术，通过一些附加的编码技术（PS、SBR 等），衍生出了 LC-AAC、HE-AAC、HE-AAC v2三种主要编码格式    |小于 128Kbit/s 表现优异，多用于视频中的音频编码    |128Kbit/s 一下的音频编码，多用于视频中的音频编码|
 |Ogg|    一种非常有潜力的编码，各种码率下都有比较优秀的表现，尤其是低码率场景下。可以在低码率的场景下仍然保持不错的音质，但目前软件硬件支持情况较差|    可用比 MP3 更小的码率实现比 MP3 更好的音质，但兼容性不好    |语音聊天的音频消息场景|
 
-#### 参考链接
+### 参考链接
 
 **[参考](https://zhuanlan.zhihu.com/p/69901270)**
 **[参考](https://zhuanlan.zhihu.com/p/161453747)**
