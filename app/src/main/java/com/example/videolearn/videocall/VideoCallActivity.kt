@@ -1,4 +1,4 @@
-package com.example.videolearn.video
+package com.example.videolearn.videocall
 
 import android.os.Bundle
 import android.util.Log
@@ -10,7 +10,7 @@ import androidx.appcompat.app.AppCompatActivity
 import com.example.videolearn.R
 import com.example.videolearn.utils.ResultUtils
 
-class VideoActivity : AppCompatActivity() {
+class VideoCallActivity : AppCompatActivity() {
     val TAG = "VideoActivity"
     lateinit var etPeerIpPort: EditText
     lateinit var etSelfPort: EditText

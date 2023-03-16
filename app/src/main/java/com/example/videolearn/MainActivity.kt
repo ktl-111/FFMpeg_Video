@@ -3,13 +3,12 @@ package com.example.videolearn
 import android.content.Intent
 import android.os.Bundle
 import android.view.View
-import androidx.activity.ComponentActivity
 import androidx.appcompat.app.AppCompatActivity
+import com.example.videolearn.videoplay.VideoPlayActiivty
 import com.example.videolearn.shotscreen.ShotScreenActivity
 import com.example.videolearn.test.ParseDataActivity
 import com.example.videolearn.test.TestActivity
-import com.example.videolearn.utils.ResultUtils
-import com.example.videolearn.video.VideoActivity
+import com.example.videolearn.videocall.VideoCallActivity
 
 class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -27,10 +26,14 @@ class MainActivity : AppCompatActivity() {
     }
 
     fun video(v: View) {
-        startActivity(Intent(this, VideoActivity::class.java))
+        startActivity(Intent(this, VideoCallActivity::class.java))
     }
 
     fun parsedata(v: View) {
         startActivity(Intent(this, ParseDataActivity::class.java))
+    }
+
+    fun videoplay(v: View) {
+        startActivity(Intent(this, VideoPlayActiivty::class.java))
     }
 }

@@ -536,7 +536,8 @@ h264visa工具分析
 > * 声道数（Channel)  
     > 平时所谓的双声道、单声道其实可以理解为需要记录几个信号，比如磁带，双声道就是同一时刻记录两个轨道的信息，一个负责记录左耳机振膜位置，一个负责记录右耳机振膜位置，以此类推，多个声道也是类似
 
-##### 大小,称为数据比特率（bitRate),即1s内的比特数目,单位为千比特每秒kbps(kb per second)
+##### 大小
+>称为数据比特率（bitRate),即1s内的比特数目,单位为千比特每秒kbps(kb per second)
 
 公式=采样率*量化格式*声道数  
 如:采样率 44.1KHz,量化格式为 16bit,双声道  
@@ -569,5 +570,6 @@ h264visa工具分析
 
 **[参考](https://zhuanlan.zhihu.com/p/69901270)**
 **[参考](https://zhuanlan.zhihu.com/p/161453747)**
+**[傅里叶分析](https://zhuanlan.zhihu.com/p/19763358)**
 [参考](https://www.newvfx.com/forums/topic/21333)
 

@@ -1,6 +1,6 @@
 package com.example.videolearn.utils
 
-import com.example.videolearn.video.*
+import com.example.videolearn.videocall.*
 import java.io.*
 import java.util.LinkedList
 
@@ -44,7 +44,6 @@ class H264Codec(private val filePath: File) {
                 System.arraycopy(bytes, copyStart, byteArray, 0, byteArray.size)
                 resultList.add(ResultData(byteArray))
             }
-            currReadBit = result.second * 8
             copyStart = result.first
             startByteIndex = result.second
 
@@ -235,22 +234,23 @@ class H264Codec(private val filePath: File) {
             while (currReadBit < bytes.size * 8) {
                 //没有到末尾一直读
                 if (bytes[currReadBit / 8].toInt() and (0x80 shr (currReadBit % 8)) != 0) {
-                    //
+                    //currReadBit / 8:从第几个字节开始读
+                    //1000 0000 >>(currReadBit % 8:0 1..7) 一直右移,计算字节里面的0
                     break
                 }
-                zeroNum += 1
-                currReadBit += 1
+                zeroNum++
+                currReadBit++
             }
-            currReadBit += 1
             var dwRet = 0
-            for (i in 0 until zeroNum) {
+            for (i in 0 .. zeroNum) {
                 dwRet = dwRet shl 1
                 if (bytes[currReadBit / 8].toInt() and (0x80 shr (currReadBit % 8)) != 0) {
-                    dwRet += 1
+                    //当前位+1
+                    dwRet++
                 }
-                currReadBit += 1
+                currReadBit++
             }
-            return (1 shl zeroNum) - 1 + dwRet
+            return dwRet - 1
         }
 
         fun u(bitIndex: Int, bytes: ByteArray): Int {
@@ -258,24 +258,15 @@ class H264Codec(private val filePath: File) {
             for (i in 0 until bitIndex) {
                 dwRet = dwRet shl 1
                 if (bytes[currReadBit / 8].toInt() and (0x80 shr (currReadBit % 8)) != 0) {
-                    dwRet += 1
+                    dwRet++
                 }
-                currReadBit += 1
+                currReadBit++
             }
             return dwRet
         }
 
         fun getFileByte(path: String): ByteArray? = kotlin.runCatching {
-            val `is`: InputStream = DataInputStream(FileInputStream(File(path)))
-            val len: Int
-            val size = 1024 * 1024
-            val bos = ByteArrayOutputStream()
-            var buf = ByteArray(size)
-            len = `is`.read(buf, 0, size)
-            bos.write(buf, 0, len)
-            buf = bos.toByteArray()
-            bos.close()
-            buf
+            File(path).readBytes()
         }.getOrElse {
             it.printStackTrace()
             null

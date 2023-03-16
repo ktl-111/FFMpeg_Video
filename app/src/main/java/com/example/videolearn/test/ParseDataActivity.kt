@@ -77,7 +77,6 @@ class ParseDataActivity : AppCompatActivity(), SurfaceHolder.Callback {
                         delay(50)
                     }
                 }
-
             }
         }
 
@@ -106,6 +105,7 @@ class ParseDataActivity : AppCompatActivity(), SurfaceHolder.Callback {
         mediaCodec?.also { mediaCodec ->
             Log.i(TAG, "parseData: ")
             val dequeueInputBuffer = mediaCodec.dequeueInputBuffer(10_000)
+            Log.i(TAG, "parseData  dequeueInputBuffer:$dequeueInputBuffer")
             if (dequeueInputBuffer >= 0) {
                 val inputBuffer = mediaCodec.getInputBuffer(dequeueInputBuffer)
                 inputBuffer?.also {
@@ -117,16 +117,18 @@ class ParseDataActivity : AppCompatActivity(), SurfaceHolder.Callback {
                     dequeueInputBuffer,
                     0,
                     data.size,
-                    System.currentTimeMillis(),
+                    0,
                     0
                 )
             }
             val bufferInfo = MediaCodec.BufferInfo()
             var dequeueOutputBuffer = mediaCodec.dequeueOutputBuffer(bufferInfo, 10_000)
+            Log.i(TAG, "parseData  dequeueOutputBuffer:$dequeueOutputBuffer")
             //阻塞回调,一直等待解码完成
             while (dequeueOutputBuffer >= 0) {
                 mediaCodec.releaseOutputBuffer(dequeueOutputBuffer, true)
                 dequeueOutputBuffer = mediaCodec.dequeueOutputBuffer(bufferInfo, 1_000)
+                Log.i(TAG, "parseData while dequeueOutputBuffer:$dequeueOutputBuffer")
             }
         } ?: kotlin.run {
             Log.e(TAG, "parseData: mediaCodec is null")

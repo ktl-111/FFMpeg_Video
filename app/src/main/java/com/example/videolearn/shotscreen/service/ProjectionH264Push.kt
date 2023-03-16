@@ -7,12 +7,10 @@ import android.media.MediaCodecInfo
 import android.media.MediaFormat
 import android.media.projection.MediaProjection
 import android.media.projection.MediaProjectionManager
-import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
-import com.example.videolearn.utils.FileUtils
 import com.example.videolearn.utils.ResultUtils
-import com.example.videolearn.video.NAL_I
-import com.example.videolearn.video.NAL_SPS
+import com.example.videolearn.videocall.NAL_I
+import com.example.videolearn.videocall.NAL_SPS
 import java.nio.ByteBuffer
 
 class ProjectionH264Push(private val context: Context, private val prot: String) : Runnable {

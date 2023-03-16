@@ -1,8 +1,7 @@
-package com.example.videolearn.video
+package com.example.videolearn.videocall
 
 import android.content.Context
 import android.hardware.Camera
-import android.hardware.Camera.CameraInfo
 import android.media.MediaCodec
 import android.media.MediaCodecInfo
 import android.media.MediaFormat

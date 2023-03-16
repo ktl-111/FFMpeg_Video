@@ -38,7 +38,7 @@ class CameraH264Encoder(private val context: Context, private val surfaceView: S
         //帧率
         createVideoFormat.setInteger(MediaFormat.KEY_FRAME_RATE, RATE)
         //多少帧一个I，非强制性
-        createVideoFormat.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 30)
+        createVideoFormat.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 1)
         //码率,越大越清晰
         createVideoFormat.setInteger(
             MediaFormat.KEY_BIT_RATE,
@@ -84,8 +84,8 @@ class CameraH264Encoder(private val context: Context, private val surfaceView: S
             /*============输出===============*/
             val bufferInfo = MediaCodec.BufferInfo()
             //获取已编码的buffer index
-            val outputIndex = mediaCodec.dequeueOutputBuffer(bufferInfo, 10_000)
-            if (outputIndex >= 0) {
+            var outputIndex = mediaCodec.dequeueOutputBuffer(bufferInfo, 10_000)
+            while (outputIndex >= 0) {
                 //拿到对应buffer
                 val outputBuffer = mediaCodec.getOutputBuffer(outputIndex)
                 val byteArray = ByteArray(bufferInfo.size)
@@ -95,6 +95,7 @@ class CameraH264Encoder(private val context: Context, private val surfaceView: S
                 FileUtils.writeBytes(byteArray, name)
                 FileUtils.writeContent(byteArray, name)
                 mediaCodec.releaseOutputBuffer(outputIndex, false)
+                outputIndex = mediaCodec.dequeueOutputBuffer(bufferInfo, 10_000)
             }
         }.onFailure {
             it.printStackTrace()

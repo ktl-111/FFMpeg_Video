@@ -1,4 +1,4 @@
-package com.example.videolearn.video
+package com.example.videolearn.videocall
 
 const val WIDTH = 1080
 const val HEIGHT = 1920

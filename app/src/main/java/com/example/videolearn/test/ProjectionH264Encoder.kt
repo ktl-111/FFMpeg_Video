@@ -42,7 +42,7 @@ class ProjectionH264Encoder(private val context: Context) : Runnable {
             //帧率
             createVideoFormat.setInteger(MediaFormat.KEY_FRAME_RATE, 20)
             //多少帧一个I，非强制性
-            createVideoFormat.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 30)
+            createVideoFormat.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 1)
             //码率,越大越清晰
             createVideoFormat.setInteger(MediaFormat.KEY_BIT_RATE, width * height)
             //来源
