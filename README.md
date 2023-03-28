@@ -291,6 +291,7 @@ doc/H.264视频编码官方中文帮助文档.pdf
 ### 实例
 
 [参考](https://zhuanlan.zhihu.com/p/27896239)
+
 > **videlfile/16.h264 16*16**
 >
 > 42:01000010  
@@ -474,7 +475,8 @@ doc/H.264视频编码官方中文帮助文档.pdf
 
 h264visa工具分析  
 ![](img/Snipaste_2023-03-12_00-42-44.png)  
-对于宽高非16整数倍需要结合其他信息进行计算[参考](https://juejin.cn/post/6956445593933709319)
+对于宽高非16整数倍需要结合其他信息进行计算[参考](https://juejin.cn/post/6956445593933709319)  
+![](img/v2-5b11cd2e81c4b134730c9856468a4f69_r.jpg)
 #### 参考链接
 **[手写解码器](https://www.zzsin.com/catalog/write_avc_decoder.html)**  
 [参考](https://blog.csdn.net/houxiaoni01/article/details/99844945)    
@@ -573,3 +575,24 @@ h264visa工具分析
 **[傅里叶分析](https://zhuanlan.zhihu.com/p/19763358)**
 [参考](https://www.newvfx.com/forums/topic/21333)
 
+
+## 直播推流
+### RTMP
+> RTMP:实时消息传输协议,基于TCP,默认使用1935端口的“明文”协议[维基百科](https://zh.wikipedia.org/wiki/%E5%AE%9E%E6%97%B6%E6%B6%88%E6%81%AF%E5%8D%8F%E8%AE%AE)
+> 直播推流流程 : 手机采集视频 / 音频数据 , 视频数据使用 H.264 编码 , 音频数据使用 AAC 编码 , 最后将音视频数据都打包到 RTMP 数据包中 , 使用 RTMP 协议上传到 RTMP 服务器中 ;
+
+#### RTMP-API
+![](img/31113620_624521b4e2e1f3803.png)
+
+#### RTMP 包格式
+结构体,按照格式设置参数到body里
+![](img/Snipaste_2023-03-28_22-40-52.png)
+![](img/Snipaste_2023-03-28_22-36-48.png)
+
+#### librtmp
+> 封装了socket,建立tcp通信,实现RTMP数据发送的so库[下载链接](http://rtmpdump.mplayerhq.hu/)
+
+#### 参考
+[Android RTMP 直播](https://www.jianshu.com/p/02b6eb0e3498)
+[RTMP 数据格式](https://blog.csdn.net/heli200482128/article/details/127198244)  
+[RTMP详讲](https://zhuanlan.zhihu.com/p/191542130)  

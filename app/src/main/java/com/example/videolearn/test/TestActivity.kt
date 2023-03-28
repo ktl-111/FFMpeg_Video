@@ -1,13 +1,9 @@
 package com.example.videolearn.test
 
-import android.content.Intent
-import android.hardware.Camera
-import android.media.projection.MediaProjectionManager
 import android.os.Bundle
 import android.view.SurfaceView
 import android.view.View
 import androidx.appcompat.app.AppCompatActivity
-import com.example.videolearn.MediaService
 import com.example.videolearn.R
 import com.example.videolearn.utils.ResultUtils
 

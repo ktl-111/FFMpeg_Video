@@ -67,7 +67,7 @@ class VideoPlayHelper(private val path: String, private val surface: Surface) {
                     videoCodec.getOutputBuffer(dequeueOutputBuffer)?.also {
                         val byteArray = ByteArray(bufferInfo.size)
                         it.get(byteArray)
-                        //不是h264数据????
+                        // TODO: 非h264数据?????
                         FileUtils.writeContent(byteArray, "VideoPlay_video")
                     }
                     decodeDelay("video", bufferInfo, startTime)

@@ -8,6 +8,7 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
 
     <application
         android:name=".App"
@@ -19,6 +20,11 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.VideoLearn"
         tools:targetApi="31">
+        <activity
+            android:name=".MainActivity1"
+            android:exported="false"
+            android:label="@string/title_activity_main1"
+            android:theme="@style/Theme.VideoLearn" />
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -40,6 +46,7 @@
         <activity android:name=".videocall.VideoCallActivity" />
         <activity android:name=".test.ParseDataActivity" />
         <activity android:name=".videoplay.VideoPlayActiivty" />
+        <activity android:name=".live.LiveActivity" />
 
         <service
             android:name=".MediaService"

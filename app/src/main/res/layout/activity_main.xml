@@ -13,7 +13,7 @@
     <Button
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:onClick="ShotScreen"
+        android:onClick="shotScreen"
         android:text="投屏" />
 
     <Button
@@ -33,4 +33,10 @@
         android:layout_height="wrap_content"
         android:onClick="videoplay"
         android:text="视频播放" />
+
+    <Button
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:onClick="live"
+        android:text="直播" />
 </LinearLayout>
