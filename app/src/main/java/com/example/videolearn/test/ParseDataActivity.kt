@@ -10,7 +10,7 @@ import android.view.SurfaceView
 import android.view.View
 import androidx.appcompat.app.AppCompatActivity
 import com.example.videolearn.R
-import com.example.videolearn.VideoScope
+import com.example.videolearn.MediaScope
 import com.example.videolearn.utils.H264Codec
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -34,7 +34,7 @@ class ParseDataActivity : AppCompatActivity(), SurfaceHolder.Callback {
 
     fun fore(v: View) {
         surfaceHolder?.also { holder ->
-            VideoScope.launch {
+            MediaScope.launch {
                 val startCodec = H264Codec(filePath).startCodec()
                 startCodec?.also {
                     var spsData: ByteArray? = null
@@ -138,7 +138,7 @@ class ParseDataActivity : AppCompatActivity(), SurfaceHolder.Callback {
 
     fun first(v: View) {
         surfaceHolder?.also { holder ->
-            VideoScope.launch {
+            MediaScope.launch {
                 val startCodec = H264Codec(filePath).startCodec()
                 startCodec?.also {
                     var spsData: ByteArray? = null

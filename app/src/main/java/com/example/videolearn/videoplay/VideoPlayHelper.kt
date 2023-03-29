@@ -3,7 +3,7 @@ package com.example.videolearn.videoplay
 import android.media.*
 import android.util.Log
 import android.view.Surface
-import com.example.videolearn.VideoScope
+import com.example.videolearn.MediaScope
 import com.example.videolearn.utils.FileUtils
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -22,10 +22,10 @@ class VideoPlayHelper(private val path: String, private val surface: Surface) {
     var startTime = 0L
     fun play() {
         startTime = System.currentTimeMillis()
-        VideoScope.launch {
+        MediaScope.launch {
             parseVideo()
         }
-        VideoScope.launch {
+        MediaScope.launch {
             parseAudio()
         }
     }

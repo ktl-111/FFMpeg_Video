@@ -34,6 +34,10 @@ int sendPacketByVideo(RTMPPacket *pPacket, int bodySize, jlong times);
 
 int sendFramePackage(jbyte *data, jint len, jlong times);
 
+int parseAudio(jbyte *data, jint len, jlong times, jint type);
+
+int sendPacketByAudio(RTMPPacket *pPacket, int size, jlong times);
+
 extern "C"
 JNIEXPORT jboolean JNICALL
 Java_com_example_rtmplib_RtmpLib_connectBiliService(JNIEnv *env, jobject thiz, jstring url_) {
@@ -260,15 +264,51 @@ Java_com_example_rtmplib_RtmpLib_sendData(JNIEnv *env, jobject thiz, jbyteArray 
             result = parseVideo(data, len_, times_);
             break;
         }
-        case 1: {
-            break;
-        }
         default: {
+            result = parseAudio(data, len_, times_, type_);
             LOGE("not type %d", type_);
             break;
         }
     }
 
     env->ReleaseByteArrayElements(data_, data, 0);
+    return result;
+}
+
+int parseAudio(jbyte *data, jint len, jlong times, jint type) {
+    auto *rtmpPacket = static_cast<RTMPPacket *>(malloc(sizeof(RTMPPacket)));
+    int bodySize = 2 + len;
+    //申请body内存大小
+    RTMPPacket_Alloc(rtmpPacket, bodySize);
+    int i = 0;
+    rtmpPacket->m_body[i++] = 0xAF;
+    if (type == 2) {
+        rtmpPacket->m_body[i++] = 0x00;
+    } else {
+        rtmpPacket->m_body[i++] = 0x01;
+    }
+    memcpy(&rtmpPacket->m_body[i], data, len);
+
+    return sendPacketByAudio(rtmpPacket, bodySize, times);
+}
+
+int sendPacketByAudio(RTMPPacket *pPacket, int bodySize, jlong times) {
+    //设置参数
+    pPacket->m_packetType = RTMP_PACKET_TYPE_AUDIO;
+    pPacket->m_nBodySize = bodySize;
+    //随意分配一个管道（尽量避开rtmp.c中使用的）,音视频不能相同
+    pPacket->m_nChannel = 0x16;
+    //不使用绝对时间
+    pPacket->m_hasAbsTimestamp = 0;
+
+    pPacket->m_nTimeStamp = times;
+
+    pPacket->m_headerType = RTMP_PACKET_SIZE_LARGE;
+
+    int result = RTMP_SendPacket(live->rtmp, pPacket, 1);
+    //释放body
+    RTMPPacket_Free(pPacket);
+    //释放packet
+    free(pPacket);
     return result;
 }

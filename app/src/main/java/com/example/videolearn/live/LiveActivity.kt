@@ -16,28 +16,36 @@ import androidx.compose.ui.unit.dp
 import com.example.videolearn.utils.ResultUtils
 
 class LiveActivity : AppCompatActivity() {
-    private lateinit var liveProjectionH264Encoder: LiveProjectionH264Encoder
+    private lateinit var liveProjectionEncoder: LiveProjectionEncoder
+    private lateinit var liveAudioEncoder: LiveAudioEncoder
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
             rootView()
         }
-        liveProjectionH264Encoder = LiveProjectionH264Encoder(this)
+        liveProjectionEncoder = LiveProjectionEncoder(this)
+        liveAudioEncoder = LiveAudioEncoder(this)
     }
 
     private fun connect() {
-        liveProjectionH264Encoder.connectService()
+        ConsumerLive.connectService()
     }
 
     private fun startProjection() {
         ResultUtils.getInstance(this)
-            .singlePermissions(
-                android.Manifest.permission.WRITE_EXTERNAL_STORAGE
-            ) { granted ->
-                if (granted) {
-                    liveProjectionH264Encoder.startProjection()
-                }
-            }
+            .permissions(
+                arrayOf(
+                    android.Manifest.permission.RECORD_AUDIO,
+                    android.Manifest.permission.WRITE_EXTERNAL_STORAGE
+                ), object : ResultUtils.PermissionsCallBack {
+                    override fun deniedList(deniedList: MutableList<String>?) {
+                    }
+
+                    override fun grantedList(grantedList: MutableList<String>?) {
+                        liveProjectionEncoder.startProjection()
+                        liveAudioEncoder.startAudioRecord()
+                    }
+                })
     }
 
     @Composable

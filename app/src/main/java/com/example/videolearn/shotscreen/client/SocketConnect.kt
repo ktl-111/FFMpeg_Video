@@ -31,16 +31,15 @@ class SocketConnect(
     private inner class MyWebSocketClient(serverURI: URI?) : WebSocketClient(serverURI) {
         override fun onOpen(serverHandshake: ServerHandshake) {
             Log.i(TAG, "打开 socket  onOpen: ")
-            App.runOnUi{
-            Toast.makeText(App.application, "start receive", Toast.LENGTH_SHORT).show()
+            App.runOnUi {
+                Toast.makeText(App.application, "start receive", Toast.LENGTH_SHORT).show()
             }
         }
 
         override fun onMessage(s: String) {}
 
-        //不断回调他
         override fun onMessage(bytes: ByteBuffer) {
-            Log.i(TAG, "消息长度  : " + bytes.remaining())
+            Log.i(TAG, "消息lenght:" + bytes.remaining())
             val buf = ByteArray(bytes.remaining())
             bytes.get(buf)
             socketCallback.callBack(buf)
