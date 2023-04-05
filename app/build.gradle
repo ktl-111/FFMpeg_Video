@@ -78,4 +78,13 @@ dependencies {
     androidTestImplementation "androidx.compose.ui:ui-test-junit4:$compose_ui_version"
     debugImplementation "androidx.compose.ui:ui-tooling:$compose_ui_version"
     debugImplementation "androidx.compose.ui:ui-test-manifest:$compose_ui_version"
+
+    def cameraVersion = "1.2.1"
+// CameraX core library
+    implementation "androidx.camera:camera-core:$cameraVersion"
+    implementation "androidx.camera:camera-camera2:$cameraVersion"
+// CameraX Lifecycle library[可选]避免手动在生命周期释放和销毁数据
+    implementation "androidx.camera:camera-lifecycle:$cameraVersion"
+// CameraX View class[可选]最佳实践，最好用里面的PreviewView，它会自行判断用SurfaceView还是TextureView来实现
+    implementation "androidx.camera:camera-view:$cameraVersion"
 }

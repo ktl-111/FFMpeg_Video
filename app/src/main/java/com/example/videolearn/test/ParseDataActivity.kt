@@ -8,6 +8,7 @@ import android.util.Log
 import android.view.SurfaceHolder
 import android.view.SurfaceView
 import android.view.View
+import android.widget.EditText
 import androidx.appcompat.app.AppCompatActivity
 import com.example.videolearn.R
 import com.example.videolearn.MediaScope
@@ -18,22 +19,24 @@ import java.io.File
 
 class ParseDataActivity : AppCompatActivity(), SurfaceHolder.Callback {
     private val TAG = "ParseDataActivity"
-    val filePath by lazy { File(application.externalCacheDir, "parsedata.h264") }
     lateinit var surfaceView: SurfaceView
     var surfaceHolder: SurfaceHolder? = null
     var mediaCodec: MediaCodec? = null
-
+    lateinit var etContent: EditText
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_parsedata)
         surfaceView = findViewById(R.id.parse_sv)
         surfaceView.holder.addCallback(this)
+        etContent = findViewById(R.id.et_content)
     }
 
 
     fun fore(v: View) {
         surfaceHolder?.also { holder ->
+            val fileName = etContent.text.toString().trim()
+            val filePath by lazy { File(application.externalCacheDir, "$fileName.h264") }
             MediaScope.launch {
                 val startCodec = H264Codec(filePath).startCodec()
                 startCodec?.also {
@@ -138,6 +141,9 @@ class ParseDataActivity : AppCompatActivity(), SurfaceHolder.Callback {
 
     fun first(v: View) {
         surfaceHolder?.also { holder ->
+            val fileName = etContent.text.toString().trim()
+            val filePath by lazy { File(application.externalCacheDir, "$fileName.h264") }
+
             MediaScope.launch {
                 val startCodec = H264Codec(filePath).startCodec()
                 startCodec?.also {

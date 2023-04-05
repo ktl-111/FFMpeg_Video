@@ -266,7 +266,6 @@ Java_com_example_rtmplib_RtmpLib_sendData(JNIEnv *env, jobject thiz, jbyteArray 
         }
         default: {
             result = parseAudio(data, len_, times_, type_);
-            LOGE("not type %d", type_);
             break;
         }
     }
