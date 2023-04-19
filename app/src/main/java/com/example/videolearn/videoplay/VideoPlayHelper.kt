@@ -10,7 +10,7 @@ import kotlinx.coroutines.launch
 
 
 class VideoPlayHelper(private val path: String, private val surface: Surface) {
-    private val START_VIDEO = "video/"
+    private val START_VIDEO = "Video/"
     private val START_AUDIO = "audio/"
     private val TAG = "VideoPlayHelper"
     var audioTrack: AudioTrack? = null
@@ -70,7 +70,7 @@ class VideoPlayHelper(private val path: String, private val surface: Surface) {
                         // TODO: 非h264数据?????
                         FileUtils.writeContent(byteArray, "VideoPlay_video")
                     }
-                    decodeDelay("video", bufferInfo, startTime)
+                    decodeDelay("Video", bufferInfo, startTime)
                     videoCodec.releaseOutputBuffer(dequeueOutputBuffer, true)
                     dequeueOutputBuffer = videoCodec.dequeueOutputBuffer(bufferInfo, 0)
                 }

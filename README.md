@@ -583,7 +583,7 @@ h264visa工具分析
 > 直播推流流程 : 手机采集视频 / 音频数据 , 视频数据使用 H.264 编码 , 音频数据使用 AAC 编码 , 最后将音视频数据都打包到 RTMP 数据包中 , 使用 RTMP 协议上传到 RTMP 服务器中 ;
 
 #### RTMP-API
-![](img/31113620_624521b4e2e1f3803.png)
+<img src="img/31113620_624521b4e2e1f3803.png" style="zoom:50%;" />
 
 #### RTMP 包格式
 结构体,按照格式设置参数到body里
@@ -602,3 +602,18 @@ h264visa工具分析
 [Android RTMP 直播](https://www.jianshu.com/p/02b6eb0e3498)
 [RTMP 数据格式](https://blog.csdn.net/heli200482128/article/details/127198244)  
 [RTMP详讲](https://zhuanlan.zhihu.com/p/191542130)  
+
+
+
+## FFMPEG
+[官网](https://ffmpeg.org/)  
+> FFmpeg 是一个音视频软解so库
+
+### 主要流程
+<img src="img/559adc64edfa49809396ba6258df8bac.png" style="zoom:60%;" />
+
+### 常用api
+[](img/Snipaste_2023-04-13_23-34-26.png)
+
+### 参考
+[一文读懂 FFmpeg](https://juejin.cn/post/7072198840035573790#heading-19)
