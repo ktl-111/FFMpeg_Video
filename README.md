@@ -613,7 +613,95 @@ h264visa工具分析
 <img src="img/559adc64edfa49809396ba6258df8bac.png" style="zoom:60%;" />
 
 ### 常用api
-[](img/Snipaste_2023-04-13_23-34-26.png)
+![](img/Snipaste_2023-04-13_23-34-26.png)
 
 ### 参考
 [一文读懂 FFmpeg](https://juejin.cn/post/7072198840035573790#heading-19)
+
+## open系列
+* OpenGL（OpenGraphics Library）
+OpenGL是业界最广泛采用的二维和三维图形API，将成千上万的应用程序应用到各种各样的计算机平台上。它是独立于窗口系统和操作系统以及网络透明。OpenGL使软件开发人员为PC，工作站和超级计算机硬件创造高性能，视觉上引人注目的图形软件应用程序，在市场，如CAD，内容创作，能源，娱乐，游戏开发，制造，医疗和虚拟现实。OpenGL公开了最新图形硬件的所有功能。
+
+* OpenCL（OpenComputing Language）
+开放运算语言opencl并行计算，面向异构系统通用目的并行编程的开放式、免费标准，也是一个统一的编程环境，便于软件开发人员为高性能计算服务器、桌面计算系统、手持设备编写高效轻便的代码，而且广泛适用于多核心处理器(CPU)、图形处理器(GPU)、Cell类型架构以及数字信号处理器(DSP)等其他并行处理器，在游戏、娱乐、科研、医疗等各种领域都有广阔的发展前景。
+
+* OpenAL（Open AudioLibrary）
+是自由软件界的跨平台音效API。它设计给多通道三维位置音效的特效表现。其 API 风格模仿自OpenGL。 
+
+* OpenGL ES (OpenGL for EmbeddedSystems)
+嵌入式系统采用的OpenGL集，是 OpenGL 三维图形 API 的子集，针对手机、PDA和游戏主机等嵌入式设备而设计。该API由Khronos集团定义推广，Khronos是一个图形软硬件行业协会，该协会主要关注图形和多媒体方面的开放标准。 
+
+* OpenVG（Vector GraphicsAcceleration）
+矢量图形设备加速器，OpenVG是免费的，跨平台的API，提供了一个低级别的硬件加速接口的矢量图形库如Flash和SVG。OpenVG是主要针对手持设备，需要移动加速引人注目的用户界面和小屏幕设备上的文本高质量的矢量图形，使硬件加速，在非常低的功率水平提供流畅的交互性能。
+
+* OpenSL ES (Open Sound Library for Embedded Systems)
+OpenSL ES 是无授权费、跨平台、针对嵌入式系统精心优化的硬件音频加速API。它为嵌入式移动多媒体设备上的本地应用程序开发者提供标准化, 高性能,低响应时间的音频功能实现方法，并实现软/硬件音频性能的直接跨平台部署，降低执行难度，促进高级音频市场的发展。
+
+### opensl es(音频播放)
+#### 为什么用opensl es播放视频
+java层提供了AudioTrack,但是只支持部分封装格式的音频,并且如果是使用ffmpeg进行解码的话,还得从C回调到java,如果用opensl es可以直接在C操作
+
+#### api设计
+> OpenSL ES 是基于 c 语言实现的，但其提供的接口是采用面向对象的方式实现，OpenSL ES 的大多数 API 是通过对象来调用的
+
+opensl es 使用三步骤
+1.创建 create
+2.实例化 realize
+3.使用对应接口 GetInterface(xxx)
+4.销毁 Destroy  
+
+![](img/Snipaste_2023-04-20_22-57-21.png)
+
+#### 对象(Object)与接口(Interface)
+> Object和Interface是OpenSL ES库的两个非常重要的概念，OpenSL ES的整个框架就是基于这两个概念构成的  
+
+1. 每个Object可能存在一个或者多个Interface，而每个Interface封装了相关的功能函数  
+    比如当我们获取一个Audio Player对象后，可以通过该对象得到音频播放Interface、音量Interface、缓存队列Interface，然后调用这些Interface的功能函数实现音频播放、音量调节等功能
+
+  ```c++
+SLEngineItf pEngineItf = NULL; // OpenSL ES引擎Interface
+SLObjectItf pPlayerObject = NULL;  // Audio Player对象
+SLPlayItf pPlayerItf = NULL;	   // 播放接口
+SLVolumeItf pVolumeItf = NULL;	   // 音量接口
+SLAndroidSimpleBufferQueueItf pBufferItf = NULL; // 缓存队列接口
+
+//创建播放器
+(*pEngineItf)->CreateAudioPlayer(pEngineItf,&pPlayerObject,..);
+//实例化
+(*pPlayerObject)->Realize(pPlayerObject,SL_BOOLEAN_FALSE);               
+//获取播放,暂停,恢复控制器
+(*pPlayerObject)->GetInterface(pPlayerObject, SL_IID_PLAY,&pPlayerItf); 
+//获取音量控制器
+(*pPlayerObject)->GetInterface(pPlayerObject,SL_IID_VOLUME,&pVolumeItf); 
+
+  ```
+
+2. 每个Object对象提供了一些最基础的"管理"操作，比如它的Realize、Destory函数用于分配、释放资源，Resume函数用于结束SL_OBJECT_STATE_SUSPENED状态等等。如果系统使用该对象支持的功能函数，就需要通过该对象的GetInterface函数获取相应的Interface接口，然后通过该Interface接口来访问功能函数。下面以调节音量为例：
+```c++
+// OpenSL ES引擎Interface
+SLEngineItf pEngineItf = NULL;
+SLObjectItf pPlayerObject = NULL;  
+// 首先，创建Audio Player对象
+(*pEngineItf)->CreateAudioPlayer(pEngineItf,&pPlayerObject,..); 
+// 其次，初始化Audio Player对象，即分配资源
+(*pPlayerObject)->Realize(pPlayerObject,SL_BOOLEAN_FALSE); 
+// 第三，获取Audio Player对象的音量(Volume)Interface
+(*pPlayerObject)->GetInterface(pPlayerObject, SL_IID_VOLUME,&pVolumeItf);  
+// 最后，调用Volume Interface的调节音量功能函数
+(*pVolumeItf)->SetVolumeLevel(&pVolumeItf,level);
+```
+
+#### 对象状态机制
+> OpenSL ES 的 Object 一般有三种状态，分别是：UNREALIZED （不可用），REALIZED（可用），SUSPENDED（挂起）。  
+
+![](img/Snipaste_2023-04-20_23-10-40.png)
+Object 处于 UNREALIZED （不可用）状态时，系统不会为其分配资源；调用 Realize 方法后便进入 REALIZED（可用）状态，此时对象的各个功能和资源可以正常访问；当系统音频相关的硬件设备被其他进程占用时，OpenSL ES Object 便会进入 SUSPENDED （挂起）状态，随后调用 Resume 方法可使对象重回 REALIZED（可用）状态；当 Object 使用结束后，调用 Destroy 方法释放资源，是对象重回 UNREALIZED （不可用）状态。
+
+
+
+#### 参考
+[opensl es api讲解以及ffmpeg解码音频](https://juejin.cn/post/7031848037311840293)
+[opensl es播放音频](https://www.jianshu.com/p/5ab9a339346f)
+[opensl es播放与采集](https://mp.weixin.qq.com/s/BSCmvkVVTEh2UuPcZhk3dA)
+
+### opengl es(视频播放)

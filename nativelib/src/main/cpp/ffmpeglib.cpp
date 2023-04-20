@@ -11,23 +11,32 @@ extern "C" {
 #include "libavutil/imgutils.h"
 #include "libavformat/avformat.h"
 #include "libavcodec/avcodec.h"
+#include "libswresample/swresample.h"
+#include <SLES/OpenSLES.h>
+#include <SLES/OpenSLES_Android.h>
 }
 AVFormatContext *avFormatContext;
 AVCodecContext *videoContext;
+AVCodecContext *audioContext;
 //等同于rgbframe.data,两个指针指的是同一个位置,由于后面copy时需要移动指针,但是rgbFrame.data需要用来存数据,不允许移动指针
 //所以定义个影子buffer
 uint8_t *shadowedOutbuffer;
 AVFrame *rgbFrame;
-SwsContext *swsContext;
+SwsContext *videoSwsContext;
 Queue *videoQueue;
+Queue *audioQueue;
 int videoIndex;
 int audioIndex;
+int videoSleep;
+
+SLAndroidSimpleBufferQueueItf pcmBufferQueue;
+uint8_t *audioOutBuffer;
 enum AVPixelFormat format = AV_PIX_FMT_RGBA;
 
 ANativeWindow *nativeWindow;
 ANativeWindow_Buffer windowBuffer;
 
-void startLooperVideo();
+void initVideo();
 
 void *decodePacket(void *params);
 
@@ -37,6 +46,14 @@ void freePacket(AVPacket **pPacket);
 
 void freeFrame(AVFrame **pAvFrame);
 
+void initAudio();
+
+void pcmBufferCallBack(SLAndroidSimpleBufferQueueItf bf, void *context);
+
+void startLooprtDecode();
+
+int sampleConvertOpensles(int sample_rate);
+
 bool startDecode = false;
 extern "C"
 JNIEXPORT jboolean JNICALL
@@ -45,6 +62,8 @@ Java_com_example_nativelib_FFMpegPlay_play(JNIEnv *env, jobject thiz, jstring ur
     char *url = const_cast<char *>(env->GetStringUTFChars(url_, 0));
 
     LOGI("play url:%s", url);
+    //注册所有组件
+    av_register_all();
     if (url[0] == 'h') {
         LOGI("play init network");
         //初始化网络模块
@@ -64,11 +83,15 @@ Java_com_example_nativelib_FFMpegPlay_play(JNIEnv *env, jobject thiz, jstring ur
     }
 
     for (int i = 0; i < avFormatContext->nb_streams; ++i) {
-        AVCodecParameters *codecpar = avFormatContext->streams[i]->codecpar;
+        AVStream *pStream = avFormatContext->streams[i];
+        AVCodecParameters *codecpar = pStream->codecpar;
         if (codecpar->codec_type == AVMEDIA_TYPE_VIDEO) {
+            int fps = av_q2d(pStream->avg_frame_rate);
+            videoSleep = 1000 / fps;
+            LOGI("视频流index:%d,width:%d,height:%d fps:%d", i, codecpar->width, codecpar->height,
+                 fps);
+            //视频流
             videoIndex = i;
-            //判断流type是否为视频流
-            LOGI("视频流index:%d,width:%d,height:%d", i, codecpar->width, codecpar->height);
             //查找对应的编解码器,传入获取到的id
             AVCodec *avCodec = avcodec_find_decoder(codecpar->codec_id);
             //分配解码器分配上下文
@@ -78,7 +101,18 @@ Java_com_example_nativelib_FFMpegPlay_play(JNIEnv *env, jobject thiz, jstring ur
             //打开解码器
             avcodec_open2(videoContext, avCodec, 0);
         } else if (codecpar->codec_type == AVMEDIA_TYPE_AUDIO) {
+            LOGI("音频流index:%d,sample_rate:%d,channels:%d,frame_size:%d", i, codecpar->sample_rate,
+                 codecpar->channels, codecpar->frame_size);
+            //音频流
             audioIndex = i;
+            //查找对应的编解码器,传入获取到的id
+            AVCodec *avCodec = avcodec_find_decoder(codecpar->codec_id);
+            //分配解码器分配上下文
+            audioContext = avcodec_alloc_context3(avCodec);
+            //将数据流相关的编解码参数来填充编解码器上下文
+            avcodec_parameters_to_context(audioContext, codecpar);
+            //打开解码器
+            avcodec_open2(audioContext, avCodec, 0);
         }
     }
 
@@ -94,12 +128,124 @@ Java_com_example_nativelib_FFMpegPlay_play(JNIEnv *env, jobject thiz, jstring ur
                                      WINDOW_FORMAT_RGBA_8888);
 
     startDecode = true;
-    startLooperVideo();
+
+    initVideo();
+    initAudio();
+    startLooprtDecode();
     env->ReleaseStringUTFChars(url_, url);
     return false;
 }
 
-void startLooperVideo() {
+void initAudio() {
+    /**
+     * opensl es 使用三步骤
+     * 1.创建 create
+     * 2.实例化 realize
+     * 3.使用对应接口 GetInterface(xxx)
+     * */
+    SLObjectItf engine;
+    //获取引擎
+    auto result = slCreateEngine(&engine, 0, 0, 0, 0, 0);
+
+    if (result != SL_RESULT_SUCCESS) {
+        LOGE("initAudio init fail %d", result);
+        return;
+    }
+    SLEngineItf engineObject;
+    //实例化引擎,false:同步,true:异步
+    result = (*engine)->Realize(engine, SL_BOOLEAN_FALSE);
+    if (result != SL_RESULT_SUCCESS) {
+        LOGE("initAudio engine Realize fail %d", result);
+        return;
+    }
+    //执行获取引擎对象接口
+    result = (*engine)->GetInterface(engine, SL_IID_ENGINE, &engineObject);
+    if (result != SL_RESULT_SUCCESS) {
+        LOGE("initAudio SL_IID_ENGINE fail %d", result);
+        return;
+    }
+
+    //创建多路混音器
+    SLObjectItf mix;
+    const SLInterfaceID mids[1] = {SL_IID_ENVIRONMENTALREVERB};
+    const SLboolean mreq[1] = {SL_BOOLEAN_FALSE};
+    result = (*engineObject)->CreateOutputMix(engineObject, &mix, 1, mids, mreq);
+    if (result != SL_RESULT_SUCCESS) {
+        LOGE("initAudio CreateOutputMix fail %d", result);
+        return;
+    }
+    //实例化混音器
+    result = (*mix)->Realize(mix, SL_BOOLEAN_FALSE);
+    if (result != SL_RESULT_SUCCESS) {
+        LOGE("initAudio mix Realize failed %d", result);
+        return;
+    }
+
+    //配置混音器
+    SLDataLocator_OutputMix outputMix = {SL_DATALOCATOR_OUTPUTMIX, mix};
+    SLDataSink audioSnk = {&outputMix, nullptr};
+
+    //创建pcm 配置
+    SLDataFormat_PCM pcm = {
+            SL_DATAFORMAT_PCM,//pcm格式
+            static_cast<SLuint32>(audioContext->channels),//声道
+            static_cast<SLuint32>(sampleConvertOpensles(audioContext->sample_rate)),//采样率
+            SL_PCMSAMPLEFORMAT_FIXED_16,//bits
+            SL_PCMSAMPLEFORMAT_FIXED_16,//和位数一致
+            SL_SPEAKER_FRONT_LEFT | SL_SPEAKER_FRONT_RIGHT,//立体声
+            SL_BYTEORDER_LITTLEENDIAN//结束标志
+    };
+    //定位要播放声音数据的存放位置
+    SLDataLocator_AndroidSimpleBufferQueue que = {SL_DATALOCATOR_ANDROIDSIMPLEBUFFERQUEUE, 2};
+    SLDataSource audioSrc = {&que, &pcm};
+
+    //创建播放器
+    const SLInterfaceID ids[3] = {SL_IID_BUFFERQUEUE};
+    const SLboolean req[3] = {SL_BOOLEAN_TRUE};
+    SLObjectItf audioPlayObject;
+    result = (*engineObject)->CreateAudioPlayer(engineObject, &audioPlayObject, &audioSrc,
+                                                &audioSnk, 1,
+                                                ids, req);
+    if (result != SL_RESULT_SUCCESS) {
+        LOGE("initAudio CreateAudioPlayer failed %d", result);
+        return;
+    }
+
+    //实例化
+    result = (*audioPlayObject)->Realize(audioPlayObject, SL_BOOLEAN_FALSE);
+    if (result != SL_RESULT_SUCCESS) {
+        LOGE("initAudio audioPlayObject Realize failed %d", result);
+        return;
+    }
+
+    //获取操作对象
+    SLPlayItf operateObject;
+    result = (*audioPlayObject)->GetInterface(audioPlayObject, SL_IID_PLAY, &operateObject);
+    if (result != SL_RESULT_SUCCESS) {
+        LOGE("initAudio SL_IID_PLAY failed %d", result);
+        return;
+    }
+
+    //使用接口,获取注册缓冲区回调对象
+    result = (*audioPlayObject)->GetInterface(audioPlayObject, SL_IID_BUFFERQUEUE, &pcmBufferQueue);
+    if (result != SL_RESULT_SUCCESS) {
+        LOGE("initAudio SL_IID_BUFFERQUEUE fail %d", result);
+        return;
+    }
+    //注册回调
+    (*pcmBufferQueue)->RegisterCallback(pcmBufferQueue, pcmBufferCallBack, 0);
+
+    //设置播放
+    (*operateObject)->SetPlayState(operateObject, SL_PLAYSTATE_PLAYING);
+
+    //采样率*通道数*16bit(2字节)
+    audioOutBuffer = (uint8_t *) av_malloc(audioContext->sample_rate * audioContext->channels * 2);
+    //启动回调
+    (*pcmBufferQueue)->Enqueue(pcmBufferQueue, "", 1);
+    LOGI("initAudio done");
+}
+
+void initVideo() {
     //初始存放目标数据的化容器
     rgbFrame = av_frame_alloc();
     //获取容器大小 格式,宽高
@@ -111,25 +257,27 @@ void startLooperVideo() {
                          videoContext->width, videoContext->height, 1);
 
     //初始化转换上下文,原视频宽高+format,目标视频宽高+format
-    swsContext = sws_getContext(videoContext->width, videoContext->height, videoContext->pix_fmt,
-                                videoContext->width, videoContext->height, format,
-                                SWS_BICUBIC, nullptr, nullptr, nullptr);
+    videoSwsContext = sws_getContext(videoContext->width, videoContext->height,
+                                     videoContext->pix_fmt,
+                                     videoContext->width, videoContext->height, format,
+                                     SWS_BICUBIC, nullptr, nullptr, nullptr);
+}
+
+void startLooprtDecode() {
+    videoQueue = new Queue();
+    audioQueue = new Queue();
+    //执行解码线程
+    pthread_t thread_decode;
+    pthread_create(&thread_decode, nullptr, decodePacket, nullptr);
 
     //创建生产消费者,loop线程
-    videoQueue = new Queue();
-    pthread_t thread_decode;
     pthread_t thread_vidio;
-    pthread_create(&thread_decode, nullptr, decodePacket, nullptr);
     pthread_create(&thread_vidio, nullptr, decodeVideo, nullptr);
 }
 
 void *decodePacket(void *params) {
     LOGI("读取数据包");
     while (startDecode) {
-//        if (videoQueue->size() > 100) {
-//            usleep(100 * 1000);
-//        }
-
         LOGI("start read");
         //创建packet接收
         AVPacket *avPacket = av_packet_alloc();
@@ -137,17 +285,104 @@ void *decodePacket(void *params) {
         int result = av_read_frame(avFormatContext, avPacket);
         if (result < 0) {
             LOGI("read done!!!");
+            freePacket(&avPacket);
             //结尾
             break;
         }
         if (avPacket->stream_index == videoIndex) {
+            //延迟帧率ms
+            usleep(videoSleep * 1000);
             LOGI("视频包大小:%d", avPacket->size);
             videoQueue->push(avPacket);
         } else if (avPacket->stream_index == audioIndex) {
             LOGI("音频包大小:%d", avPacket->size);
+            audioQueue->push(avPacket);
         }
     }
     return nullptr;
+}
+
+//需要播放时会回调该函数拿数据
+void pcmBufferCallBack(SLAndroidSimpleBufferQueueItf bf, void *context) {
+    LOGI("audio pcmBufferCallBack start");
+    int dataSize = 0;
+    while (startDecode) {
+        AVPacket *avPacket = av_packet_alloc();
+        LOGI("audio start get data");
+        //消费者获取packet
+        audioQueue->get(avPacket);
+        LOGI("audio 消费者packet size:%d", avPacket->size);
+
+        //通知解码
+        int result = avcodec_send_packet(audioContext, avPacket);
+        if (result != 0) {
+            LOGE("audio avcodec_send_packet error code:%d", result);
+            freePacket(&avPacket);
+            continue;
+        }
+        LOGI("audio start receive frame");
+        auto startTime = std::chrono::steady_clock::now();
+        //创建接收帧容器
+        AVFrame *audioFrame = av_frame_alloc();
+        //接收解码器输出的数据
+        result = avcodec_receive_frame(audioContext, audioFrame);
+        if (result != 0) {
+            freeFrame(&audioFrame);
+            freePacket(&avPacket);
+            LOGE("audio avcodec_receive_frame error code:%d", result);
+            continue;
+        }
+        //设置解析option
+        SwrContext *swr_ctx = swr_alloc_set_opts(
+                NULL,
+                AV_CH_LAYOUT_STEREO,
+                AV_SAMPLE_FMT_S16,
+                audioFrame->sample_rate,
+                audioFrame->channel_layout,
+                (AVSampleFormat) audioFrame->format,
+                audioFrame->sample_rate,
+                NULL, NULL
+        );
+
+        if (!swr_ctx || swr_init(swr_ctx) < 0) {
+            freeFrame(&audioFrame);
+            freePacket(&avPacket);
+            LOGE("audio swr_ctx init fail %p", &swr_ctx);
+            continue;
+        }
+
+        //开始转换
+        int nb = swr_convert(swr_ctx, &audioOutBuffer, audioFrame->nb_samples,
+                             (const uint8_t **) audioFrame->data, audioFrame->nb_samples);
+        if (nb < 0) {
+            freeFrame(&audioFrame);
+            freePacket(&avPacket);
+            swr_free(&swr_ctx);
+            LOGE("audio swr_convert fail %d", nb);
+            continue;
+        }
+
+        int outChannel = av_get_channel_layout_nb_channels(AV_CH_LAYOUT_STEREO);
+        LOGI("audio swr_convert nb:%d outChannel:%d", nb, outChannel);
+        //计算转换后的真实大小
+        dataSize = nb * outChannel * av_get_bytes_per_sample(AV_SAMPLE_FMT_S16);
+        LOGI("audio swr_convert dataSize:%d", dataSize);
+
+        auto endTime = std::chrono::steady_clock::now();
+        auto diff = std::chrono::duration<double, std::micro>(endTime - startTime).count();
+
+        LOGI("audio 解码耗时 by micro:%f sample_rate:%d,channels:%d,format:%d,", diff,
+             audioFrame->sample_rate, audioFrame->channels, audioFrame->format);
+
+        freeFrame(&audioFrame);
+        freePacket(&avPacket);
+        swr_free(&swr_ctx);
+        break;
+    }
+    if (dataSize > 0) {
+        LOGI("audio pcmBufferQueue Enqueue");
+        (*pcmBufferQueue)->Enqueue(pcmBufferQueue, audioOutBuffer, dataSize);
+    }
 }
 
 void *decodeVideo(void *params) {
@@ -156,11 +391,11 @@ void *decodeVideo(void *params) {
         AVPacket *avPacket = av_packet_alloc();
         //消费者获取packet
         videoQueue->get(avPacket);
-        LOGI("消费者packet size:%d", avPacket->size);
+        LOGI("video 消费者packet size:%d", avPacket->size);
         //通知解码
         int result = avcodec_send_packet(videoContext, avPacket);
         if (result != 0) {
-            LOGI("avcodec_send_packet error code:%d", result);
+            LOGI("video avcodec_send_packet error code:%d", result);
             freePacket(&avPacket);
             continue;
         }
@@ -172,12 +407,12 @@ void *decodeVideo(void *params) {
         if (result != 0) {
             freeFrame(&videoFrame);
             freePacket(&avPacket);
-            LOGI("avcodec_receive_frame error code:%d", result);
+            LOGI("video avcodec_receive_frame error code:%d", result);
             continue;
         }
 //        LOGI("帧数据 pts:%lld,dts:%lld,duration:%lld,pictType:%d",videoFrame->pts,videoFrame->pkt_dts,videoFrame->pkt_duration,videoFrame->pict_type);
         //将yuv数据转成rgb
-        sws_scale(swsContext, videoFrame->data, videoFrame->linesize, 0, videoContext->height,
+        sws_scale(videoSwsContext, videoFrame->data, videoFrame->linesize, 0, videoContext->height,
                   rgbFrame->data, rgbFrame->linesize);
         //此时rgbframe.data中已经有数据了
 
@@ -223,21 +458,74 @@ void *decodeVideo(void *params) {
         auto endTime = std::chrono::steady_clock::now();
         auto diff = std::chrono::duration<double, std::micro>(endTime - startTime).count();
 
-        LOGI("解码耗时 by micro:%f 帧类型:%s", diff, type);
+        LOGI("video 解码耗时 by micro:%f 帧类型:%s", diff, type);
     }
     return nullptr;
 }
 
 void freePacket(AVPacket **pPacket) {
+    LOGI("freePacket %p", &*pPacket);
     av_packet_free(&*pPacket);
     av_free(*pPacket);
     *pPacket = nullptr;
 }
 
 void freeFrame(AVFrame **pAvFrame) {
+    LOGI("freeFrame %p", &*pAvFrame);
     av_frame_free(&*pAvFrame);
     av_free(*pAvFrame);
     *pAvFrame = nullptr;
+}
+
+
+int sampleConvertOpensles(int sample_rate) {
+    int rate = 0;
+    switch (sample_rate) {
+        case 8000:
+            rate = SL_SAMPLINGRATE_8;
+            break;
+        case 11025:
+            rate = SL_SAMPLINGRATE_11_025;
+            break;
+        case 12000:
+            rate = SL_SAMPLINGRATE_12;
+            break;
+        case 16000:
+            rate = SL_SAMPLINGRATE_16;
+            break;
+        case 22050:
+            rate = SL_SAMPLINGRATE_22_05;
+            break;
+        case 24000:
+            rate = SL_SAMPLINGRATE_24;
+            break;
+        case 32000:
+            rate = SL_SAMPLINGRATE_32;
+            break;
+        case 44100:
+            rate = SL_SAMPLINGRATE_44_1;
+            break;
+        case 48000:
+            rate = SL_SAMPLINGRATE_48;
+            break;
+        case 64000:
+            rate = SL_SAMPLINGRATE_64;
+            break;
+        case 88200:
+            rate = SL_SAMPLINGRATE_88_2;
+            break;
+        case 96000:
+            rate = SL_SAMPLINGRATE_96;
+            break;
+        case 192000:
+            rate = SL_SAMPLINGRATE_192;
+            break;
+        default:
+            rate = SL_SAMPLINGRATE_44_1;
+
+    }
+    return rate;
+
 }
 
 extern "C"

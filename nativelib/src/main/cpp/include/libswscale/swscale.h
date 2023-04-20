@@ -157,8 +157,8 @@ av_warn_unused_result
 int sws_init_context(struct SwsContext *sws_context, SwsFilter *srcFilter, SwsFilter *dstFilter);
 
 /**
- * Free the swscaler context swsContext.
- * If swsContext is NULL, then does nothing.
+ * Free the swscaler context videoSwsContext.
+ * If videoSwsContext is NULL, then does nothing.
  */
 void sws_freeContext(struct SwsContext *swsContext);
 
@@ -322,7 +322,7 @@ void sws_convertPalette8ToPacked32(const uint8_t *src, uint8_t *dst, int num_pix
 void sws_convertPalette8ToPacked24(const uint8_t *src, uint8_t *dst, int num_pixels, const uint8_t *palette);
 
 /**
- * Get the AVClass for swsContext. It can be used in combination with
+ * Get the AVClass for videoSwsContext. It can be used in combination with
  * AV_OPT_SEARCH_FAKE_OBJ for examining options.
  *
  * @see av_opt_find().

@@ -35,6 +35,7 @@ class FFMPEGActivity : AppCompatActivity() {
     private fun play() {
         //直播地址
 //        val path = "http://zhibo.hkstv.tv/livestream/mutfysrq/playlist.m3u8"
+//        val path = "http://39.135.138.58:18890/PLTV/88888888/224/3221225630/index.m3u8"
         val path = File(application.externalCacheDir, "ffmpeg.mp4").absolutePath
         ffMpegPlay ?: let {
             FFMpegPlay(surfaceView).apply { ffMpegPlay = this }

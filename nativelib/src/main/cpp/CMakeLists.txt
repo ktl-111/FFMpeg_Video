@@ -29,4 +29,5 @@ target_link_libraries(
         swresample
         swscale
         android
+        OpenSLES
 )
