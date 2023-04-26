@@ -18,8 +18,16 @@ class H264Codec(private val filePath: File) {
         fun isB() = slice_type == SLICE_TYPE_B
         fun isP() = slice_type == SLICE_TYPE_P
         override fun toString(): String {
-            return "ResultData( unit_type=$unit_type, slice_type=$slice_type, width=$width, height=$height, resultData=${resultData.contentToString()})"
+            return "ResultData( unit_type=$unit_type, slice_type=$slice_type ${getFrameType()}, width=$width, height=$height, resultData=${resultData.contentToString()})"
         }
+
+        fun getFrameType() =
+            when {
+                isI() -> "I帧"
+                isB() -> "B帧"
+                isP() -> "P帧"
+                else -> "其他"
+            }
     }
 
     init {
@@ -242,7 +250,7 @@ class H264Codec(private val filePath: File) {
                 currReadBit++
             }
             var dwRet = 0
-            for (i in 0 .. zeroNum) {
+            for (i in 0..zeroNum) {
                 dwRet = dwRet shl 1
                 if (bytes[currReadBit / 8].toInt() and (0x80 shr (currReadBit % 8)) != 0) {
                     //当前位+1

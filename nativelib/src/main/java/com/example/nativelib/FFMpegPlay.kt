@@ -1,12 +1,14 @@
 package com.example.nativelib
 
+import android.util.Log
 import android.view.Surface
 import android.view.SurfaceView
 import android.view.ViewGroup.LayoutParams
 
-class FFMpegPlay(val surfaceView: SurfaceView) {
-
+class FFMpegPlay(private val surfaceView: SurfaceView) {
+    val TAG = "FFMpegPlay"
     external fun play(url: String, surface: Surface): Boolean
+    external fun cutting(destPath: String)
     external fun release()
 
     init {
@@ -19,4 +21,11 @@ class FFMpegPlay(val surfaceView: SurfaceView) {
         val videoHeight = (videoWidth / ratio).toInt()
         surfaceView.layoutParams = LayoutParams(videoWidth, videoHeight)
     }
+
+    private fun onCallData(byteArray: ByteArray) {
+        Log.i(TAG, "onCallData: ${byteArray.size}")
+        callback?.invoke(byteArray)
+    }
+
+    var callback: ((ByteArray) -> Unit)? = null
 }

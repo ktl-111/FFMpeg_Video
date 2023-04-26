@@ -39,7 +39,7 @@ class VideoPlayActiivty : AppCompatActivity() {
     fun play(v: View) {
         surfaceHolder?.also {
             videoPlayHelper = VideoPlayHelper(
-                File(application.externalCacheDir, "Video.mp4").toString(),
+                File(application.externalCacheDir, "ffmpeg.mp4").toString(),
                 it.surface
             ).apply {
                 play()

@@ -15,6 +15,21 @@ extern "C" {
 #include <SLES/OpenSLES.h>
 #include <SLES/OpenSLES_Android.h>
 }
+
+_JavaVM *javaVM = nullptr;
+jobject instance = nullptr;
+jmethodID onCallData = nullptr;
+extern "C"
+JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *vm, void *reserved) {
+    jint result = -1;
+    javaVM = vm;
+    JNIEnv *env;
+    if (vm->GetEnv((void **) &env, JNI_VERSION_1_4) != JNI_OK) {
+        return result;
+    }
+    return JNI_VERSION_1_4;
+}
+
 AVFormatContext *avFormatContext;
 AVCodecContext *videoContext;
 AVCodecContext *audioContext;
@@ -36,6 +51,8 @@ enum AVPixelFormat format = AV_PIX_FMT_RGBA;
 ANativeWindow *nativeWindow;
 ANativeWindow_Buffer windowBuffer;
 
+AVFormatContext *outFormatContext;
+
 void initVideo();
 
 void *decodePacket(void *params);
@@ -54,11 +71,17 @@ void startLooprtDecode();
 
 int sampleConvertOpensles(int sample_rate);
 
+int initMuxerParams(char *destPath);
+
 bool startDecode = false;
 extern "C"
 JNIEXPORT jboolean JNICALL
 Java_com_example_nativelib_FFMpegPlay_play(JNIEnv *env, jobject thiz, jstring url_,
                                            jobject surface) {
+    instance = env->NewGlobalRef(thiz);
+    jclass jclazz = env->GetObjectClass(instance);
+    onCallData = env->GetMethodID(jclazz, "onCallData", "([B)V");
+
     char *url = const_cast<char *>(env->GetStringUTFChars(url_, 0));
 
     LOGI("play url:%s", url);
@@ -86,10 +109,6 @@ Java_com_example_nativelib_FFMpegPlay_play(JNIEnv *env, jobject thiz, jstring ur
         AVStream *pStream = avFormatContext->streams[i];
         AVCodecParameters *codecpar = pStream->codecpar;
         if (codecpar->codec_type == AVMEDIA_TYPE_VIDEO) {
-            int fps = av_q2d(pStream->avg_frame_rate);
-            videoSleep = 1000 / fps;
-            LOGI("视频流index:%d,width:%d,height:%d fps:%d", i, codecpar->width, codecpar->height,
-                 fps);
             //视频流
             videoIndex = i;
             //查找对应的编解码器,传入获取到的id
@@ -100,9 +119,16 @@ Java_com_example_nativelib_FFMpegPlay_play(JNIEnv *env, jobject thiz, jstring ur
             avcodec_parameters_to_context(videoContext, codecpar);
             //打开解码器
             avcodec_open2(videoContext, avCodec, 0);
+
+            int fps = av_q2d(pStream->avg_frame_rate);
+            videoSleep = 1000 / fps;
+            LOGI("视频流index:%d,width:%d,height:%d,fps:%d,duration:%lld,codecName:%s", i,
+                 codecpar->width,
+                 codecpar->height,
+                 fps, avFormatContext->duration / AV_TIME_BASE, avCodec->name);
+
+
         } else if (codecpar->codec_type == AVMEDIA_TYPE_AUDIO) {
-            LOGI("音频流index:%d,sample_rate:%d,channels:%d,frame_size:%d", i, codecpar->sample_rate,
-                 codecpar->channels, codecpar->frame_size);
             //音频流
             audioIndex = i;
             //查找对应的编解码器,传入获取到的id
@@ -113,6 +139,11 @@ Java_com_example_nativelib_FFMpegPlay_play(JNIEnv *env, jobject thiz, jstring ur
             avcodec_parameters_to_context(audioContext, codecpar);
             //打开解码器
             avcodec_open2(audioContext, avCodec, 0);
+
+            LOGI("音频流index:%d,sample_rate:%d,channels:%d,frame_size:%d", i, codecpar->sample_rate,
+                 codecpar->channels, codecpar->frame_size);
+        } else {
+            LOGI("其他流index:%d,codec_type:%d", i, codecpar->codec_type);
         }
     }
 
@@ -291,7 +322,7 @@ void *decodePacket(void *params) {
         }
         if (avPacket->stream_index == videoIndex) {
             //延迟帧率ms
-            usleep(videoSleep * 1000);
+//            usleep(videoSleep * 1000);
             LOGI("视频包大小:%d", avPacket->size);
             videoQueue->push(avPacket);
         } else if (avPacket->stream_index == audioIndex) {
@@ -386,16 +417,54 @@ void pcmBufferCallBack(SLAndroidSimpleBufferQueueItf bf, void *context) {
 }
 
 void *decodeVideo(void *params) {
+    //创建过滤器
+    const AVBitStreamFilter *pFilter;
+    AVBSFContext *absCtx;
+    //-filters 查看支持的过滤器集合
+    pFilter = av_bsf_get_by_name("h264_mp4toannexb");
+
+    av_bsf_alloc(pFilter, &absCtx);
+    avcodec_parameters_copy(absCtx->par_in, avFormatContext->streams[videoIndex]->codecpar);
+    av_bsf_init(absCtx);
+    int result;
 
     while (startDecode) {
         AVPacket *avPacket = av_packet_alloc();
+
         //消费者获取packet
         videoQueue->get(avPacket);
-        LOGI("video 消费者packet size:%d", avPacket->size);
-        //通知解码
-        int result = avcodec_send_packet(videoContext, avPacket);
+
+        int size = avPacket->size;
+        LOGI("video 消费者packet size:%d", size);
+
+        //========过滤器,获取h264码流=========
+        result = av_bsf_send_packet(absCtx, avPacket);
         if (result != 0) {
-            LOGI("video avcodec_send_packet error code:%d", result);
+            LOGE("av_bsf_send_packet error code:%d", result);
+            freePacket(&avPacket);
+            continue;
+        }
+        result = av_bsf_receive_packet(absCtx, avPacket);
+        while (result == 0) {
+            //result为0说明成功,需要继续读取,直到不等于0,说明没有数据
+            result = av_bsf_receive_packet(absCtx, avPacket);
+        }
+
+        JNIEnv *jniEnv;
+        if (javaVM->AttachCurrentThread(&jniEnv, 0) == JNI_OK) {
+            //由于在native子线程,需要特殊处理回调java层
+            jbyteArray pArray = jniEnv->NewByteArray(size);
+            jniEnv->SetByteArrayRegion(pArray, 0, size,
+                                       reinterpret_cast<const jbyte *>(avPacket->data));
+            jniEnv->CallVoidMethod(instance, onCallData, pArray);
+            jniEnv->DeleteLocalRef(pArray);
+            javaVM->DetachCurrentThread();
+        }
+
+        //通知解码
+        result = avcodec_send_packet(videoContext, avPacket);
+        if (result != 0) {
+            LOGE("video avcodec_send_packet error code:%d", result);
             freePacket(&avPacket);
             continue;
         }
@@ -407,10 +476,11 @@ void *decodeVideo(void *params) {
         if (result != 0) {
             freeFrame(&videoFrame);
             freePacket(&avPacket);
-            LOGI("video avcodec_receive_frame error code:%d", result);
+            LOGE("video avcodec_receive_frame error code:%d", result);
             continue;
         }
 //        LOGI("帧数据 pts:%lld,dts:%lld,duration:%lld,pictType:%d",videoFrame->pts,videoFrame->pkt_dts,videoFrame->pkt_duration,videoFrame->pict_type);
+
         //将yuv数据转成rgb
         sws_scale(videoSwsContext, videoFrame->data, videoFrame->linesize, 0, videoContext->height,
                   rgbFrame->data, rgbFrame->linesize);
@@ -453,12 +523,14 @@ void *decodeVideo(void *params) {
             }
         }
 
+
         freeFrame(&videoFrame);
         freePacket(&avPacket);
         auto endTime = std::chrono::steady_clock::now();
-        auto diff = std::chrono::duration<double, std::micro>(endTime - startTime).count();
+        auto diffMicro = std::chrono::duration<double, std::micro>(endTime - startTime).count();
+        auto diffMilli = std::chrono::duration<double, std::milli>(endTime - startTime).count();
 
-        LOGI("video 解码耗时 by micro:%f 帧类型:%s", diff, type);
+        LOGI("video 解码耗时:%f微秒 %f毫秒 帧类型:%s size:%d", diffMicro, diffMilli, type, size);
     }
     return nullptr;
 }
@@ -532,4 +604,129 @@ extern "C"
 JNIEXPORT void JNICALL
 Java_com_example_nativelib_FFMpegPlay_release(JNIEnv *env, jobject thiz) {
     startDecode = false;
+}
+
+int initMuxerParams(char *destPath) {
+    int result;
+    result = avformat_alloc_output_context2(&outFormatContext, nullptr, nullptr, destPath);
+    if (result < 0) {
+        LOGI("avformat_alloc_output_context2 result:%d", result);
+        return -1;
+    }
+    AVStream *outStream = avformat_new_stream(outFormatContext, NULL);
+    result = avcodec_parameters_copy(outStream->codecpar,
+                                     avFormatContext->streams[videoIndex]->codecpar);
+
+    if (result < 0) {
+        LOGE("avcodec_parameters_copy result:%d", result);
+        return -1;
+    }
+
+    outStream->codecpar->codec_tag = 0;
+
+    result = avio_open(&outFormatContext->pb, destPath, AVIO_FLAG_WRITE);
+    if (result < 0) {
+        LOGE("avio_open result:%d", result);
+        return -1;
+    }
+
+    result = avformat_write_header(outFormatContext, nullptr);
+    if (result < 0) {
+        LOGE("avformat_write_header result:%d", result);
+        return -1;
+    }
+    int startTime = 3;
+    int endTime = 8;
+    result = av_seek_frame(avFormatContext, -1, startTime * AV_TIME_BASE, AVSEEK_FLAG_ANY);
+    if (result < 0) {
+        LOGE("av_seek_frame result:%d", result);
+        return -1;
+    }
+
+    int64_t dtsStart;
+    int64_t ptsStart;
+    while (1) {
+        AVStream *inStream, *outStream;
+        auto avPacket = av_packet_alloc();
+
+        int result = av_read_frame(avFormatContext, avPacket);
+        if (result < 0) {
+            LOGI("cutting read done!!!");
+            freePacket(&avPacket);
+            break;
+        }
+        if (avPacket->stream_index == videoIndex) {
+            inStream = avFormatContext->streams[avPacket->stream_index];
+            outStream = outFormatContext->streams[avPacket->stream_index];
+
+            auto timeBase = av_q2d(inStream->time_base);
+            LOGI("cutting timebase:%f,pts:%lld result:%f", timeBase, avPacket->pts,
+                 timeBase * avPacket->pts);
+
+            if (timeBase * avPacket->pts > endTime) {
+                freePacket(&avPacket);
+                break;
+            }
+
+            if (dtsStart == 0) {
+                dtsStart = avPacket->dts;
+            }
+            if (ptsStart == 0) {
+                ptsStart = avPacket->pts;
+            }
+
+            // 时间基转换
+            int rnd = AV_ROUND_NEAR_INF | AV_ROUND_PASS_MINMAX;
+            avPacket->pts = av_rescale_q_rnd(avPacket->pts - ptsStart, inStream->time_base,
+                                             outStream->time_base,
+                                             (AVRounding) rnd);
+
+            avPacket->dts = av_rescale_q_rnd(avPacket->dts - dtsStart, inStream->time_base,
+                                             outStream->time_base,
+                                             (AVRounding) rnd);
+
+            LOGI("cutting av_rescale_q_rnd pts:%lld,dts:%lld,fps:%f", avPacket->pts, avPacket->pts,
+                 av_q2d(outStream->avg_frame_rate));
+            if (avPacket->pts < 0) {
+                avPacket->pts = 0;
+            }
+            if (avPacket->dts < 0) {
+                avPacket->dts = 0;
+            }
+
+            if (avPacket->pts < avPacket->dts) {
+                //处理异常数据,pts必大于dts
+                continue;
+            }
+
+            avPacket->duration = av_rescale_q(avPacket->duration, inStream->time_base,
+                                              outStream->time_base);
+            avPacket->pos = -1;
+
+            result = av_interleaved_write_frame(outFormatContext, avPacket);
+            if (result < 0) {
+                LOGE("av_interleaved_write_frame result:%d", result);
+                break;
+            }
+            freePacket(&avPacket);
+        }
+
+    }
+    LOGI("cutting done!!!");
+    av_write_trailer(outFormatContext);
+    return 0;
+}
+
+extern "C"
+JNIEXPORT void JNICALL
+Java_com_example_nativelib_FFMpegPlay_cutting(JNIEnv *env, jobject thiz, jstring dest_path_) {
+    startDecode = false;
+    char *destPath = const_cast<char *>(env->GetStringUTFChars(dest_path_, 0));
+    LOGI("cutting path:%s", destPath);
+    int result = initMuxerParams(destPath);
+    if (result != -1) {
+
+    }
+
+    env->ReleaseStringUTFChars(dest_path_, destPath);
 }

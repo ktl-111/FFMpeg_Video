@@ -10,7 +10,7 @@ import kotlinx.coroutines.launch
 
 
 class VideoPlayHelper(private val path: String, private val surface: Surface) {
-    private val START_VIDEO = "Video/"
+    private val START_VIDEO = "video/"
     private val START_AUDIO = "audio/"
     private val TAG = "VideoPlayHelper"
     var audioTrack: AudioTrack? = null
@@ -55,8 +55,8 @@ class VideoPlayHelper(private val path: String, private val surface: Surface) {
             val videoCodec = videoCodec!!
             videoCodec.configure(trackFormat, surface, null, 0)
             videoCodec.start()
-
             while (true) {
+                val startTime = System.nanoTime()
                 decodeMediaData(videoExtractor, videoCodec)
 
                 val bufferInfo = MediaCodec.BufferInfo()
@@ -70,10 +70,12 @@ class VideoPlayHelper(private val path: String, private val surface: Surface) {
                         // TODO: 非h264数据?????
                         FileUtils.writeContent(byteArray, "VideoPlay_video")
                     }
-                    decodeDelay("Video", bufferInfo, startTime)
+//                    decodeDelay("video", bufferInfo, startTime)
                     videoCodec.releaseOutputBuffer(dequeueOutputBuffer, true)
                     dequeueOutputBuffer = videoCodec.dequeueOutputBuffer(bufferInfo, 0)
                 }
+                val diff = System.nanoTime() - startTime
+                Log.i(TAG, "parseVideo: 耗时:${diff}纳秒 ${diff/1000/1000}毫秒")
 
                 //读到结束
                 if (bufferInfo.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM !== 0) {
@@ -210,6 +212,7 @@ class VideoPlayHelper(private val path: String, private val surface: Surface) {
         for (index in 0 until trackCount) {
             val trackFormat = mediaExtractor.getTrackFormat(index)
             trackFormat.getString(MediaFormat.KEY_MIME)?.also {
+                Log.i(TAG, "getTrackIndex: ${it} ${startWith}")
                 if (it.startsWith(startWith)) {
                     return index to it
                 }

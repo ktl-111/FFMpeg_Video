@@ -329,7 +329,6 @@ typedef struct AVFrame {
      * NOTE: Except for hwaccel formats, pointers not needed by the format
      *  MUST be set to NULL.
      */
-//      88  89 80  camerax    ImagePlane   能 1  不能2  可以 1 不可以 2
     uint8_t *data[AV_NUM_DATA_POINTERS];
 
     /**

@@ -67,15 +67,18 @@ class ParseDataActivity : AppCompatActivity(), SurfaceHolder.Callback {
                                         spsData.size,
                                         ppsData!!.size
                                     )
-                                    parseData(byteArray)
+                                    parseData("sps+pps", byteArray)
                                 }
                             }
                         } else if (resultData.isI()) {
                             Log.i(TAG, "fore: I帧")
-                            parseData(resultData.resultData)
+                            parseData("I帧", resultData.resultData)
                         } else {
-                            Log.i(TAG, "fore: 其他帧")
-                            parseData(resultData.resultData)
+                            Log.i(TAG, "fore: 其他帧 slice_type:${resultData.slice_type}")
+                            parseData(
+                                resultData.getFrameType(),
+                                resultData.resultData
+                            )
                         }
                         delay(50)
                     }
@@ -104,9 +107,9 @@ class ParseDataActivity : AppCompatActivity(), SurfaceHolder.Callback {
         }
     }
 
-    fun parseData(data: ByteArray) {
+    fun parseData(tag: String, data: ByteArray) {
         mediaCodec?.also { mediaCodec ->
-            Log.i(TAG, "parseData: ")
+            val startTime = System.nanoTime()
             val dequeueInputBuffer = mediaCodec.dequeueInputBuffer(10_000)
             Log.i(TAG, "parseData  dequeueInputBuffer:$dequeueInputBuffer")
             if (dequeueInputBuffer >= 0) {
@@ -133,6 +136,8 @@ class ParseDataActivity : AppCompatActivity(), SurfaceHolder.Callback {
                 dequeueOutputBuffer = mediaCodec.dequeueOutputBuffer(bufferInfo, 1_000)
                 Log.i(TAG, "parseData while dequeueOutputBuffer:$dequeueOutputBuffer")
             }
+            val diff = System.nanoTime() - startTime
+            Log.i(TAG, "$tag parseVideo: 耗时:${diff}纳秒 ${diff / 1000 / 1000}毫秒")
         } ?: kotlin.run {
             Log.e(TAG, "parseData: mediaCodec is null")
         }
@@ -179,12 +184,12 @@ class ParseDataActivity : AppCompatActivity(), SurfaceHolder.Callback {
                                         spsData.size,
                                         ppsData!!.size
                                     )
-                                    parseData(byteArray)
+                                    parseData("sps+pps", byteArray)
                                 }
                             }
                         } else if (resultData.isI()) {
                             Log.i(TAG, "fore: I帧")
-                            parseData(resultData.resultData)
+                            parseData("I帧", resultData.resultData)
                             if (currI >= maxI) {
                                 return@also
                             }
@@ -194,7 +199,10 @@ class ParseDataActivity : AppCompatActivity(), SurfaceHolder.Callback {
                                 TAG,
                                 "fore: 其他帧 currO:${currO} slice_type:${resultData.slice_type}"
                             )
-                            parseData(resultData.resultData)
+                            parseData(
+                                "其他帧 slice_type:${resultData.slice_type}",
+                                resultData.resultData
+                            )
                             if (currO >= maxO) {
                                 return@also
                             }
