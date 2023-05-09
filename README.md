@@ -682,6 +682,13 @@ h264visa工具分析
 ffmpeg软解:
 ![](img/Snipaste_2023-04-26_23-51-42.png)
 
+### 剪辑
+快影/剪映:重编码,原视频时长29s,2m,剪辑成13s,2+m,
+
+sdk:丢帧,只留IP
+
+#### 参考
+[ffmpeg实现重封装](https://codeantenna.com/a/LavUIN2K2P)
 
 ### 参考
 [一文读懂 FFmpeg](https://juejin.cn/post/7072198840035573790#heading-19)

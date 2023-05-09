@@ -2,6 +2,7 @@ package com.example.videolearn.ffmpeg
 
 import android.os.Bundle
 import android.os.Environment
+import android.util.Log
 import android.view.Surface
 import android.view.SurfaceHolder
 import android.view.SurfaceView
@@ -25,6 +26,7 @@ import kotlinx.coroutines.launch
 import java.io.File
 
 class FFMPEGActivity : AppCompatActivity() {
+    val TAG = "FFMPEGActivity"
     private lateinit var surface: Surface
     private lateinit var surfaceView: SurfaceView
     private var ffMpegPlay: FFMpegPlay? = null
@@ -40,8 +42,11 @@ class FFMPEGActivity : AppCompatActivity() {
         //直播地址
 //         path = "http://zhibo.hkstv.tv/livestream/mutfysrq/playlist.m3u8"
 //         path = "http://39.135.138.58:18890/PLTV/88888888/224/3221225630/index.m3u8"
-        path = File(application.externalCacheDir, "ffmpeg.mp4").absolutePath
+//        path = File(application.externalCacheDir, "testout_no_first_i.mp4").absolutePath
 //        path = File(Environment.getExternalStorageDirectory(), "douyin.mp4").absolutePath
+        path = File(Environment.getExternalStorageDirectory(), "video.mp4").absolutePath
+//        path = File(Environment.getExternalStorageDirectory(), "ffmpeg.mp4").absolutePath
+//        path = File(Environment.getExternalStorageDirectory(), "VID_20230511_004231.mp4").absolutePath
 //        path = File(application.externalCacheDir, "vid_test1.mp4").absolutePath
         val path = path!!
         if (!path.startsWith("http")) {
@@ -76,6 +81,7 @@ class FFMPEGActivity : AppCompatActivity() {
                     } else {
                         outFile.delete()
                     }
+                    Log.i(TAG, "cutting file:${outFile.absolutePath}")
                     val destPath = outFile.absolutePath
                     ffMpegPlay?.cutting(destPath)
                 }
