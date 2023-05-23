@@ -100,7 +100,7 @@ enum AVPacketSideDataType {
 
     /**
      * This side data contains a 3x3 transformation matrix describing an affine
-     * transformation that needs to be applied to the decoded Video frames for
+     * transformation that needs to be applied to the decoded video frames for
      * correct presentation.
      *
      * See libavutil/display.h for a detailed description of the data.
@@ -108,7 +108,7 @@ enum AVPacketSideDataType {
     AV_PKT_DATA_DISPLAYMATRIX,
 
     /**
-     * This side data should be associated with a Video stream and contains
+     * This side data should be associated with a video stream and contains
      * Stereoscopic 3D information in form of the AVStereo3D struct.
      */
     AV_PKT_DATA_STEREO3D,
@@ -216,27 +216,27 @@ enum AVPacketSideDataType {
 
     /**
      * Mastering display metadata (based on SMPTE-2086:2014). This metadata
-     * should be associated with a Video stream and contains data in the form
+     * should be associated with a video stream and contains data in the form
      * of the AVMasteringDisplayMetadata struct.
      */
     AV_PKT_DATA_MASTERING_DISPLAY_METADATA,
 
     /**
-     * This side data should be associated with a Video stream and corresponds
+     * This side data should be associated with a video stream and corresponds
      * to the AVSphericalMapping structure.
      */
     AV_PKT_DATA_SPHERICAL,
 
     /**
      * Content light level (based on CTA-861.3). This metadata should be
-     * associated with a Video stream and contains data in the form of the
+     * associated with a video stream and contains data in the form of the
      * AVContentLightMetadata struct.
      */
     AV_PKT_DATA_CONTENT_LIGHT_LEVEL,
 
     /**
      * ATSC A53 Part 4 Closed Captions. This metadata should be associated with
-     * a Video stream. A53 CC bitstream is stored as uint8_t in AVPacketSideData.data.
+     * a video stream. A53 CC bitstream is stored as uint8_t in AVPacketSideData.data.
      * The number of bytes of CC data is AVPacketSideData.size.
      */
     AV_PKT_DATA_A53_CC,
@@ -318,7 +318,7 @@ typedef struct AVPacketSideData {
  * and then passed as input to decoders, or received as output from encoders and
  * then passed to muxers.
  *
- * For Video, it should typically contain one compressed frame. For audio it may
+ * For video, it should typically contain one compressed frame. For audio it may
  * contain several compressed frames. Encoders are allowed to output empty
  * packets, with no compressed data, containing only side data
  * (e.g. to update some stream parameters at the end of encoding).
@@ -366,7 +366,6 @@ typedef struct AVPacket {
      * Can be AV_NOPTS_VALUE if it is not stored in the file.
      */
     int64_t dts;
-//    00 00 01 65 88 84 00 29 FF CA EE 7D 2B 7F 55 41 A4 51 8A 47 B4 00 92 24 14 DD 0C B4 E0 4D 6B 09 0A C3 48 50 32 D9 14 B0 F5 A7 5F 93 CA 0B 66 BC D2 08 7C 59 82 B7 2C DE 4F A7 3C 7C B1 EA 94 17 C9 52 96 7D 3A 9D 0F 64 3B 13 47 B3 47 F4 05 47 1E 98 3D A8 6F F1 15 66 8B F4 9B 12 80 AD DD A9 AB 42 A5 5C 35 D0 7C 3B E7 6B C5 D0 A3 57 10 B6 30 1A 48 76 9D 7F FF FF 13 7D 53 57 E1 C4 55 3A 5F E5 ED BE 0D 32 5A F6 49 FB 17 14 32 94 00 35 39 3B 8E E6 9D 85 17 35 08 7C 52 55 8A 91 97 CE B4 33 C6 D9 BB B4 0F C7 45 85 71 75 EC A4 69 FA C4 3F 6A C7 F4 2B 1E BE A5 B9 BF F0 70 02 FC 8B A4 BE C4 82 30 E8 C0 01 EC ED 85 89 2B DB 74 DF EA 5F AE 9D E9 FD 12 46 8A E1 E5 AC DE 77 91 21 FC 66 C2 AA BF 8B 83 7E CC 7F B3 47 54 A4 64 23 B2 A5 86 B4 89 7E CE E5 22 06 FE FE 06 F2 06 F6 31 EF 04 2F F5 C3 79 B9 32 31 67 94 51 E1 77 08 C4 0E
     uint8_t *data;
     int   size;
     int   stream_index;

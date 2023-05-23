@@ -60,7 +60,7 @@ int av_parse_ratio(AVRational *q, const char *str, int max,
  * @param[in,out] height_ptr pointer to the variable which will contain the detected
  * height value
  * @param[in] str the string to parse: it has to be a string in the format
- * width x height or a valid Video size abbreviation.
+ * width x height or a valid video size abbreviation.
  * @return >= 0 on success, a negative error code otherwise
  */
 int av_parse_video_size(int *width_ptr, int *height_ptr, const char *str);
@@ -71,7 +71,7 @@ int av_parse_video_size(int *width_ptr, int *height_ptr, const char *str);
  * @param[in,out] rate pointer to the AVRational which will contain the detected
  * frame rate
  * @param[in] str the string to parse: it has to be a string in the format
- * rate_num / rate_den, a float number or a valid Video rate abbreviation
+ * rate_num / rate_den, a float number or a valid video rate abbreviation
  * @return >= 0 on success, a negative error code otherwise
  */
 int av_parse_video_rate(AVRational *rate, const char *str);

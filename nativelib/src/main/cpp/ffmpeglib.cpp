@@ -5,6 +5,7 @@
 #include <unistd.h>
 
 #include <android/native_window_jni.h>
+#include <string>
 
 extern "C" {
 #include "libswscale/swscale.h"
@@ -14,11 +15,19 @@ extern "C" {
 #include "libswresample/swresample.h"
 #include <SLES/OpenSLES.h>
 #include <SLES/OpenSLES_Android.h>
+#include "libavcodec/jni.h"
+#include "libavcodec/mediacodec.h"
 }
 
 _JavaVM *javaVM = nullptr;
 jobject instance = nullptr;
 jmethodID onCallData = nullptr;
+//是否开启硬解
+int openHwCoder = 1;
+//解码线程数
+int decoderThreadCount = 0;
+//比例
+int scale = 1;
 extern "C"
 JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *vm, void *reserved) {
     jint result = -1;
@@ -27,6 +36,11 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *vm, void *reserved) {
     if (vm->GetEnv((void **) &env, JNI_VERSION_1_4) != JNI_OK) {
         return result;
     }
+    if (openHwCoder) {
+        // 设置JavaVM，否则无法进行硬解码
+        av_jni_set_java_vm(vm, nullptr);
+    }
+
     return JNI_VERSION_1_4;
 }
 
@@ -59,10 +73,6 @@ void *decodePacket(void *params);
 
 void *decodeVideo(void *params);
 
-void freePacket(AVPacket **pPacket);
-
-void freeFrame(AVFrame **pAvFrame);
-
 void initAudio();
 
 void pcmBufferCallBack(SLAndroidSimpleBufferQueueItf bf, void *context);
@@ -72,6 +82,25 @@ void startLooprtDecode();
 int sampleConvertOpensles(int sample_rate);
 
 int initMuxerParams(char *destPath);
+
+void writeH264Content(AVBSFContext **absCtx, AVPacket *pPacket);
+
+void showFrameToWindow(AVFrame **pFrame);
+
+AVPixelFormat hw_pix_fmt;
+
+static enum AVPixelFormat get_hw_format(AVCodecContext *ctx,
+                                        const enum AVPixelFormat *pix_fmts) {
+    const enum AVPixelFormat *p;
+
+    for (p = pix_fmts; *p != -1; p++) {
+        if (*p == hw_pix_fmt)
+            return *p;
+    }
+
+    LOGE("Failed to get HW surface format.\n");
+    return AV_PIX_FMT_NONE;
+}
 
 bool startDecode = false;
 extern "C"
@@ -84,7 +113,7 @@ Java_com_example_nativelib_FFMpegPlay_play(JNIEnv *env, jobject thiz, jstring ur
 
     char *url = const_cast<char *>(env->GetStringUTFChars(url_, 0));
 
-    LOGI("play url:%s", url);
+    LOGI("play url:%s,是否开启硬解:%d", url, openHwCoder);
     //注册所有组件
     av_register_all();
     if (url[0] == 'h') {
@@ -92,15 +121,22 @@ Java_com_example_nativelib_FFMpegPlay_play(JNIEnv *env, jobject thiz, jstring ur
         //初始化网络模块
         avformat_network_init();
     }
+    int result;
     //分配 avFormatContext
     avFormatContext = avformat_alloc_context();
     //打开文件输入流
-    avformat_open_input(&avFormatContext, url, nullptr, nullptr);
-    //提取输入文件中的数据流信息
-    int code = avformat_find_stream_info(avFormatContext, nullptr);
+    result = avformat_open_input(&avFormatContext, url, nullptr, nullptr);
+    if (result < 0) {
+        LOGE("avformat_open_input result:%d", result);
+        env->ReleaseStringUTFChars(url_, url);
+        return false;
+    }
 
-    if (code < 0) {
-        LOGE("avformat_find_stream_info code:%d", code);
+    //提取输入文件中的数据流信息
+    result = avformat_find_stream_info(avFormatContext, nullptr);
+
+    if (result < 0) {
+        LOGE("avformat_find_stream_info result:%d", result);
         env->ReleaseStringUTFChars(url_, url);
         return false;
     }
@@ -112,20 +148,73 @@ Java_com_example_nativelib_FFMpegPlay_play(JNIEnv *env, jobject thiz, jstring ur
             //视频流
             videoIndex = i;
             //查找对应的编解码器,传入获取到的id
-            AVCodec *avCodec = avcodec_find_decoder(codecpar->codec_id);
+            AVCodec *avCodec = nullptr;
+            if (openHwCoder) {
+                avCodec = avcodec_find_decoder_by_name("h264_mediacodec");
+                if (nullptr == avCodec) {
+                    LOGE("video 没有找到硬解码器h264_mediacodec");
+                } else {
+                    // 配置硬解码器
+                    int i;
+                    for (i = 0;; i++) {
+                        const AVCodecHWConfig *config = avcodec_get_hw_config(avCodec, i);
+                        if (nullptr == config) {
+                            LOGE("video 获取硬解码配置失败");
+                            return false;
+                        }
+                        if (config->methods & AV_CODEC_HW_CONFIG_METHOD_HW_DEVICE_CTX &&
+                            config->device_type == AV_HWDEVICE_TYPE_MEDIACODEC) {
+                            hw_pix_fmt = config->pix_fmt;
+                            LOGI("video 硬件解码器配置成功 format:%s %d",
+                                 av_get_pix_fmt_name((AVPixelFormat) hw_pix_fmt), hw_pix_fmt);
+                            break;
+                        }
+                    }
+                }
+            } else {
+                avCodec = avcodec_find_decoder(codecpar->codec_id);
+            }
+
             //分配解码器分配上下文
             videoContext = avcodec_alloc_context3(avCodec);
-
+            if (decoderThreadCount) {
+                videoContext->thread_count = decoderThreadCount;
+            }
             //将数据流相关的编解码参数来填充编解码器上下文
             avcodec_parameters_to_context(videoContext, codecpar);
+
+            if (openHwCoder) {
+                AVBufferRef *mHwDeviceCtx = nullptr;
+                if (av_hwdevice_ctx_create(&mHwDeviceCtx, AV_HWDEVICE_TYPE_MEDIACODEC, nullptr,
+                                           nullptr,
+                                           0) < 0) {
+                    LOGE("video av_hwdevice_ctx_create false");
+                    return false;
+                }
+                videoContext->hw_device_ctx = av_buffer_ref(mHwDeviceCtx);
+                videoContext->get_format = get_hw_format;
+                //关联mediacontext
+                AVMediaCodecContext *mediaCodecContext = av_mediacodec_alloc_context();
+                result = av_mediacodec_default_init(videoContext, mediaCodecContext, surface);
+                if (result != 0) {
+                    LOGE("video av_mediacodec_default_init %d", result);
+                    return false;
+                }
+            }
+
             //打开解码器
-            avcodec_open2(videoContext, avCodec, 0);
+            result = avcodec_open2(videoContext, avCodec, 0);
+            if (result < 0) {
+                LOGE("video avcodec_open2 false result:%d", result);
+                return false;
+            }
 
             int fps = av_q2d(pStream->avg_frame_rate);
             videoSleep = 1000 / fps;
-            LOGI("视频流index:%d,width:%d,height:%d,fps:%d,duration:%lld,codecName:%s,codec_tag:%d",
+            LOGI("video 视频流index:%d,width:%d,height:%d,fps:%d,duration:%lld,codecName:%s,codec_id:%d,thread_count:%d",
                  i, codecpar->width, codecpar->height, fps,
-                 avFormatContext->duration / AV_TIME_BASE, avCodec->name, codecpar->codec_tag);
+                 avFormatContext->duration / AV_TIME_BASE, avCodec->name, codecpar->codec_id,
+                 videoContext->thread_count);
 
         } else if (codecpar->codec_type == AVMEDIA_TYPE_AUDIO) {
             //音频流
@@ -135,22 +224,26 @@ Java_com_example_nativelib_FFMpegPlay_play(JNIEnv *env, jobject thiz, jstring ur
             //分配解码器分配上下文
             audioContext = avcodec_alloc_context3(avCodec);
             //将数据流相关的编解码参数来填充编解码器上下文
-            avcodec_parameters_to_context(audioContext, codecpar);
+            result = avcodec_parameters_to_context(audioContext, codecpar);
+            if (result != 0) {
+                LOGE("audio avcodec_parameters_to_context %d", result);
+            }
             //打开解码器
-            avcodec_open2(audioContext, avCodec, 0);
-
-            LOGI("音频流index:%d,sample_rate:%d,channels:%d,frame_size:%d", i, codecpar->sample_rate,
-                 codecpar->channels, codecpar->frame_size);
+            result = avcodec_open2(audioContext, avCodec, 0);
+            if (result != 0) {
+                LOGE("audio avcodec_open2 %d", result);
+            }
+            LOGI("audio 音频流index:%d,sample_rate:%d,channels:%d,frame_size:%d,codecId:%d,name:%p", i,
+                 codecpar->sample_rate,
+                 codecpar->channels, codecpar->frame_size, codecpar->codec_id, &avCodec->name);
         } else {
             LOGI("其他流index:%d,codec_type:%d", i, codecpar->codec_type);
         }
     }
-
     //回调给应用层
     jclass instance = env->GetObjectClass(thiz);
     jmethodID jmethodId = env->GetMethodID(instance, "onConfig", "(II)V");
     env->CallVoidMethod(thiz, jmethodId, videoContext->width, videoContext->height);
-
     //获取缓冲window
     nativeWindow = ANativeWindow_fromSurface(env, surface);
     //修改缓冲区格式和大小,对应视频格式和大小
@@ -166,7 +259,16 @@ Java_com_example_nativelib_FFMpegPlay_play(JNIEnv *env, jobject thiz, jstring ur
     return false;
 }
 
+bool initAudioSuccess() {
+    return &(avcodec_find_decoder(avFormatContext->streams[audioIndex]->codecpar->codec_id)->name)
+           != nullptr;
+}
+
 void initAudio() {
+    if (!initAudioSuccess()) {
+        LOGE("initAudio audioContext not init");
+        return;
+    }
     /**
      * opensl es 使用三步骤
      * 1.创建 create
@@ -276,20 +378,22 @@ void initAudio() {
 }
 
 void initVideo() {
+    int dstWidth = videoContext->width / scale;
+    int dstHeight = videoContext->height / scale;
     //初始存放目标数据的化容器
     rgbFrame = av_frame_alloc();
     //获取容器大小 格式,宽高
-    int buffSize = av_image_get_buffer_size(format, videoContext->width, videoContext->height, 1);
+    int buffSize = av_image_get_buffer_size(format, dstWidth, dstHeight, 1);
     //分配内存空间给容器
     shadowedOutbuffer = static_cast<uint8_t *>(av_malloc(buffSize * sizeof(uint8_t)));
     //将rgbFrame->data指针指向outbuffer,等同于rgbFrame->data=shadowedOutbuffer
     av_image_fill_arrays(rgbFrame->data, rgbFrame->linesize, shadowedOutbuffer, format,
-                         videoContext->width, videoContext->height, 1);
+                         dstWidth, dstHeight, 1);
 
     //初始化转换上下文,原视频宽高+format,目标视频宽高+format
     videoSwsContext = sws_getContext(videoContext->width, videoContext->height,
                                      videoContext->pix_fmt,
-                                     videoContext->width, videoContext->height, format,
+                                     dstWidth, dstHeight, format,
                                      SWS_BICUBIC, nullptr, nullptr, nullptr);
 }
 
@@ -315,7 +419,8 @@ void *decodePacket(void *params) {
         int result = av_read_frame(avFormatContext, avPacket);
         if (result < 0) {
             LOGI("read done!!!");
-            freePacket(&avPacket);
+            videoQueue->setDone();
+            av_packet_unref(avPacket);
             //结尾
             break;
         }
@@ -325,8 +430,10 @@ void *decodePacket(void *params) {
             LOGI("视频包大小:%d", avPacket->size);
             videoQueue->push(avPacket);
         } else if (avPacket->stream_index == audioIndex) {
-            LOGI("音频包大小:%d", avPacket->size);
-            audioQueue->push(avPacket);
+            if (initAudioSuccess()) {
+                LOGI("音频包大小:%d", avPacket->size);
+                audioQueue->push(avPacket);
+            }
         }
     }
     return nullptr;
@@ -347,7 +454,7 @@ void pcmBufferCallBack(SLAndroidSimpleBufferQueueItf bf, void *context) {
         int result = avcodec_send_packet(audioContext, avPacket);
         if (result != 0) {
             LOGE("audio avcodec_send_packet error code:%d", result);
-            freePacket(&avPacket);
+            av_packet_unref(avPacket);
             continue;
         }
         LOGI("audio start receive frame");
@@ -357,8 +464,8 @@ void pcmBufferCallBack(SLAndroidSimpleBufferQueueItf bf, void *context) {
         //接收解码器输出的数据
         result = avcodec_receive_frame(audioContext, audioFrame);
         if (result != 0) {
-            freeFrame(&audioFrame);
-            freePacket(&avPacket);
+            av_frame_unref(audioFrame);
+            av_packet_unref(avPacket);
             LOGE("audio avcodec_receive_frame error code:%d", result);
             continue;
         }
@@ -375,8 +482,8 @@ void pcmBufferCallBack(SLAndroidSimpleBufferQueueItf bf, void *context) {
         );
 
         if (!swr_ctx || swr_init(swr_ctx) < 0) {
-            freeFrame(&audioFrame);
-            freePacket(&avPacket);
+            av_frame_unref(audioFrame);
+            av_packet_unref(avPacket);
             LOGE("audio swr_ctx init fail %p", &swr_ctx);
             continue;
         }
@@ -385,8 +492,8 @@ void pcmBufferCallBack(SLAndroidSimpleBufferQueueItf bf, void *context) {
         int nb = swr_convert(swr_ctx, &audioOutBuffer, audioFrame->nb_samples,
                              (const uint8_t **) audioFrame->data, audioFrame->nb_samples);
         if (nb < 0) {
-            freeFrame(&audioFrame);
-            freePacket(&avPacket);
+            av_frame_unref(audioFrame);
+            av_packet_unref(avPacket);
             swr_free(&swr_ctx);
             LOGE("audio swr_convert fail %d", nb);
             continue;
@@ -404,8 +511,8 @@ void pcmBufferCallBack(SLAndroidSimpleBufferQueueItf bf, void *context) {
         LOGI("audio 解码耗时 by micro:%f sample_rate:%d,channels:%d,format:%d,", diff,
              audioFrame->sample_rate, audioFrame->channels, audioFrame->format);
 
-        freeFrame(&audioFrame);
-        freePacket(&avPacket);
+        av_frame_unref(audioFrame);
+        av_packet_unref(avPacket);
         swr_free(&swr_ctx);
         break;
     }
@@ -416,143 +523,216 @@ void pcmBufferCallBack(SLAndroidSimpleBufferQueueItf bf, void *context) {
 }
 
 void *decodeVideo(void *params) {
-    //创建过滤器
-    const AVBitStreamFilter *pFilter;
     AVBSFContext *absCtx;
-    //-filters 查看支持的过滤器集合
-    pFilter = av_bsf_get_by_name("h264_mp4toannexb");
-
-    av_bsf_alloc(pFilter, &absCtx);
-    avcodec_parameters_copy(absCtx->par_in, avFormatContext->streams[videoIndex]->codecpar);
-    av_bsf_init(absCtx);
-    int result;
-
-    while (startDecode) {
-        AVPacket *avPacket = av_packet_alloc();
-
-        //消费者获取packet
-        videoQueue->get(avPacket);
-
-        int size = avPacket->size;
-        LOGI("video 消费者packet size:%d", size);
-        auto startTime = std::chrono::steady_clock::now();
-        //========过滤器,获取h264码流=========
-        result = av_bsf_send_packet(absCtx, avPacket);
-        if (result != 0) {
-            LOGE("av_bsf_send_packet error code:%d", result);
-            freePacket(&avPacket);
-            continue;
-        }
-
-        do {
-            //result为0说明成功,需要继续读取,直到不等于0,说明没有数据
-            result = av_bsf_receive_packet(absCtx, avPacket);
-        } while (result == 0);
-        auto endTime = std::chrono::steady_clock::now();
-        auto diffMicro = std::chrono::duration<double, std::micro>(endTime - startTime).count();
-        auto diffMilli = std::chrono::duration<double, std::milli>(endTime - startTime).count();
-
-        LOGI("video 转h264解码耗时:%f微秒 %f毫秒 size:%d", diffMicro, diffMilli, size);
-        JNIEnv *jniEnv;
-        if (javaVM->AttachCurrentThread(&jniEnv, 0) == JNI_OK) {
-            //由于在native子线程,需要特殊处理回调java层
-            jbyteArray pArray = jniEnv->NewByteArray(size);
-            jniEnv->SetByteArrayRegion(pArray, 0, size,
-                                       reinterpret_cast<const jbyte *>(avPacket->data));
-            jniEnv->CallVoidMethod(instance, onCallData, pArray);
-            jniEnv->DeleteLocalRef(pArray);
-            javaVM->DetachCurrentThread();
-        }
-        startTime = std::chrono::steady_clock::now();
-        //通知解码
-        result = avcodec_send_packet(videoContext, avPacket);
-        if (result != 0) {
-            LOGE("video avcodec_send_packet error code:%d", result);
-            freePacket(&avPacket);
-            continue;
-        }
-
-        //创建接收帧容器
-        AVFrame *videoFrame = av_frame_alloc();
-        //接收解码器输出的数据
-        result = avcodec_receive_frame(videoContext, videoFrame);
-        if (result != 0) {
-            freeFrame(&videoFrame);
-            freePacket(&avPacket);
-            LOGE("video avcodec_receive_frame error code:%d", result);
-            continue;
-        }
-//        LOGI("帧数据 pts:%lld,dts:%lld,duration:%lld,pictType:%d",videoFrame->pts,videoFrame->pkt_dts,videoFrame->pkt_duration,videoFrame->pict_type);
-        const char *type;
-        AVPictureType pictureType = videoFrame->pict_type;
-        switch (pictureType) {
-            case AV_PICTURE_TYPE_I: {
-                type = "I帧";
-                break;
-            }
-            case AV_PICTURE_TYPE_P: {
-                type = "P帧";
-                break;
-            }
-            case AV_PICTURE_TYPE_B: {
-                type = "B帧";
-                break;
-            }
-            default : {
-                type = &"其他"[pictureType];
-                break;
-            }
-        }
-
-        endTime = std::chrono::steady_clock::now();
-        diffMicro = std::chrono::duration<double, std::micro>(endTime - startTime).count();
-        diffMilli = std::chrono::duration<double, std::milli>(endTime - startTime).count();
-
-        LOGI("video 解码耗时:%f微秒 %f毫秒 帧类型:%s size:%d", diffMicro, diffMilli, type, size);
-        startTime = std::chrono::steady_clock::now();
-        //将yuv数据转成rgb
-        sws_scale(videoSwsContext, videoFrame->data, videoFrame->linesize, 0, videoContext->height,
-                  rgbFrame->data, rgbFrame->linesize);
-        //此时rgbframe.data中已经有数据了
-
-        //windowBuffer 入参出参,
-        ANativeWindow_lock(nativeWindow, &windowBuffer, nullptr);
-
-        //转成数组
-        auto *dstWindow = static_cast<uint8_t *>(windowBuffer.bits);
-
-        for (int i = 0; i < videoContext->height; ++i) {
-            //从rgbFrame->data中拷贝数据到window中
-            //windowBuffer.stride * 4 === 像素*4个字节(rgba)
-            memcpy(dstWindow + i * windowBuffer.stride * 4,
-                   shadowedOutbuffer + i * rgbFrame->linesize[0],
-                   rgbFrame->linesize[0]);
-        }
-        endTime = std::chrono::steady_clock::now();
-        diffMicro = std::chrono::duration<double, std::micro>(endTime - startTime).count();
-        diffMilli = std::chrono::duration<double, std::milli>(endTime - startTime).count();
-        LOGI("video yuv->rgb->显示 耗时:%f微秒 %f毫秒 帧类型:%s size:%d", diffMicro, diffMilli, type, size);
-        ANativeWindow_unlockAndPost(nativeWindow);
-        freeFrame(&videoFrame);
-        freePacket(&avPacket);
+    if (!openHwCoder) {
+        const AVBitStreamFilter *pFilter;
+        //创建过滤器
+        //-filters 查看支持的过滤器集合
+        pFilter = av_bsf_get_by_name("h264_mp4toannexb");
+        av_bsf_alloc(pFilter, &absCtx);
+        avcodec_parameters_copy(absCtx->par_in, avFormatContext->streams[videoIndex]->codecpar);
+        av_bsf_init(absCtx);
     }
+    start:
+    while (startDecode) {
+        auto startTime = std::chrono::steady_clock::now();
+        auto endTime = std::chrono::steady_clock::now();
+        auto diffMilli = std::chrono::duration<double, std::milli>(endTime - startTime).count();
+        AVPacket *avPacket = av_packet_alloc();
+        int result;
+        videoQueue->get(avPacket);
+        LOGI("video videoQueue get packet size:%d", avPacket->size);
+
+        if (!openHwCoder) {
+            //硬解写h264会崩溃
+            writeH264Content(&absCtx, avPacket);
+        }
+        /**发送数据包,通知解码
+         * avcodec_send_packet
+         * 0:通知解码成功
+         * AVERROR(EAGAIN):缓冲区已满,需要调用avcodec_receive_frame获取解码后的数据,当前数据包不能丢弃,否则会丢帧
+         * AVERROR_EOF:结束,但是可以继续从缓冲区获取数据
+         *
+         * 获取解码后的数据
+         * avcodec_receive_frame
+         * 0:获取解码数据成功
+         * AVERROR(EAGAIN):缓冲区已空,需要发送新的数据包,此情况判断如果avcodec_send_packet==AVERROR(EAGAIN),继续发送当前数据包,并且需要判断返回值,对应判断是否需要继续获取解码数据
+         * AVERROR_EOF:缓冲区刷新完成,后续不再有解码数据
+         *
+         * 如果无发送包,但是缓冲区还有数据,可以设置avPacket->data=null,avPacket->size=0;发送后再获取解码数据
+         */
+        result = avcodec_send_packet(videoContext, avPacket);
+        //是否需要重新send
+        int needReSend = 0;
+        if (result == 0) {
+            av_packet_unref(avPacket);
+            LOGI("video avcodec_send_packet success");
+        } else if (result == AVERROR(EAGAIN)) {
+            needReSend = 1;
+            //缓冲区已满，要从内部缓冲区读取解码后的音视频帧
+            LOGI("video avcodec_send_packet AVERROR(EAGAIN)");
+        } else if (result == AVERROR_EOF) {
+            av_packet_unref(avPacket);
+            // 数据包送入结束不再送入,但是可以继续可以从内部缓冲区读取解码后的音视频帧
+            LOGI("video avcodec_send_packet AVERROR_EOF");
+        } else {
+            LOGE("video avcodec_send_packet error code:%d", result);
+            continue;
+        }
+        do {
+            frame:
+            LOGI("video start receive frame");
+            AVFrame *avFrame = av_frame_alloc();
+            // AVERROR(EAGAIN):缓冲区已空，没有帧输出，需要更多的送入数据包
+            // AVERROR_EOF:解码缓冲区已经刷新完成,后续不再有音视频帧输出
+            result = avcodec_receive_frame(videoContext, avFrame);
+
+            if (result == AVERROR(EAGAIN)) {
+                LOGI("video avcodec_receive_frame AVERROR(EAGAIN)");
+                av_frame_unref(avFrame);
+                if (needReSend) {
+                    int tResult = avcodec_send_packet(videoContext, avPacket);
+                    LOGI("video avcodec_send_packet while %d", tResult);
+                    if (tResult == 0 || tResult == AVERROR(EAGAIN)) {
+                        if (tResult == 0) {
+                            av_packet_unref(avPacket);
+                            needReSend = 0;
+                        }
+                        goto frame;
+                    } else {
+                        av_packet_unref(avPacket);
+                        goto start;
+                    }
+                }
+            } else if (result == AVERROR_EOF) {
+                av_frame_unref(avFrame);
+                LOGI("video avcodec_receive_frame AVERROR_EOF");
+                goto start;
+            } else if (result == 0) {
+                LOGI("video 帧数据 width:%d,height:%d,frameFormat:%s %d",
+                     avFrame->width, avFrame->height,
+                     av_get_pix_fmt_name((AVPixelFormat) avFrame->format), avFrame->format);
+
+                const char *type;
+                AVPictureType pictureType = avFrame->pict_type;
+                switch (pictureType) {
+                    case AV_PICTURE_TYPE_I: {
+                        type = "I帧";
+                        break;
+                    }
+                    case AV_PICTURE_TYPE_P: {
+                        type = "P帧";
+                        break;
+                    }
+                    case AV_PICTURE_TYPE_B: {
+                        type = "B帧";
+                        break;
+                    }
+                    default : {
+                        type = "其他";
+                        break;
+                    }
+                }
+                endTime = std::chrono::steady_clock::now();
+                diffMilli = std::chrono::duration<double, std::milli>(endTime - startTime).count();
+
+                LOGI("video 解码耗时:%f毫秒 帧类型:%s-%d", diffMilli, type, pictureType);
+                showFrameToWindow(&avFrame);
+
+                av_frame_unref(avFrame);
+            } else {
+                av_frame_unref(avFrame);
+                LOGE("video avcodec_receive_frame error code:%d", result);
+                if (needReSend && startDecode) {
+                    goto frame;
+                }
+            }
+        } while (result == 0);
+    }
+    LOGI("parse all frame done!!!");
     return nullptr;
 }
 
-void freePacket(AVPacket **pPacket) {
-    LOGI("freePacket %p", &*pPacket);
-    av_packet_free(&*pPacket);
-    av_free(*pPacket);
-    *pPacket = nullptr;
+void showFrameToWindow(AVFrame **pFrame) {
+    AVFrame *avFrame = nullptr;
+    //硬解,并且配置直接关联surface,format为mediacoder
+    bool hwFmt = openHwCoder && hw_pix_fmt && (*pFrame)->format == hw_pix_fmt;
+    LOGI("video showFrameToWindow hwFmt:%d", hwFmt);
+    if (hwFmt) {
+        auto startTime = std::chrono::steady_clock::now();
+        //直接渲染到surface
+        int result = av_mediacodec_release_buffer((AVMediaCodecBuffer *) (*pFrame)->data[3], 1);
+        auto endTime = std::chrono::steady_clock::now();
+        auto diffMilli = std::chrono::duration<double, std::milli>(endTime - startTime).count();
+        LOGI("video av_mediacodec_release_buffer 耗时:%f毫秒 result:%d", diffMilli, result);
+//        avFrame = av_frame_alloc();
+//        result = av_hwframe_transfer_data(avFrame, (*pFrame), 0);
+//        LOGI("video av_hwframe_map %d", result);
+        return;
+    } else {
+        avFrame = *pFrame;
+    }
+
+    auto startTime = std::chrono::steady_clock::now();
+    //将yuv数据转成rgb
+    sws_scale(videoSwsContext, avFrame->data, avFrame->linesize, 0,
+              videoContext->height,
+              rgbFrame->data, rgbFrame->linesize);
+    auto endTime = std::chrono::steady_clock::now();
+    auto diffMilli = std::chrono::duration<double, std::milli>(endTime - startTime).count();
+    LOGI("video sws_scale yuv->rgb 耗时:%f毫秒", diffMilli);
+    //此时rgbframe.data中已经有数据了
+
+    //windowBuffer 入参出参,
+    ANativeWindow_lock(nativeWindow, &windowBuffer, nullptr);
+
+    //转成数组
+    auto *dstWindow = static_cast<uint8_t *>(windowBuffer.bits);
+
+    startTime = std::chrono::steady_clock::now();
+    for (int i = 0; i < videoContext->height / scale; ++i) {
+        //从rgbFrame->data中拷贝数据到window中
+        //windowBuffer.stride * 4 === 像素*4个字节(rgba)
+        memcpy(dstWindow + i * windowBuffer.stride * 4,
+               shadowedOutbuffer + i * rgbFrame->linesize[0],
+               rgbFrame->linesize[0]);
+    }
+    endTime = std::chrono::steady_clock::now();
+    diffMilli = std::chrono::duration<double, std::milli>(endTime - startTime).count();
+    LOGI("video rgb->显示 耗时:%f毫秒", diffMilli);
+    ANativeWindow_unlockAndPost(nativeWindow);
+    if (hwFmt) {
+        av_frame_unref(avFrame);
+    }
 }
 
-void freeFrame(AVFrame **pAvFrame) {
-    LOGI("freeFrame %p", &*pAvFrame);
-    av_frame_free(&*pAvFrame);
-    av_free(*pAvFrame);
-    *pAvFrame = nullptr;
-}
+void writeH264Content(AVBSFContext **absCtx, AVPacket *avPacket) {
+    AVPacket *tempPacket = av_packet_alloc();
+    av_packet_ref(tempPacket, avPacket);
+    int size = tempPacket->size;
+    int result = av_bsf_send_packet(*absCtx, tempPacket);
+    if (result != 0) {
+        LOGE("video writeH264Content av_bsf_send_packet error code:%d", result);
+        av_packet_unref(tempPacket);
+        return;
+    }
 
+    do {
+        //result为0说明成功,需要继续读取,直到不等于0,说明没有数据
+        result = av_bsf_receive_packet(*absCtx, tempPacket);
+    } while (result == 0);
+    JNIEnv *jniEnv;
+    if (javaVM->AttachCurrentThread(&jniEnv, 0) == JNI_OK) {
+        //由于在native子线程,需要特殊处理回调java层
+        jbyteArray pArray = jniEnv->NewByteArray(size);
+        jniEnv->SetByteArrayRegion(pArray, 0, size,
+                                   reinterpret_cast<const jbyte *>(tempPacket->data));
+        jniEnv->CallVoidMethod(instance, onCallData, pArray);
+        jniEnv->DeleteLocalRef(pArray);
+        javaVM->DetachCurrentThread();
+    }
+    av_packet_unref(tempPacket);
+}
 
 int sampleConvertOpensles(int sample_rate) {
     int rate = 0;
@@ -646,8 +826,8 @@ int initMuxerParams(char *destPath) {
         return -1;
     }
 
-    int startTime = 2;
-    int endTime = 7;
+    int startTime = 3;
+    int endTime = 13;
     auto timeBase = av_q2d(inStream->time_base);
     //s=pts*timebase
     long long startPts = startTime / timeBase;
@@ -666,18 +846,18 @@ int initMuxerParams(char *destPath) {
         result = av_read_frame(avFormatContext, avPacket);
         if (result != 0) {
             LOGI("cutting read done!!!");
-            freePacket(&avPacket);
+            av_packet_unref(avPacket);
             break;
         }
         if (avPacket->stream_index != videoIndex) {
-            freePacket(&avPacket);
+            av_packet_unref(avPacket);
             continue;
         }
         LOGI("===========start cutting video=============");
 
         if (avPacket->pts > endtPts) {
             LOGE("cutting pts>endTime");
-            freePacket(&avPacket);
+            av_packet_unref(avPacket);
             break;
         }
         int filterB = 0;
@@ -687,7 +867,7 @@ int initMuxerParams(char *destPath) {
             result = avcodec_send_packet(videoContext, avPacket);
             if (result != 0) {
                 LOGE("cutting video avcodec_send_packet error code:%d", result);
-                freePacket(&avPacket);
+                av_packet_unref(avPacket);
                 continue;
             }
             //创建接收帧容器
@@ -695,8 +875,8 @@ int initMuxerParams(char *destPath) {
             //接收解码器输出的数据
             result = avcodec_receive_frame(videoContext, videoFrame);
             if (result != 0) {
-                freeFrame(&videoFrame);
-                freePacket(&avPacket);
+                av_frame_unref(videoFrame);
+                av_packet_unref(avPacket);
                 LOGE("cutting video avcodec_receive_frame error code:%d", result);
                 continue;
             }
@@ -722,7 +902,7 @@ int initMuxerParams(char *destPath) {
                 }
             }
             LOGI("cutting %s %p %p", type, videoFrame->data, avPacket->data);
-            freeFrame(&videoFrame);
+            av_frame_unref(videoFrame);
         }
 
         LOGI("cutting pts avPacket->pts:(%f) startPts(%f)",
@@ -750,18 +930,18 @@ int initMuxerParams(char *destPath) {
 
         if (avPacket->pts < avPacket->dts) {
             LOGE("cutting pts<dts");
-            freePacket(&avPacket);
+            av_packet_unref(avPacket);
             //处理异常数据,pts必大于dts
             continue;
         }
 
         result = av_interleaved_write_frame(outFormatContext, avPacket);
         if (result < 0) {
-            freePacket(&avPacket);
+            av_packet_unref(avPacket);
             LOGE("cutting av_interleaved_write_frame result:%d", result);
             break;
         }
-        freePacket(&avPacket);
+        av_packet_unref(avPacket);
         LOGI("cutting %s done", "");
     }
     LOGI("cutting done!!!");

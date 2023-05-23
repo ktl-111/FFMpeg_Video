@@ -40,7 +40,7 @@
 /**
  * @addtogroup lavu_video_display
  * The display transformation matrix specifies an affine transformation that
- * should be applied to Video frames for correct presentation. It is compatible
+ * should be applied to video frames for correct presentation. It is compatible
  * with the matrices stored in the ISO/IEC 14496-12 container format.
  *
  * The data is a 3x3 matrix represented as a 9-element array:

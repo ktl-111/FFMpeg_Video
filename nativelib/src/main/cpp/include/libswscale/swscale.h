@@ -157,8 +157,8 @@ av_warn_unused_result
 int sws_init_context(struct SwsContext *sws_context, SwsFilter *srcFilter, SwsFilter *dstFilter);
 
 /**
- * Free the swscaler context videoSwsContext.
- * If videoSwsContext is NULL, then does nothing.
+ * Free the swscaler context swsContext.
+ * If swsContext is NULL, then does nothing.
  */
 void sws_freeContext(struct SwsContext *swsContext);
 

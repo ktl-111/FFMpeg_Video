@@ -23,7 +23,9 @@ import com.example.nativelib.FFMpegPlay
 import com.example.videolearn.MediaScope
 import com.example.videolearn.utils.FileUtils
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import java.io.File
+import java.util.concurrent.Executors
 
 class FFMPEGActivity : AppCompatActivity() {
     val TAG = "FFMPEGActivity"
@@ -44,8 +46,10 @@ class FFMPEGActivity : AppCompatActivity() {
 //         path = "http://39.135.138.58:18890/PLTV/88888888/224/3221225630/index.m3u8"
 //        path = File(application.externalCacheDir, "testout_no_first_i.mp4").absolutePath
 //        path = File(Environment.getExternalStorageDirectory(), "douyin.mp4").absolutePath
-        path = File(Environment.getExternalStorageDirectory(), "video.mp4").absolutePath
+//        path = File(Environment.getExternalStorageDirectory(), "video.mp4").absolutePath
+//        path = File(application.externalCacheDir, "ffmpeg3.mp4").absolutePath
 //        path = File(Environment.getExternalStorageDirectory(), "ffmpeg.mp4").absolutePath
+        path = File(Environment.getExternalStorageDirectory(), "ffmpeg3.mp4").absolutePath
 //        path = File(Environment.getExternalStorageDirectory(), "VID_20230511_004231.mp4").absolutePath
 //        path = File(application.externalCacheDir, "vid_test1.mp4").absolutePath
         val path = path!!
@@ -55,13 +59,22 @@ class FFMPEGActivity : AppCompatActivity() {
                 return
             }
         }
-
+        val newSingleThreadExecutor = Executors.newSingleThreadExecutor()
         ffMpegPlay ?: let {
             FFMpegPlay(surfaceView).apply {
                 ffMpegPlay = this
+                val fileName = "ffmpeg"
+                FileUtils.deleteBytesFile(fileName)
+                FileUtils.deleteContentFile(fileName)
                 callback = {
-                    FileUtils.writeBytes(it, "ffmpeg")
-                    FileUtils.writeContent(it, "ffmpeg")
+                    newSingleThreadExecutor.submit {
+                        kotlin.runCatching {
+                            FileUtils.writeBytes(it, fileName)
+                            FileUtils.writeContent(it, fileName)
+                        }.onFailure {
+                            it.printStackTrace()
+                        }
+                    }
                 }
             }
         }.play(path, surface = surface)

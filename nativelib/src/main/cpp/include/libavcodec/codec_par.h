@@ -78,7 +78,7 @@ typedef struct AVCodecParameters {
     int      extradata_size;
 
     /**
-     * - Video: the pixel format, the value corresponds to enum AVPixelFormat.
+     * - video: the pixel format, the value corresponds to enum AVPixelFormat.
      * - audio: the sample format, the value corresponds to enum AVSampleFormat.
      */
     int format;
@@ -121,7 +121,7 @@ typedef struct AVCodecParameters {
     int level;
 
     /**
-     * Video only. The dimensions of the Video frame in pixels.
+     * Video only. The dimensions of the video frame in pixels.
      */
     int width;
     int height;
@@ -136,7 +136,7 @@ typedef struct AVCodecParameters {
     AVRational sample_aspect_ratio;
 
     /**
-     * Video only. The order of the fields in interlaced Video.
+     * Video only. The order of the fields in interlaced video.
      */
     enum AVFieldOrder                  field_order;
 

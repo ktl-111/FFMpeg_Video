@@ -86,7 +86,7 @@
  *
  * Note that some schemes/protocols are quite powerful, allowing access to
  * both local and remote files, parts of them, concatenations of them, local
- * audio and Video devices and so on.
+ * audio and video devices and so on.
  *
  * @{
  *
@@ -139,8 +139,8 @@
  * @endcode
  * This code passes the private options 'video_size' and 'pixel_format' to the
  * demuxer. They would be necessary for e.g. the rawvideo demuxer, since it
- * cannot know how to interpret raw Video data otherwise. If the format turns
- * out to be something different than raw Video, those options will not be
+ * cannot know how to interpret raw video data otherwise. If the format turns
+ * out to be something different than raw video, those options will not be
  * recognized by the demuxer and therefore will not be applied. Such unrecognized
  * options are then returned in the options dictionary (recognized options are
  * consumed). The calling program can handle such unrecognized options as it
@@ -499,7 +499,7 @@ typedef struct AVOutputFormat {
     const char *extensions; /**< comma-separated filename extensions */
     /* output support */
     enum AVCodecID audio_codec;    /**< default audio codec */
-    enum AVCodecID video_codec;    /**< default Video codec */
+    enum AVCodecID video_codec;    /**< default video codec */
     enum AVCodecID subtitle_codec; /**< default subtitle codec */
     /**
      * can use flags: AVFMT_NOFILE, AVFMT_NEEDNUMBER,
@@ -856,7 +856,7 @@ typedef struct AVStreamInternal AVStreamInternal;
 #define AV_DISPOSITION_DESCRIPTIONS 0x20000
 #define AV_DISPOSITION_METADATA     0x40000
 #define AV_DISPOSITION_DEPENDENT    0x80000 ///< dependent audio stream (mix_type=0 in mpegts)
-#define AV_DISPOSITION_STILL_IMAGE 0x100000 ///< still images in Video stream (still_picture_flag=1 in mpegts)
+#define AV_DISPOSITION_STILL_IMAGE 0x100000 ///< still images in video stream (still_picture_flag=1 in mpegts)
 
 /**
  * Options for behavior on timestamp wrap detection.
@@ -1088,10 +1088,11 @@ typedef struct AVStream {
     void        *unused7;
     AVProbeData  unused6;
     int64_t      unused5[16+1];
-    void         *unused2;
-    int          unused3;
-    unsigned int unused4;
 #endif
+    AVIndexEntry *index_entries; /**< Only used if the format does not
+                                    support seeking natively. */
+    int nb_index_entries;
+    unsigned int index_entries_allocated_size;
 
     /**
      * Stream Identifier
@@ -1205,7 +1206,7 @@ typedef int (*AVOpenCallback)(struct AVFormatContext *s, AVIOContext **pb, const
                               const AVIOInterruptCB *int_cb, AVDictionary **options);
 
 /**
- * The duration of a Video can be estimated through various ways, and this enum can be used
+ * The duration of a video can be estimated through various ways, and this enum can be used
  * to know how the duration was estimated.
  */
 enum AVDurationEstimationMethod {
@@ -1415,7 +1416,7 @@ typedef struct AVFormatContext {
     AVProgram **programs;
 
     /**
-     * Forced Video codec_id.
+     * Forced video codec_id.
      * Demuxing: Set by user.
      */
     enum AVCodecID video_codec_id;
@@ -1708,7 +1709,7 @@ typedef struct AVFormatContext {
     int io_repositioned;
 
     /**
-     * Forced Video codec.
+     * Forced video codec.
      * This allows forcing a specific decoder, even when there are multiple with
      * the same codec_id.
      * Demuxing: Set by user
@@ -2278,7 +2279,7 @@ void av_program_add_stream_index(AVFormatContext *ac, int progid, unsigned int i
  * be found are ignored.
  *
  * @param ic                media file handle
- * @param type              stream type: Video, audio, subtitles, etc.
+ * @param type              stream type: video, audio, subtitles, etc.
  * @param wanted_stream_nb  user-requested stream number,
  *                          or -1 for automatic selection
  * @param related_stream    try to find a stream related (eg. in the same
@@ -2310,14 +2311,14 @@ int av_find_best_stream(AVFormatContext *ic,
  *
  * On success, the returned packet is reference-counted (pkt->buf is set) and
  * valid indefinitely. The packet must be freed with av_packet_unref() when
- * it is no longer needed. For Video, the packet contains exactly one frame.
+ * it is no longer needed. For video, the packet contains exactly one frame.
  * For audio, it contains an integer number of frames if each frame has
  * a known fixed size (e.g. PCM or ADPCM data). If the audio frames have
  * a variable size (e.g. MPEG audio), then it contains one frame.
  *
  * pkt->pts, pkt->dts and pkt->duration are always set to correct
  * values in AVStream.time_base units (and guessed if the format cannot
- * provide them). pkt->pts can be AV_NOPTS_VALUE if the Video format
+ * provide them). pkt->pts can be AV_NOPTS_VALUE if the video format
  * has B-frames, so it is better to rely on pkt->dts if you do not
  * decompress the payload.
  *
@@ -2569,7 +2570,7 @@ int av_write_uncoded_frame(AVFormatContext *s, int stream_index,
  * If the muxer supports it, this function makes it possible to write an AVFrame
  * structure directly, without encoding it into a packet.
  * It is mostly useful for devices and similar special muxers that use raw
- * Video or PCM data and will not serialize it into a byte stream.
+ * video or PCM data and will not serialize it into a byte stream.
  *
  * To test whether it is possible to use it with a given muxer and stream,
  * use av_write_uncoded_frame_query().
@@ -2890,7 +2891,7 @@ int avformat_query_codec(const AVOutputFormat *ofmt, enum AVCodecID codec_id,
  * @endcode
  */
 /**
- * @return the table mapping RIFF FourCCs for Video to libavcodec AVCodecID.
+ * @return the table mapping RIFF FourCCs for video to libavcodec AVCodecID.
  */
 const struct AVCodecTag *avformat_get_riff_video_tags(void);
 /**
@@ -2898,7 +2899,7 @@ const struct AVCodecTag *avformat_get_riff_video_tags(void);
  */
 const struct AVCodecTag *avformat_get_riff_audio_tags(void);
 /**
- * @return the table mapping MOV FourCCs for Video to libavcodec AVCodecID.
+ * @return the table mapping MOV FourCCs for video to libavcodec AVCodecID.
  */
 const struct AVCodecTag *avformat_get_mov_video_tags(void);
 /**

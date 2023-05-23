@@ -154,7 +154,7 @@ typedef struct AVD3D11VAFramesContext {
     /**
      * D3D11_TEXTURE2D_DESC.BindFlags used for texture creation. The user must
      * at least set D3D11_BIND_DECODER if the frames context is to be used for
-     * Video decoding.
+     * video decoding.
      * This field is ignored/invalid if a user-allocated texture is provided.
      */
     UINT BindFlags;

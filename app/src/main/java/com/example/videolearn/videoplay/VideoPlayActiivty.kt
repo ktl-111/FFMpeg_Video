@@ -1,6 +1,7 @@
 package com.example.videolearn.videoplay
 
 import android.os.Bundle
+import android.os.Environment
 import android.view.SurfaceHolder
 import android.view.SurfaceView
 import android.view.View
@@ -39,7 +40,8 @@ class VideoPlayActiivty : AppCompatActivity() {
     fun play(v: View) {
         surfaceHolder?.also {
             videoPlayHelper = VideoPlayHelper(
-                File(application.externalCacheDir, "ffmpeg.mp4").toString(),
+//                File(application.externalCacheDir, "ffmpeg.mp4").toString(),
+                File(Environment.getExternalStorageDirectory(), "ffmpeg3.mp4").absolutePath,
                 it.surface
             ).apply {
                 play()

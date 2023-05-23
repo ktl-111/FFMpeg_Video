@@ -20,7 +20,7 @@
 
 /**
  * @file
- * Stereoscopic Video
+ * Stereoscopic video
  */
 
 #ifndef AVUTIL_STEREO3D_H
@@ -40,7 +40,7 @@
 
 /**
  * @addtogroup lavu_video_stereo3d
- * A stereoscopic Video file consists in multiple views embedded in a single
+ * A stereoscopic video file consists in multiple views embedded in a single
  * frame, usually describing two views of a scene. This file describes all
  * possible codec-independent view arrangements.
  * */
@@ -168,14 +168,14 @@ enum AVStereo3DView {
 
 /**
  * Stereo 3D type: this structure describes how two videos are packed
- * within a single Video surface, with additional information as needed.
+ * within a single video surface, with additional information as needed.
  *
  * @note The struct must be allocated with av_stereo3d_alloc() and
  *       its size is not a part of the public ABI.
  */
 typedef struct AVStereo3D {
     /**
-     * How views are packed within the Video.
+     * How views are packed within the video.
      */
     enum AVStereo3DType type;
 

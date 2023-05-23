@@ -22,7 +22,7 @@
 /**
  * @file
  * @ingroup lavfi_buffersink
- * memory buffer sink API for audio and Video
+ * memory buffer sink API for audio and video
  */
 
 #include "avfilter.h"
@@ -82,9 +82,9 @@
 int av_buffersink_get_frame_flags(AVFilterContext *ctx, AVFrame *frame, int flags);
 
 /**
- * Tell av_buffersink_get_buffer_ref() to read Video/samples buffer
+ * Tell av_buffersink_get_buffer_ref() to read video/samples buffer
  * reference, but not remove it from the buffer. This is useful if you
- * need only to read a Video/samples buffer, without to fetch it.
+ * need only to read a video/samples buffer, without to fetch it.
  */
 #define AV_BUFFERSINK_FLAG_PEEK 1
 

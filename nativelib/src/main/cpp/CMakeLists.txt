@@ -1,6 +1,7 @@
 cmake_minimum_required(VERSION 3.22.1)
 #导入头文件
 include_directories(include)
+include_directories(share)
 message("路径:${CMAKE_SOURCE_DIR}/ffmpeg/${ANDROID_ABI}")
 #设置动态依赖库,相当于将路径配置到环境变量,后续target_link_libraries可直接使用
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -L${CMAKE_SOURCE_DIR}/ffmpeg/${ANDROID_ABI}")

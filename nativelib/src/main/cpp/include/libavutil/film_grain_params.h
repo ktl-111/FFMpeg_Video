@@ -118,7 +118,7 @@ typedef struct AVFilmGrainAOMParams {
 } AVFilmGrainAOMParams;
 
 /**
- * This structure describes how to handle film grain synthesis in Video
+ * This structure describes how to handle film grain synthesis in video
  * for specific codecs. Must be present on every frame where film grain is
  * meant to be synthesised for correct presentation.
  *

@@ -112,7 +112,7 @@ enum AVFrameSideDataType {
      */
     AV_FRAME_DATA_AUDIO_SERVICE_TYPE,
     /**
-     * Mastering display metadata associated with a Video frame. The payload is
+     * Mastering display metadata associated with a video frame. The payload is
      * an AVMasteringDisplayMetadata type and contains information about the
      * mastering display color volume.
      */
@@ -168,7 +168,7 @@ enum AVFrameSideDataType {
     AV_FRAME_DATA_S12M_TIMECODE,
 
     /**
-     * HDR dynamic metadata associated with a Video frame. The payload is
+     * HDR dynamic metadata associated with a video frame. The payload is
      * an AVDynamicHDRPlus type and contains information for color
      * volume transform - application 4 of SMPTE 2094-40:2016 standard.
      */
@@ -181,12 +181,12 @@ enum AVFrameSideDataType {
     AV_FRAME_DATA_REGIONS_OF_INTEREST,
 
     /**
-     * Encoding parameters for a Video frame, as described by AVVideoEncParams.
+     * Encoding parameters for a video frame, as described by AVVideoEncParams.
      */
     AV_FRAME_DATA_VIDEO_ENC_PARAMS,
 
     /**
-     * User data unregistered metadata associated with a Video frame.
+     * User data unregistered metadata associated with a video frame.
      * This is the H.26[45] UDU SEI message, and shouldn't be used for any other purpose
      * The data is stored as uint8_t in AVFrameSideData.data which is 16 bytes of
      * uuid_iso_iec_11578 followed by AVFrameSideData.size - 16 bytes of user_data_payload_byte.
@@ -286,7 +286,7 @@ typedef struct AVRegionOfInterest {
 } AVRegionOfInterest;
 
 /**
- * This structure describes decoded (raw) audio or Video data.
+ * This structure describes decoded (raw) audio or video data.
  *
  * AVFrame must be allocated using av_frame_alloc(). Note that this only
  * allocates the AVFrame itself, the buffers for the data must be managed
@@ -327,18 +327,18 @@ typedef struct AVFrame {
      * then 16 extra bytes must be allocated.
      *
      * NOTE: Except for hwaccel formats, pointers not needed by the format
-     *  MUST be set to NULL.
+     * MUST be set to NULL.
      */
     uint8_t *data[AV_NUM_DATA_POINTERS];
 
     /**
-     * For Video, size in bytes of each picture line.
+     * For video, size in bytes of each picture line.
      * For audio, size in bytes of each plane.
      *
      * For audio, only linesize[0] may be set. For planar audio, each channel
      * plane must be the same size.
      *
-     * For Video the linesizes should be multiples of the CPUs alignment
+     * For video the linesizes should be multiples of the CPUs alignment
      * preference, this is 16 or 32 for modern desktop CPUs.
      * Some code requires such alignment other code can be slower without
      * correct alignment, for yet other it makes no difference.
@@ -351,7 +351,7 @@ typedef struct AVFrame {
     /**
      * pointers to the data planes/channels.
      *
-     * For Video, this should simply point to data[].
+     * For video, this should simply point to data[].
      *
      * For planar audio, each channel has a separate data pointer, and
      * linesize[0] contains the size of each channel buffer.
@@ -366,7 +366,7 @@ typedef struct AVFrame {
 
     /**
      * @name Video dimensions
-     * Video frames only. The coded dimensions (in pixels) of the Video frame,
+     * Video frames only. The coded dimensions (in pixels) of the video frame,
      * i.e. the size of the rectangle that contains some well-defined values.
      *
      * @note The part of the frame intended for display/presentation is further
@@ -385,7 +385,7 @@ typedef struct AVFrame {
 
     /**
      * format of the frame, -1 if unknown or unset
-     * Values correspond to enum AVPixelFormat for Video frames,
+     * Values correspond to enum AVPixelFormat for video frames,
      * enum AVSampleFormat for audio)
      */
     int format;
@@ -401,7 +401,7 @@ typedef struct AVFrame {
     enum AVPictureType pict_type;
 
     /**
-     * Sample aspect ratio for the Video frame, 0/1 if unknown/unspecified.
+     * Sample aspect ratio for the video frame, 0/1 if unknown/unspecified.
      */
     AVRational sample_aspect_ratio;
 
@@ -500,7 +500,7 @@ typedef struct AVFrame {
      * must be filled contiguously -- if buf[i] is non-NULL then buf[j] must
      * also be non-NULL for all j < i.
      *
-     * There may be at most one AVBuffer per data plane, so for Video this array
+     * There may be at most one AVBuffer per data plane, so for video this array
      * always contains all the references. For planar audio with more than
      * AV_NUM_DATA_POINTERS channels, there may be more buffers than can fit in
      * this array. Then the extra AVBufferRef pointers are stored in the
@@ -754,15 +754,12 @@ attribute_deprecated
 void    av_frame_set_color_range(AVFrame *frame, enum AVColorRange val);
 #endif
 
-#if FF_API_COLORSPACE_NAME
 /**
  * Get the name of a colorspace.
  * @return a static string identifying the colorspace; can be NULL.
- * @deprecated use av_color_space_name()
  */
-attribute_deprecated
 const char *av_get_colorspace_name(enum AVColorSpace val);
-#endif
+
 /**
  * Allocate an AVFrame and set its fields to default values.  The resulting
  * struct must be freed using av_frame_free().
@@ -825,11 +822,11 @@ void av_frame_unref(AVFrame *frame);
 void av_frame_move_ref(AVFrame *dst, AVFrame *src);
 
 /**
- * Allocate new buffer(s) for audio or Video data.
+ * Allocate new buffer(s) for audio or video data.
  *
  * The following fields must be set on frame before calling this function:
- * - format (pixel format for Video, sample format for audio)
- * - width and height for Video
+ * - format (pixel format for video, sample format for audio)
+ * - width and height for video
  * - nb_samples and channel_layout for audio
  *
  * This function will fill AVFrame.data and AVFrame.buf arrays and, if
@@ -894,7 +891,7 @@ int av_frame_copy(AVFrame *dst, const AVFrame *src);
  *
  * Metadata for the purpose of this function are those fields that do not affect
  * the data layout in the buffers.  E.g. pts, sample rate (for audio) or sample
- * aspect ratio (for Video), but not width/height or channel layout.
+ * aspect ratio (for video), but not width/height or channel layout.
  * Side data is also copied.
  */
 int av_frame_copy_props(AVFrame *dst, const AVFrame *src);
@@ -971,7 +968,7 @@ enum {
 };
 
 /**
- * Crop the given Video AVFrame according to its crop_left/crop_top/crop_right/
+ * Crop the given video AVFrame according to its crop_left/crop_top/crop_right/
  * crop_bottom fields. If cropping is successful, the function will adjust the
  * data pointers and the width/height fields, and set the crop fields to 0.
  *

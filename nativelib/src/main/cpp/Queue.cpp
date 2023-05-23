@@ -3,6 +3,7 @@
 //
 
 #include "Queue.h"
+#include "loghelper.h"
 
 Queue::Queue() {
     pthread_mutex_init(&mutexPacket, NULL);
@@ -29,20 +30,23 @@ int Queue::get(AVPacket *packet) {
 
     pthread_mutex_lock(&mutexPacket);
 
-    while(true)
-    {
-        if(queuePacket.size() > 0)
-        {
-            AVPacket *avPacket =  queuePacket.front();
-            if(av_packet_ref(packet, avPacket) == 0)
-            {
+    while (true) {
+        if (queuePacket.size() > 0) {
+            AVPacket *avPacket = queuePacket.front();
+            if (av_packet_ref(packet, avPacket) == 0) {
                 queuePacket.pop();
             }
             av_packet_free(&avPacket);
             av_free(avPacket);
             avPacket = NULL;
             break;
-        } else{
+        } else {
+            LOGI("queuePacket.size:%d done:%d", queuePacket.size(), done);
+//            if (done) {
+//                packet->data= nullptr;
+//                packet->size = 0;
+//            } else {
+//            }
             pthread_cond_wait(&condPacket, &mutexPacket);
         }
     }
@@ -62,8 +66,7 @@ void Queue::clearAvpacket() {
     pthread_cond_signal(&condPacket);
     pthread_mutex_unlock(&mutexPacket);
 
-    while (!queuePacket.empty())
-    {
+    while (!queuePacket.empty()) {
         AVPacket *packet = queuePacket.front();
         queuePacket.pop();
         av_packet_free(&packet);
@@ -72,4 +75,8 @@ void Queue::clearAvpacket() {
     }
     pthread_mutex_unlock(&mutexPacket);
 
+}
+
+void Queue::setDone() {
+    done = 1;
 }

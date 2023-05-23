@@ -5,12 +5,20 @@ import android.util.Log;
 
 import com.example.videolearn.App;
 
+import java.io.File;
 import java.io.FileOutputStream;
 import java.io.FileWriter;
 import java.io.IOException;
 
 public class FileUtils {
     private static final String TAG = "David";
+
+    public static void deleteBytesFile(String fileName) {
+        File file = new File(App.Companion.getApplication().getExternalCacheDir() + "/" + fileName + ".h264");
+        if (file.exists()) {
+            file.delete();
+        }
+    }
 
     public static void writeBytes(byte[] array, String fileName) {
         FileOutputStream writer = null;
@@ -33,7 +41,12 @@ public class FileUtils {
             }
         }
     }
-
+    public static void deleteContentFile(String fileName) {
+        File file = new File(App.Companion.getApplication().getExternalCacheDir() + "/" + fileName + ".txt");
+        if (file.exists()) {
+            file.delete();
+        }
+    }
     public static String writeContent(byte[] array, String fileName) {
         char[] HEX_CHAR_TABLE = {
                 '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F'

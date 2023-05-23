@@ -20,7 +20,7 @@
 
 /**
  * @file
- * Spherical Video
+ * Spherical video
  */
 
 #ifndef AVUTIL_SPHERICAL_H
@@ -33,20 +33,20 @@
  * @addtogroup lavu_video
  * @{
  *
- * @defgroup lavu_video_spherical Spherical Video mapping
+ * @defgroup lavu_video_spherical Spherical video mapping
  * @{
  */
 
 /**
  * @addtogroup lavu_video_spherical
- * A spherical Video file contains surfaces that need to be mapped onto a
+ * A spherical video file contains surfaces that need to be mapped onto a
  * sphere. Depending on how the frame was converted, a different distortion
  * transformation or surface recomposition function needs to be applied before
- * the Video should be mapped and displayed.
+ * the video should be mapped and displayed.
  */
 
 /**
- * Projection of the Video surface(s) on a sphere.
+ * Projection of the video surface(s) on a sphere.
  */
 enum AVSphericalProjection {
     /**
@@ -67,7 +67,7 @@ enum AVSphericalProjection {
     /**
      * Video represents a portion of a sphere mapped on a flat surface
      * using equirectangular projection. The @ref bounding fields indicate
-     * the position of the current Video in a larger surface.
+     * the position of the current video in a larger surface.
      */
     AV_SPHERICAL_EQUIRECTANGULAR_TILE,
 };
@@ -89,7 +89,7 @@ typedef struct AVSphericalMapping {
      * @name Initial orientation
      * @{
      * There fields describe additional rotations applied to the sphere after
-     * the Video frame is mapped onto it. The sphere is rotated around the
+     * the video frame is mapped onto it. The sphere is rotated around the
      * viewer, who remains stationary. The order of transformation is always
      * yaw, followed by pitch, and finally by roll.
      *
@@ -151,7 +151,7 @@ typedef struct AVSphericalMapping {
      *      +----------------+----------+
      * @endcode
      *
-     * If needed, the original Video surface dimensions can be derived
+     * If needed, the original video surface dimensions can be derived
      * by adding the current stream or frame size to the related bounds,
      * like in the following example:
      *

@@ -66,7 +66,7 @@ typedef int (*AVVDPAU_Render2)(struct AVCodecContext *, struct AVFrame *,
 
 /**
  * This structure is used to share data between the libavcodec library and
- * the client Video application.
+ * the client video application.
  * The user shall allocate the structure via the av_alloc_vdpau_hwaccel
  * function and make it available as
  * AVCodecContext.hwaccel_context. Members can be set by the user once
@@ -127,18 +127,18 @@ int av_vdpau_bind_context(AVCodecContext *avctx, VdpDevice device,
                           VdpGetProcAddress *get_proc_address, unsigned flags);
 
 /**
- * Gets the parameters to create an adequate VDPAU Video surface for the codec
+ * Gets the parameters to create an adequate VDPAU video surface for the codec
  * context using VDPAU hardware decoding acceleration.
  *
  * @note Behavior is undefined if the context was not successfully bound to a
  * VDPAU device using av_vdpau_bind_context().
  *
  * @param avctx the codec context being used for decoding the stream
- * @param type storage space for the VDPAU Video surface chroma type
+ * @param type storage space for the VDPAU video surface chroma type
  *              (or NULL to ignore)
- * @param width storage space for the VDPAU Video surface pixel width
+ * @param width storage space for the VDPAU video surface pixel width
  *              (or NULL to ignore)
- * @param height storage space for the VDPAU Video surface pixel height
+ * @param height storage space for the VDPAU video surface pixel height
  *              (or NULL to ignore)
  *
  * @return 0 on success, a negative AVERROR code on failure.

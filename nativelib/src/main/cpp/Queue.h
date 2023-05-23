@@ -22,6 +22,7 @@ public:
     pthread_mutex_t mutexPacket;
     pthread_cond_t condPacket;
     bool  playStatus = false;
+    bool done = 0;
 
 public:
     Queue();
@@ -30,7 +31,7 @@ public:
     int get(AVPacket *packet);
     int size();
     void clearAvpacket();
-
+    void setDone();
 };
 
 

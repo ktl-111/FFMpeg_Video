@@ -90,14 +90,14 @@
  * avcodec_receive_packet() functions provide an encode/decode API, which
  * decouples input and output.
  *
- * The API is very similar for encoding/decoding and audio/Video, and works as
+ * The API is very similar for encoding/decoding and audio/video, and works as
  * follows:
  * - Set up and open the AVCodecContext as usual.
  * - Send valid input:
  *   - For decoding, call avcodec_send_packet() to give the decoder raw
  *     compressed data in an AVPacket.
  *   - For encoding, call avcodec_send_frame() to give the encoder an AVFrame
- *     containing uncompressed audio or Video.
+ *     containing uncompressed audio or video.
  *
  *   In both cases, it is recommended that AVPackets and AVFrames are
  *   refcounted, or libavcodec might have to copy the input data. (libavformat
@@ -106,7 +106,7 @@
  * - Receive output in a loop. Periodically call one of the avcodec_receive_*()
  *   functions and process their output:
  *   - For decoding, call avcodec_receive_frame(). On success, it will return
- *     an AVFrame containing uncompressed audio or Video data.
+ *     an AVFrame containing uncompressed audio or video data.
  *   - For encoding, call avcodec_receive_packet(). On success, it will return
  *     an AVPacket with a compressed frame.
  *
@@ -159,7 +159,7 @@
  * - avcodec_decode_video2() and avcodec_decode_audio4():
  *   Use avcodec_send_packet() to feed input to the decoder, then use
  *   avcodec_receive_frame() to receive decoded frames after each packet.
- *   Unlike with the old Video decoding API, multiple frames might result from
+ *   Unlike with the old video decoding API, multiple frames might result from
  *   a packet. For audio, splitting the input packet into frames by partially
  *   decoding packets becomes transparent to the API user. You never need to
  *   feed an AVPacket to the API twice (unless it is rejected with AVERROR(EAGAIN) - then
@@ -643,7 +643,7 @@ typedef struct AVCodecContext {
      * timebase should be 1/framerate and timestamp increments should be
      * identically 1.
      * This often, but not always is the inverse of the frame rate or field rate
-     * for Video. 1/time_base is not the average frame rate if the frame rate is not
+     * for video. 1/time_base is not the average frame rate if the frame rate is not
      * constant.
      *
      * Like containers, elementary streams also can store timestamps, 1/time_base
@@ -692,7 +692,7 @@ typedef struct AVCodecContext {
     int delay;
 
 
-    /* Video only */
+    /* video only */
     /**
      * picture width / height.
      *
@@ -908,7 +908,7 @@ typedef struct AVCodecContext {
     /**
      * sample aspect ratio (0 if unknown)
      * That is the width of a pixel divided by the height of the pixel.
-     * Numerator and denominator must be relatively prime and smaller than 256 for some Video standards.
+     * Numerator and denominator must be relatively prime and smaller than 256 for some video standards.
      * - encoding: Set by user.
      * - decoding: Set by libavcodec.
      */
@@ -1279,7 +1279,7 @@ typedef struct AVCodecContext {
      * The following fields will be set in the frame before this callback is
      * called:
      * - format
-     * - width, height (Video only)
+     * - width, height (video only)
      * - sample_rate, channel_layout, nb_samples (audio only)
      * Their values may differ from the corresponding values in
      * AVCodecContext. This callback must use the frame values, not the codec
@@ -1352,7 +1352,7 @@ typedef struct AVCodecContext {
 
 #if FF_API_OLD_ENCDEC
     /**
-     * If non-zero, the decoded audio and Video frames returned from
+     * If non-zero, the decoded audio and video frames returned from
      * avcodec_decode_video2() and avcodec_decode_audio4() are reference-counted
      * and are valid indefinitely. The caller must free them with
      * av_frame_unref() when they are not needed anymore.
@@ -2123,7 +2123,7 @@ typedef struct AVCodecContext {
     /**
      * Skip processing alpha if supported by codec.
      * Note that if the format uses pre-multiplied alpha (common with VP6,
-     * and recommended due to better Video quality/compression)
+     * and recommended due to better video quality/compression)
      * the image will look as if alpha-blended onto a black background.
      * However for formats that do not use pre-multiplied alpha
      * there might be serious artefacts (though e.g. libswscale currently
@@ -2279,7 +2279,7 @@ typedef struct AVCodecContext {
     int hwaccel_flags;
 
     /**
-     * Video decoding only. Certain Video codecs support cropping, meaning that
+     * Video decoding only. Certain video codecs support cropping, meaning that
      * only a sub-rectangle of the decoded frame is intended for display.  This
      * option controls how cropping is handled by libavcodec.
      *
@@ -2503,7 +2503,7 @@ typedef struct AVHWAccel {
      * Callback for parameter data (SPS/PPS/VPS etc).
      *
      * Useful for hardware decoders which keep persistent state about the
-     * Video parameters, and need to receive any changes to update that state.
+     * video parameters, and need to receive any changes to update that state.
      *
      * @param avctx the codec context
      * @param type the nal unit type
@@ -2552,7 +2552,7 @@ typedef struct AVHWAccel {
      *
      * XvMC uses it to replace the ff_mpv_reconstruct_mb().
      * Instead of decoding to raw picture, MB parameters are
-     * stored in an array provided by the Video driver.
+     * stored in an array provided by the video driver.
      *
      * @param s the mpeg context
      */
@@ -2826,7 +2826,7 @@ const AVClass *avcodec_get_subtitle_rect_class(void);
  * Copy the settings of the source AVCodecContext into the destination
  * AVCodecContext. The resulting destination codec context will be
  * unopened, i.e. you are required to call avcodec_open2() before you
- * can use this AVCodecContext to decode/encode Video/audio data.
+ * can use this AVCodecContext to decode/encode video/audio data.
  *
  * @param dest target codec context, should be initialized with
  *             avcodec_alloc_context3(NULL), but otherwise uninitialized
@@ -3048,7 +3048,7 @@ int avcodec_decode_audio4(AVCodecContext *avctx, AVFrame *frame,
                           int *got_frame_ptr, const AVPacket *avpkt);
 
 /**
- * Decode the Video frame of size avpkt->size from avpkt->data into picture.
+ * Decode the video frame of size avpkt->size from avpkt->data into picture.
  * Some decoders may support multiple frames in a single AVPacket, such
  * decoders would then just decode the first frame.
  *
@@ -3067,7 +3067,7 @@ int avcodec_decode_audio4(AVCodecContext *avctx, AVFrame *frame,
  * before packets may be fed to the decoder.
  *
  * @param avctx the codec context
- * @param[out] picture The AVFrame in which the decoded Video frame will be stored.
+ * @param[out] picture The AVFrame in which the decoded video frame will be stored.
  *             Use av_frame_alloc() to get an AVFrame. The codec will
  *             allocate memory for the actual bitmap by calling the
  *             AVCodecContext.get_buffer2() callback.
@@ -3105,7 +3105,7 @@ int avcodec_decode_video2(AVCodecContext *avctx, AVFrame *picture,
  * Otherwise, the subtitle is stored in *sub.
  * Note that AV_CODEC_CAP_DR1 is not available for subtitle codecs. This is for
  * simplicity, because the performance difference is expected to be negligible
- * and reusing a get_buffer written for Video codecs would probably perform badly
+ * and reusing a get_buffer written for video codecs would probably perform badly
  * due to a potentially very different allocation pattern.
  *
  * Some decoders (those marked with AV_CODEC_CAP_DELAY) have a delay between input
@@ -3149,7 +3149,7 @@ int avcodec_decode_subtitle2(AVCodecContext *avctx, AVSubtitle *sub,
  *       before packets may be fed to the decoder.
  *
  * @param avctx codec context
- * @param[in] avpkt The input AVPacket. Usually, this will be a single Video
+ * @param[in] avpkt The input AVPacket. Usually, this will be a single video
  *                  frame, or several complete audio frames.
  *                  Ownership of the packet remains with the caller, and the
  *                  decoder will not write to the packet. The decoder may create
@@ -3185,7 +3185,7 @@ int avcodec_send_packet(AVCodecContext *avctx, const AVPacket *avpkt);
  * Return decoded output data from a decoder.
  *
  * @param avctx codec context
- * @param frame This will be set to a reference-counted Video or audio
+ * @param frame This will be set to a reference-counted video or audio
  *              frame (depending on the decoder type) allocated by the
  *              decoder. Note that the function will always call
  *              av_frame_unref(frame) before doing anything else.
@@ -3205,11 +3205,11 @@ int avcodec_send_packet(AVCodecContext *avctx, const AVPacket *avpkt);
 int avcodec_receive_frame(AVCodecContext *avctx, AVFrame *frame);
 
 /**
- * Supply a raw Video or audio frame to the encoder. Use avcodec_receive_packet()
+ * Supply a raw video or audio frame to the encoder. Use avcodec_receive_packet()
  * to retrieve buffered output packets.
  *
  * @param avctx     codec context
- * @param[in] frame AVFrame containing the raw audio or Video frame to be encoded.
+ * @param[in] frame AVFrame containing the raw audio or video frame to be encoded.
  *                  Ownership of the frame remains with the caller, and the
  *                  encoder will not write to the frame. The encoder may create
  *                  a reference to the frame data (or copy it if the frame is
@@ -3381,7 +3381,7 @@ typedef struct AVCodecParserContext {
     int64_t cur_offset; /* current offset
                            (incremented by each av_parser_parse()) */
     int64_t next_frame_offset; /* offset of the next frame */
-    /* Video info */
+    /* video info */
     int pict_type; /* XXX: Put it back in AVCodecContext. */
     /**
      * This field is used for proper frame duration computation in lavf.
@@ -3519,19 +3519,19 @@ typedef struct AVCodecParserContext {
     int output_picture_number;
 
     /**
-     * Dimensions of the decoded Video intended for presentation.
+     * Dimensions of the decoded video intended for presentation.
      */
     int width;
     int height;
 
     /**
-     * Dimensions of the coded Video.
+     * Dimensions of the coded video.
      */
     int coded_width;
     int coded_height;
 
     /**
-     * The format of the coded data, corresponds to enum AVPixelFormat for Video
+     * The format of the coded data, corresponds to enum AVPixelFormat for video
      * and for enum AVSampleFormat for audio.
      *
      * Note that a decoder can have considerable freedom in how exactly it
@@ -3689,9 +3689,9 @@ int avcodec_encode_audio2(AVCodecContext *avctx, AVPacket *avpkt,
                           const AVFrame *frame, int *got_packet_ptr);
 
 /**
- * Encode a frame of Video.
+ * Encode a frame of video.
  *
- * Takes input raw Video data from frame and writes the next output packet, if
+ * Takes input raw video data from frame and writes the next output packet, if
  * available, to avpkt. The output packet does not necessarily contain data for
  * the most recent frame, as encoders can delay and reorder input frames
  * internally as needed.
@@ -3710,7 +3710,7 @@ int avcodec_encode_audio2(AVCodecContext *avctx, AVPacket *avpkt,
  *
  *                  If this function fails or produces no output, avpkt will be
  *                  freed using av_packet_unref().
- * @param[in] frame AVFrame containing the raw Video data to be encoded.
+ * @param[in] frame AVFrame containing the raw video data to be encoded.
  *                  May be NULL when flushing an encoder that has the
  *                  AV_CODEC_CAP_DELAY capability set.
  * @param[out] got_packet_ptr This field is set to 1 by libavcodec if the

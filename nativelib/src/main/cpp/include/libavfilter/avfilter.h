@@ -477,7 +477,7 @@ struct AVFilterLink {
 
     enum AVMediaType type;      ///< filter media type
 
-    /* These parameters apply only to Video */
+    /* These parameters apply only to video */
     int w;                      ///< agreed upon image width
     int h;                      ///< agreed upon image height
     AVRational sample_aspect_ratio; ///< agreed upon sample aspect ratio
@@ -699,7 +699,7 @@ void avfilter_link_set_closed(AVFilterLink *link, int closed);
 int avfilter_config_links(AVFilterContext *filter);
 
 #define AVFILTER_CMD_FLAG_ONE   1 ///< Stop once a filter understood the command (for target=all for example), fast filters are favored automatically
-#define AVFILTER_CMD_FLAG_FAST  2 ///< Only execute command when its fast (like a Video out that supports contrast adjustment in hw)
+#define AVFILTER_CMD_FLAG_FAST  2 ///< Only execute command when its fast (like a video out that supports contrast adjustment in hw)
 
 /**
  * Make the filter instance process a command.

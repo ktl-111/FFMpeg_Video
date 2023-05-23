@@ -688,7 +688,12 @@ ffmpeg软解:
 sdk:丢帧,只留IP
 
 #### 参考
-[ffmpeg实现重封装](https://codeantenna.com/a/LavUIN2K2P)
+[ffmpeg实现重封装](https://codeantenna.com/a/LavUIN2K2P)  
+[ffmpeg解码](https://www.nxrte.com/jishu/13254.html)  
+[ffmpeg硬解](https://cloud.tencent.com/developer/article/2115712) +[ffmpeg直接渲染Surface](https://cloud.tencent.com/developer/article/1901883?from=article.detail.1928893)
+[ffmpeg硬解2](https://zhuanlan.zhihu.com/p/168240163)   
+[ffmpeg硬解3](https://blog.csdn.net/lakebobo/article/details/79619584)
+[ffmpeg官方demo](https://github.com/FFmpeg/FFmpeg/blob/master/doc/examples/hw_decode.c)
 
 ### 参考
 [一文读懂 FFmpeg](https://juejin.cn/post/7072198840035573790#heading-19)

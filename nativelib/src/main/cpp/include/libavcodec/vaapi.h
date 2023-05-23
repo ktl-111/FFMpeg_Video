@@ -1,5 +1,5 @@
 /*
- * Video Acceleration API (shared data between FFmpeg and the Video player)
+ * Video Acceleration API (shared data between FFmpeg and the video player)
  * HW decode acceleration for MPEG-2, MPEG-4, H.264 and VC-1
  *
  * Copyright (C) 2008-2009 Splitted-Desktop Systems
@@ -44,7 +44,7 @@
 
 /**
  * This structure is used to share data between the FFmpeg library and
- * the client Video application.
+ * the client video application.
  * This shall be zero-allocated and available as
  * AVCodecContext.hwaccel_context. All user members can be set once
  * during initialization or through each AVCodecContext.get_buffer()
@@ -71,7 +71,7 @@ struct attribute_deprecated vaapi_context {
     uint32_t config_id;
 
     /**
-     * Context ID (Video decode pipeline)
+     * Context ID (video decode pipeline)
      *
      * - encoding: unused
      * - decoding: Set by user

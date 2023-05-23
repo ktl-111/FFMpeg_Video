@@ -97,7 +97,7 @@ struct attribute_deprecated xvmc_pix_fmt {
 
     /** Pointer to the surface allocated by XvMCCreateSurface().
         It has to be freed by XvMCDestroySurface() on application exit.
-        It identifies the frame and its state on the Video hardware.
+        It identifies the frame and its state on the video hardware.
         - application - set during initialization
         - libavcodec  - unchanged
     */

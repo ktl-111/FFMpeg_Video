@@ -72,7 +72,7 @@ unsigned av_buffersrc_get_nb_failed_requests(AVFilterContext *buffer_src);
  */
 typedef struct AVBufferSrcParameters {
     /**
-     * Video: the pixel format, value corresponds to enum AVPixelFormat
+     * video: the pixel format, value corresponds to enum AVPixelFormat
      * audio: the sample format, value corresponds to enum AVSampleFormat
      */
     int format;
@@ -92,7 +92,7 @@ typedef struct AVBufferSrcParameters {
     AVRational sample_aspect_ratio;
 
     /**
-     * Video only, the frame rate of the input Video. This field must only be
+     * Video only, the frame rate of the input video. This field must only be
      * set to a non-zero value if input stream has a known constant framerate
      * and should be left at its initial value if the framerate is variable or
      * unknown.
