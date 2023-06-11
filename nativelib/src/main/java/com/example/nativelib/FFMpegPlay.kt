@@ -3,7 +3,6 @@ package com.example.nativelib
 import android.util.Log
 import android.view.Surface
 import android.view.SurfaceView
-import android.view.ViewGroup.LayoutParams
 
 class FFMpegPlay(private val surfaceView: SurfaceView) {
     val TAG = "FFMpegPlay"
@@ -48,9 +47,15 @@ class FFMpegPlay(private val surfaceView: SurfaceView) {
 
     private fun onCallData(byteArray: ByteArray) {
         Log.i(TAG, "onCallData: ${byteArray.size}")
-        callback?.invoke(byteArray)
+        dataCallback?.invoke(byteArray)
+    }
+
+    private fun onCallCurrTime(currTime: Float) {
+        Log.i(TAG, "onCallCurrTime: $currTime")
+        playTimeCallback?.invoke(currTime)
     }
 
     var configCallback: ((Long, Int) -> Unit)? = null
-    var callback: ((ByteArray) -> Unit)? = null
+    var dataCallback: ((ByteArray) -> Unit)? = null
+    var playTimeCallback: ((Float) -> Unit)? = null
 }

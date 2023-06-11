@@ -27,6 +27,8 @@ extern "C" {
 _JavaVM *javaVM = nullptr;
 jobject instance = nullptr;
 jmethodID onCallData = nullptr;
+jmethodID onCallCurrTime = nullptr;
+jclass jclazz = nullptr;
 //是否开启硬解
 int openHwCoder = 1;
 //解码线程数
@@ -45,6 +47,7 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *vm, void *reserved) {
         // 设置JavaVM，否则无法进行硬解码
         av_jni_set_java_vm(vm, nullptr);
     }
+    LOGI("JNI_OnLoad %p", &javaVM);
 
     return JNI_VERSION_1_4;
 }
@@ -113,8 +116,9 @@ JNIEXPORT jboolean JNICALL
 Java_com_example_nativelib_FFMpegPlay_play(JNIEnv *env, jobject thiz, jstring url_,
                                            jobject surface) {
     instance = env->NewGlobalRef(thiz);
-    jclass jclazz = env->GetObjectClass(instance);
+    jclazz = env->GetObjectClass(instance);
     onCallData = env->GetMethodID(jclazz, "onCallData", "([B)V");
+    onCallCurrTime = env->GetMethodID(jclazz, "onCallCurrTime", "(F)V");
 
     char *url = const_cast<char *>(env->GetStringUTFChars(url_, 0));
 
@@ -246,8 +250,7 @@ Java_com_example_nativelib_FFMpegPlay_play(JNIEnv *env, jobject thiz, jstring ur
         }
     }
     //回调给应用层
-    jclass instance = env->GetObjectClass(thiz);
-    jmethodID jmethodId = env->GetMethodID(instance, "onConfig", "(IIJI)V");
+    jmethodID jmethodId = env->GetMethodID(jclazz, "onConfig", "(IIJI)V");
     env->CallVoidMethod(thiz, jmethodId, videoContext->width, videoContext->height,
                         avFormatContext->duration / AV_TIME_BASE, fps);
     //获取缓冲window
@@ -537,15 +540,15 @@ void pcmBufferCallBack(SLAndroidSimpleBufferQueueItf bf, void *context) {
 
 void *decodeVideo(void *params) {
     AVBSFContext *absCtx;
-    if (!openHwCoder) {
-        const AVBitStreamFilter *pFilter;
-        //创建过滤器
-        //-filters 查看支持的过滤器集合
-        pFilter = av_bsf_get_by_name("h264_mp4toannexb");
-        av_bsf_alloc(pFilter, &absCtx);
-        avcodec_parameters_copy(absCtx->par_in, avFormatContext->streams[videoIndex]->codecpar);
-        av_bsf_init(absCtx);
-    }
+    const AVBitStreamFilter *pFilter;
+    //创建过滤器
+    //-filters 查看支持的过滤器集合
+    pFilter = av_bsf_get_by_name("h264_mp4toannexb");
+    av_bsf_alloc(pFilter, &absCtx);
+    avcodec_parameters_copy(absCtx->par_in, avFormatContext->streams[videoIndex]->codecpar);
+    av_bsf_init(absCtx);
+
+    auto timeBase = av_q2d(avFormatContext->streams[videoIndex]->time_base);
     start:
     while (startDecode) {
         auto startTime = std::chrono::steady_clock::now();
@@ -560,10 +563,7 @@ void *decodeVideo(void *params) {
              avPacket->size,
              avPacket->pts, avPacket->dts, avPacket->flags, nalType);
 
-        if (!openHwCoder) {
-            //硬解写h264会崩溃
-            writeH264Content(&absCtx, avPacket);
-        }
+        writeH264Content(&absCtx, avPacket);
         /**发送数据包,通知解码
          * avcodec_send_packet
          * 0:通知解码成功
@@ -626,11 +626,20 @@ void *decodeVideo(void *params) {
                 LOGI("video avcodec_receive_frame AVERROR_EOF");
                 goto start;
             } else if (result == 0) {
-                LOGI("video 帧数据 width:%d,height:%d,frameFormat:%s %d,flags:%d,key_frame:%d",
+                float currTime = timeBase * avFrame->pts;
+                LOGI("video 帧数据 width:%d,height:%d,frameFormat:%s %d,flags:%d,key_frame:%d,currTime:%f",
                      avFrame->width, avFrame->height,
                      av_get_pix_fmt_name((AVPixelFormat) avFrame->format), avFrame->format,
-                     avFrame->flags, avFrame->key_frame);
-
+                     avFrame->flags, avFrame->key_frame, currTime);
+                JNIEnv *jniEnv;
+                if (javaVM->AttachCurrentThread(&jniEnv, nullptr) == JNI_OK) {
+                    //由于在native子线程,需要特殊处理回调java层
+                    jniEnv->CallVoidMethod(instance, onCallCurrTime, currTime);
+                    if (!openHwCoder) {
+                        //开启硬解后vm给ffmpeg管理,如果detach会崩溃
+                        javaVM->DetachCurrentThread();
+                    }
+                }
                 const char *type;
                 AVPictureType pictureType = avFrame->pict_type;
                 switch (pictureType) {
@@ -656,7 +665,6 @@ void *decodeVideo(void *params) {
 
                 LOGI("video 解码耗时:%f毫秒 帧类型:%s-%d", diffMilli, type, pictureType);
                 showFrameToWindow(&avFrame);
-
                 av_frame_unref(avFrame);
             } else {
                 av_frame_unref(avFrame);
@@ -747,7 +755,9 @@ void writeH264Content(AVBSFContext **absCtx, AVPacket *avPacket) {
                                    reinterpret_cast<const jbyte *>(tempPacket->data));
         jniEnv->CallVoidMethod(instance, onCallData, pArray);
         jniEnv->DeleteLocalRef(pArray);
-        javaVM->DetachCurrentThread();
+        if (!openHwCoder) {
+            javaVM->DetachCurrentThread();
+        }
     }
     av_packet_unref(tempPacket);
 }
@@ -986,7 +996,7 @@ Java_com_example_nativelib_FFMpegPlay_cutting(JNIEnv *env, jobject thiz, jstring
 
     env->ReleaseStringUTFChars(dest_path_, destPath);
 }
-
+long long startPts;
 list<long long> sendDoneSet;
 extern "C"
 JNIEXPORT void JNICALL
@@ -996,12 +1006,20 @@ Java_com_example_nativelib_FFMpegPlay_seekTo(JNIEnv *env, jobject thiz, jfloat _
     auto inStream = avFormatContext->streams[videoIndex];
     auto timeBase = av_q2d(inStream->time_base);
     //s=pts*timebase
-    long long startPts = duration / timeBase;
-    int result = 0;
-    if (duration == 0) {
+    long long tStartPts = duration / timeBase;
+    if (tStartPts < startPts) {
         avcodec_flush_buffers(videoContext);
+        sendDoneSet.clear();
+        LOGI("seek video back avcodec_flush_buffers");
+    } else if (tStartPts == 0) {
+        avcodec_flush_buffers(videoContext);
+        sendDoneSet.clear();
+        LOGI("seek video 0 avcodec_flush_buffers");
         //int av_seek_frame(AVFormatContext *s, int stream_index, int64_t timestamp,
     }
+    startPts = tStartPts;
+    int result = 0;
+
     //stream_index为-1,timestamp为时间(us)
     //stream_index为视频index,timestamp为pts
 //    result = av_seek_frame(avFormatContext, videoIndex, startPts,
@@ -1143,10 +1161,11 @@ AVSEEK_FLAG_FRAME:是基于帧数量快进
                 LOGI("seek video avcodec_receive_frame AVERROR_EOF");
                 goto start;
             } else if (result == 0) {
-                LOGI("seek video 帧数据 width:%d,height:%d,frameFormat:%s %d,flags:%d,key_frame:%d,pts:%lld",
+                LOGI("seek video 帧数据 width:%d,height:%d,frameFormat:%s %d,flags:%d,key_frame:%d,pts:%lld,frameTime:%f",
                      avFrame->width, avFrame->height,
                      av_get_pix_fmt_name((AVPixelFormat) avFrame->format), avFrame->format,
-                     avFrame->flags, avFrame->key_frame, avFrame->pts);
+                     avFrame->flags, avFrame->key_frame, avFrame->pts, timeBase * avFrame->pts);
+
 
                 const char *type;
                 AVPictureType pictureType = avFrame->pict_type;

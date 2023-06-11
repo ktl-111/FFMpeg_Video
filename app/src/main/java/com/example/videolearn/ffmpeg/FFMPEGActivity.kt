@@ -12,6 +12,7 @@ import androidx.activity.compose.setContent
 import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -26,6 +27,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.painter.ColorPainter
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -34,10 +36,12 @@ import com.example.videolearn.MediaScope
 import com.example.videolearn.ffmpeg.bean.VideoBean
 import com.example.videolearn.utils.FileUtils
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.io.File
 import java.util.concurrent.Executors
+import kotlin.math.abs
 
 class FFMPEGActivity : AppCompatActivity() {
     val TAG = "FFMPEGActivity"
@@ -48,13 +52,14 @@ class FFMPEGActivity : AppCompatActivity() {
     private val videoList = mutableStateListOf<VideoBean>()
     private var mVideoDuration = 0L
     private val mFps = mutableStateOf(0)
+    private val mCurrPlayTime = mutableStateOf(0f)
+    private var isSeek = mutableStateOf(false)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContent { rootView(videoList, mFps) }
+        setContent { rootView(videoList, mFps, mCurrPlayTime) }
     }
 
     private fun play() {
-
         //直播地址
 //         path = "http://zhibo.hkstv.tv/livestream/mutfysrq/playlist.m3u8"
 //         path = "http://39.135.138.58:18890/PLTV/88888888/224/3221225630/index.m3u8"
@@ -81,16 +86,16 @@ class FFMPEGActivity : AppCompatActivity() {
                 val fileName = "ffmpeg"
                 FileUtils.deleteBytesFile(fileName)
                 FileUtils.deleteContentFile(fileName)
-                callback = {
-                    newSingleThreadExecutor.submit {
-                        kotlin.runCatching {
-                            FileUtils.writeBytes(it, fileName)
-                            FileUtils.writeContent(it, fileName)
-                        }.onFailure {
-                            it.printStackTrace()
-                        }
-                    }
-                }
+//                dataCallback = {
+//                    newSingleThreadExecutor.submit {
+//                        kotlin.runCatching {
+//                            FileUtils.writeBytes(it, fileName)
+//                            FileUtils.writeContent(it, fileName)
+//                        }.onFailure {
+//                            it.printStackTrace()
+//                        }
+//                    }
+//                }
                 configCallback = { duration, fps ->
                     mVideoDuration = duration
                     MediaScope.launch(Dispatchers.Main) {
@@ -103,15 +108,25 @@ class FFMPEGActivity : AppCompatActivity() {
                         videoList.addAll(list)
                     }
                 }
+                playTimeCallback = { time ->
+                    updateUi(time)
+                }
             }
         }.play(path, surface = surface)
     }
 
+    private fun updateUi(time: Float) {
+        MediaScope.launch(Dispatchers.Main) {
+            mCurrPlayTime.value = time
+            Log.i(TAG, "updateUi: ${time}")
+        }
+    }
+
     private fun resume() {
         Log.i(TAG, "resume: ")
-//        MediaScope.launch {
-//            ffMpegPlay?.resume()
-//        }
+        MediaScope.launch {
+            ffMpegPlay?.resume()
+        }
     }
 
     private fun pause() {
@@ -137,11 +152,33 @@ class FFMPEGActivity : AppCompatActivity() {
         }
     }
 
-    fun itemChange(index: Int) {
-        Log.i(TAG, "itemChange: $index")
-//        MediaScope.launch {
-//            ffMpegPlay?.seekTo(index.toFloat())
-//        }
+    val singleCoroutine = Executors.newSingleThreadExecutor().asCoroutineDispatcher()
+    var preTime = 0f
+
+    private fun seek(index: Int, offset: Int, itemWidthPx: Float) {
+        if (!isSeek.value) {
+            return
+        }
+        MediaScope.launch(singleCoroutine) {
+            val scale = offset / itemWidthPx
+            val seek = 1f * scale + index
+            if (seek == preTime) {
+                Log.i(TAG, "itemChange seek == preTime")
+                return@launch
+            }
+            mCurrPlayTime.value = seek
+            if (seek != 0f) {
+                val diffSeek = abs(seek - preTime)
+                val minSeek = 1f / mFps.value
+                if (diffSeek < minSeek) {
+                    Log.i(TAG, "itemChange filter diffSeek:$diffSeek minSeek:${minSeek}")
+                    return@launch
+                }
+            }
+            preTime = seek
+            Log.i(TAG, "itemChange seek:$seek index:$index offset:$offset")
+            ffMpegPlay?.seekTo(seek)
+        }
     }
 
     private fun testSeek() {
@@ -150,7 +187,7 @@ class FFMPEGActivity : AppCompatActivity() {
             val diff = 1f / mFps.value
             while (seek < mVideoDuration) {
                 ffMpegPlay?.seekTo(seek)
-                delay(500)
+                delay(50)
                 seek += diff
             }
         }
@@ -168,11 +205,15 @@ class FFMPEGActivity : AppCompatActivity() {
         rootView(videoList.apply {
             add(VideoBean(1))
             add(VideoBean(2))
-        }, mFps)
+        }, mFps, mCurrPlayTime)
     }
 
     @Composable
-    fun rootView(videoList: SnapshotStateList<VideoBean>, fps: MutableState<Int>) {
+    fun rootView(
+        videoList: SnapshotStateList<VideoBean>,
+        fps: MutableState<Int>,
+        currPlayTime: MutableState<Float>
+    ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -209,11 +250,10 @@ class FFMPEGActivity : AppCompatActivity() {
                                 LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT)
                         }
                     }, modifier = Modifier
-                        .background(Color.Red)
-                        .padding(1.dp)
+                        .border(width = 1.dp, color = Color.Red)
                         .align(Alignment.Center)
                 )
-                Text(text = "fps:${fps.value}", color = Color.Red)
+                Text(text = "fps:${fps.value}\ncurrTime:${currPlayTime.value}", color = Color.Red)
             }
             Column(
                 modifier = Modifier
@@ -221,10 +261,31 @@ class FFMPEGActivity : AppCompatActivity() {
                     .fillMaxWidth()
                     .wrapContentHeight()
             ) {
-                val lazyState = rememberLazyListState()
-                itemChange(remember { derivedStateOf { lazyState.firstVisibleItemIndex } }.value)
-
-                LazyRow(state = lazyState, modifier = Modifier
+                val itemWidth = 80.dp
+                val lazyListState = rememberLazyListState()
+                val isSeek = remember {
+                    isSeek
+                }
+                val itemWidthPx = LocalDensity.current.run {
+                    itemWidth.toPx()
+                }
+                if (isSeek.value) {
+                    val index = remember { derivedStateOf { lazyListState.firstVisibleItemIndex } }
+                    val offset =
+                        remember { derivedStateOf { lazyListState.firstVisibleItemScrollOffset } }
+                    seek(index.value, offset.value, itemWidthPx)
+                } else {
+                    LaunchedEffect(key1 = derivedStateOf { currPlayTime }) {
+                        val scrollIndex = (currPlayTime.value / 1).toInt()
+                        val scrollOffset = (currPlayTime.value % 1 * itemWidthPx).toInt()
+                        Log.i(
+                            TAG,
+                            "LaunchedEffect: scrollIndex:$scrollIndex scrollOffset:$scrollOffset"
+                        )
+                        lazyListState.scrollToItem(scrollIndex, scrollOffset)
+                    }
+                }
+                LazyRow(state = lazyListState, modifier = Modifier
                     .fillMaxWidth()
                     .pointerInput(Unit) {
                         awaitPointerEventScope {
@@ -233,8 +294,10 @@ class FFMPEGActivity : AppCompatActivity() {
                                 Log.i(TAG, "awaitPointerEventScope event type:${event.type}")
                                 if (event.changes.size == 1) {
                                     if (event.type == PointerEventType.Release) {
+                                        isSeek.value = false
                                         resume()
                                     } else if (event.type == PointerEventType.Press) {
+                                        isSeek.value = true
                                         pause()
                                     }
                                 }
@@ -250,7 +313,7 @@ class FFMPEGActivity : AppCompatActivity() {
                             Box {
                                 Box(
                                     modifier = Modifier
-                                        .width(80.dp)
+                                        .width(itemWidth)
                                         .height(30.dp),
                                     contentAlignment = Alignment.Center
                                 ) {
@@ -271,6 +334,7 @@ class FFMPEGActivity : AppCompatActivity() {
 
                     }
                 }
+
                 commonButton("cutting") {
                     cutting()
                 }
