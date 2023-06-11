@@ -10,16 +10,40 @@ class FFMpegPlay(private val surfaceView: SurfaceView) {
     external fun play(url: String, surface: Surface): Boolean
     external fun cutting(destPath: String)
     external fun release()
+    external fun resume()
+    external fun pause()
+    external fun seekTo(duration: Float)
 
     init {
         System.loadLibrary("nativelib")
     }
 
-    fun onConfig(witdh: Int, height: Int) {
+    fun onConfig(witdh: Int, height: Int, duration: Long, fps: Int) {
+        configCallback?.invoke(duration, fps)
         val ratio = witdh.toFloat() / height
-        val videoWidth = surfaceView.context.resources.displayMetrics.widthPixels
-        val videoHeight = (videoWidth / ratio).toInt()
-        surfaceView.layoutParams = LayoutParams(videoWidth, videoHeight)
+        Log.i(
+            TAG, "onConfig: video width:$witdh,height$height ratio:$ratio\n" +
+                    "view width:${surfaceView.measuredWidth},height${surfaceView.measuredHeight}"
+        )
+        val videoHeight: Int
+        val videoWidth: Int
+        if (height > witdh) {
+            videoHeight = surfaceView.measuredHeight
+            videoWidth = (videoHeight * ratio).toInt()
+        } else {
+            videoWidth = surfaceView.measuredWidth
+            videoHeight = (videoWidth / ratio).toInt()
+        }
+        surfaceView.layoutParams.also {
+            it.width = videoWidth
+            it.height = videoHeight
+        }
+        surfaceView.requestLayout()
+        Log.i(
+            TAG,
+            "onConfig: change width:${surfaceView.measuredWidth},height:${surfaceView.measuredHeight}\n" +
+                    "width:${videoWidth},height:${videoHeight}"
+        )
     }
 
     private fun onCallData(byteArray: ByteArray) {
@@ -27,5 +51,6 @@ class FFMpegPlay(private val surfaceView: SurfaceView) {
         callback?.invoke(byteArray)
     }
 
+    var configCallback: ((Long, Int) -> Unit)? = null
     var callback: ((ByteArray) -> Unit)? = null
 }

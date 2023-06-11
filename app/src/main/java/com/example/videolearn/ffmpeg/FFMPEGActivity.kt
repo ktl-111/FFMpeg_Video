@@ -10,20 +10,32 @@ import android.view.ViewGroup.LayoutParams
 import android.widget.Toast
 import androidx.activity.compose.setContent
 import androidx.appcompat.app.AppCompatActivity
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.Button
 import androidx.compose.material.Text
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
+import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.painter.ColorPainter
+import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.example.nativelib.FFMpegPlay
 import com.example.videolearn.MediaScope
+import com.example.videolearn.ffmpeg.bean.VideoBean
 import com.example.videolearn.utils.FileUtils
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 import java.io.File
 import java.util.concurrent.Executors
 
@@ -33,10 +45,12 @@ class FFMPEGActivity : AppCompatActivity() {
     private lateinit var surfaceView: SurfaceView
     private var ffMpegPlay: FFMpegPlay? = null
     private var path: String? = null
+    private val videoList = mutableStateListOf<VideoBean>()
+    private var mVideoDuration = 0L
+    private val mFps = mutableStateOf(0)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContent { rootView() }
-
+        setContent { rootView(videoList, mFps) }
     }
 
     private fun play() {
@@ -49,7 +63,8 @@ class FFMPEGActivity : AppCompatActivity() {
 //        path = File(Environment.getExternalStorageDirectory(), "video.mp4").absolutePath
 //        path = File(application.externalCacheDir, "ffmpeg3.mp4").absolutePath
 //        path = File(Environment.getExternalStorageDirectory(), "ffmpeg.mp4").absolutePath
-        path = File(Environment.getExternalStorageDirectory(), "ffmpeg3.mp4").absolutePath
+//        path = File(Environment.getExternalStorageDirectory(), "ffmpeg3.mp4").absolutePath
+        path = File(Environment.getExternalStorageDirectory(), "longvideo.mp4").absolutePath
 //        path = File(Environment.getExternalStorageDirectory(), "VID_20230511_004231.mp4").absolutePath
 //        path = File(application.externalCacheDir, "vid_test1.mp4").absolutePath
         val path = path!!
@@ -76,12 +91,32 @@ class FFMPEGActivity : AppCompatActivity() {
                         }
                     }
                 }
+                configCallback = { duration, fps ->
+                    mVideoDuration = duration
+                    MediaScope.launch(Dispatchers.Main) {
+                        mFps.value = fps
+                        val list = mutableListOf<VideoBean>().apply {
+                            for (time in 0..duration) {
+                                add(VideoBean(time))
+                            }
+                        }
+                        videoList.addAll(list)
+                    }
+                }
             }
         }.play(path, surface = surface)
     }
 
+    private fun resume() {
+        Log.i(TAG, "resume: ")
+//        MediaScope.launch {
+//            ffMpegPlay?.resume()
+//        }
+    }
+
     private fun pause() {
-        ffMpegPlay?.release()
+        Log.i(TAG, "pause: ")
+        ffMpegPlay?.pause()
     }
 
     private fun cutting() {
@@ -102,6 +137,26 @@ class FFMPEGActivity : AppCompatActivity() {
         }
     }
 
+    fun itemChange(index: Int) {
+        Log.i(TAG, "itemChange: $index")
+//        MediaScope.launch {
+//            ffMpegPlay?.seekTo(index.toFloat())
+//        }
+    }
+
+    private fun testSeek() {
+        MediaScope.launch {
+            var seek = 0f
+            val diff = 1f / mFps.value
+            while (seek < mVideoDuration) {
+                ffMpegPlay?.seekTo(seek)
+                delay(500)
+                seek += diff
+            }
+        }
+
+    }
+
     override fun onDestroy() {
         super.onDestroy()
         ffMpegPlay?.release()
@@ -109,67 +164,140 @@ class FFMPEGActivity : AppCompatActivity() {
 
     @Preview
     @Composable
-    fun rootView() {
-        Box(
+    fun testPreview() {
+        rootView(videoList.apply {
+            add(VideoBean(1))
+            add(VideoBean(2))
+        }, mFps)
+    }
+
+    @Composable
+    fun rootView(videoList: SnapshotStateList<VideoBean>, fps: MutableState<Int>) {
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .fillMaxHeight()
         ) {
-            AndroidView(factory = { context ->
-                return@AndroidView SurfaceView(context).also {
-                    surfaceView = it
-                    it.holder.addCallback(object : SurfaceHolder.Callback {
-                        override fun surfaceCreated(holder: SurfaceHolder) {
-                            surface = holder.surface
-                        }
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+                    .background(Color.Black)
+            ) {
+                AndroidView(
+                    factory = { context ->
+                        return@AndroidView SurfaceView(context).also {
+                            surfaceView = it
+                            it.holder.addCallback(object : SurfaceHolder.Callback {
+                                override fun surfaceCreated(holder: SurfaceHolder) {
+                                    surface = holder.surface
+                                }
 
-                        override fun surfaceChanged(
-                            holder: SurfaceHolder,
-                            format: Int,
-                            width: Int,
-                            height: Int
-                        ) {
-                        }
+                                override fun surfaceChanged(
+                                    holder: SurfaceHolder,
+                                    format: Int,
+                                    width: Int,
+                                    height: Int
+                                ) {
+                                }
 
-                        override fun surfaceDestroyed(holder: SurfaceHolder) {
-                        }
+                                override fun surfaceDestroyed(holder: SurfaceHolder) {
+                                }
 
-                    })
-                    it.layoutParams =
-                        LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT)
-                }
-            })
+                            })
+                            it.layoutParams =
+                                LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT)
+                        }
+                    }, modifier = Modifier
+                        .background(Color.Red)
+                        .padding(1.dp)
+                        .align(Alignment.Center)
+                )
+                Text(text = "fps:${fps.value}", color = Color.Red)
+            }
             Column(
                 modifier = Modifier
                     .padding(10.dp)
                     .fillMaxWidth()
-                    .align(alignment = Alignment.BottomCenter)
+                    .wrapContentHeight()
             ) {
-                Button(
-                    modifier = Modifier
-                        .padding(10.dp)
-                        .fillMaxWidth(),
-                    onClick = { cutting() }) {
-                    Text(text = "cutting")
+                val lazyState = rememberLazyListState()
+                itemChange(remember { derivedStateOf { lazyState.firstVisibleItemIndex } }.value)
+
+                LazyRow(state = lazyState, modifier = Modifier
+                    .fillMaxWidth()
+                    .pointerInput(Unit) {
+                        awaitPointerEventScope {
+                            while (true) {
+                                val event = awaitPointerEvent()
+                                Log.i(TAG, "awaitPointerEventScope event type:${event.type}")
+                                if (event.changes.size == 1) {
+                                    if (event.type == PointerEventType.Release) {
+                                        resume()
+                                    } else if (event.type == PointerEventType.Press) {
+                                        pause()
+                                    }
+                                }
+                            }
+                        }
+                    }) {
+                    items(videoList) {
+                        Column(
+                            modifier = Modifier
+                                .wrapContentHeight()
+                                .wrapContentWidth()
+                        ) {
+                            Box {
+                                Box(
+                                    modifier = Modifier
+                                        .width(80.dp)
+                                        .height(30.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = "${it.duration}s"
+                                    )
+                                }
+                                Image(
+                                    painter = ColorPainter(Color.Black),
+                                    contentDescription = "",
+                                    modifier = Modifier
+                                        .width(1.dp)
+                                        .height(30.dp)
+                                )
+                            }
+
+                        }
+
+                    }
                 }
-                Button(
-                    modifier = Modifier
-                        .padding(10.dp)
-                        .fillMaxWidth(),
-                    onClick = { pause() }) {
-                    Text(text = "pause")
+                commonButton("cutting") {
+                    cutting()
                 }
-                Button(
-                    modifier = Modifier
-                        .padding(10.dp)
-                        .fillMaxWidth(),
-                    onClick = { play() }) {
-                    Text(text = "play")
+                commonButton(text = "testSeek") {
+                    testSeek()
+                }
+                commonButton("pause") {
+                    pause()
+                }
+                commonButton("play") {
+                    play()
                 }
             }
-
         }
     }
 
+
+    @Composable
+    fun commonButton(text: String, onclick: () -> Unit) {
+        Button(
+            modifier = Modifier
+                .padding(0.dp, 10.dp, 0.dp, 0.dp)
+                .fillMaxWidth(),
+            onClick = onclick
+        ) {
+            Text(text = text)
+        }
+    }
 
 }

@@ -694,6 +694,8 @@ sdk:丢帧,只留IP
 [ffmpeg硬解2](https://zhuanlan.zhihu.com/p/168240163)   
 [ffmpeg硬解3](https://blog.csdn.net/lakebobo/article/details/79619584)
 [ffmpeg官方demo](https://github.com/FFmpeg/FFmpeg/blob/master/doc/examples/hw_decode.c)
+[大佬分析ffmpeg源码/命令行](https://ffmpeg.xianwaizhiyin.net/)
+[ffmpeg ftiler讲解](https://cloud.tencent.com/developer/article/2168943?areaSource=&traceId=)+[抽帧](https://cloud.tencent.com/developer/article/2168938?areaSource=&traceId=)
 
 ### 参考
 [一文读懂 FFmpeg](https://juejin.cn/post/7072198840035573790#heading-19)

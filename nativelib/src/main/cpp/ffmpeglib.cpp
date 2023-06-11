@@ -7,6 +7,11 @@
 #include <android/native_window_jni.h>
 #include <string>
 
+#include <list>
+#include <set>
+
+using namespace std;
+
 extern "C" {
 #include "libswscale/swscale.h"
 #include "libavutil/imgutils.h"
@@ -140,7 +145,7 @@ Java_com_example_nativelib_FFMpegPlay_play(JNIEnv *env, jobject thiz, jstring ur
         env->ReleaseStringUTFChars(url_, url);
         return false;
     }
-
+    int fps = 0;
     for (int i = 0; i < avFormatContext->nb_streams; ++i) {
         AVStream *pStream = avFormatContext->streams[i];
         AVCodecParameters *codecpar = pStream->codecpar;
@@ -209,9 +214,9 @@ Java_com_example_nativelib_FFMpegPlay_play(JNIEnv *env, jobject thiz, jstring ur
                 return false;
             }
 
-            int fps = av_q2d(pStream->avg_frame_rate);
+            fps = av_q2d(pStream->avg_frame_rate);
             videoSleep = 1000 / fps;
-            LOGI("video 视频流index:%d,width:%d,height:%d,fps:%d,duration:%lld,codecName:%s,codec_id:%d,thread_count:%d",
+            LOGI("video 视频流index:%d,width:%d,height:%d,fps:%d,duration:%lld秒,codecName:%s,codec_id:%d,thread_count:%d",
                  i, codecpar->width, codecpar->height, fps,
                  avFormatContext->duration / AV_TIME_BASE, avCodec->name, codecpar->codec_id,
                  videoContext->thread_count);
@@ -242,8 +247,9 @@ Java_com_example_nativelib_FFMpegPlay_play(JNIEnv *env, jobject thiz, jstring ur
     }
     //回调给应用层
     jclass instance = env->GetObjectClass(thiz);
-    jmethodID jmethodId = env->GetMethodID(instance, "onConfig", "(II)V");
-    env->CallVoidMethod(thiz, jmethodId, videoContext->width, videoContext->height);
+    jmethodID jmethodId = env->GetMethodID(instance, "onConfig", "(IIJI)V");
+    env->CallVoidMethod(thiz, jmethodId, videoContext->width, videoContext->height,
+                        avFormatContext->duration / AV_TIME_BASE, fps);
     //获取缓冲window
     nativeWindow = ANativeWindow_fromSurface(env, surface);
     //修改缓冲区格式和大小,对应视频格式和大小
@@ -255,6 +261,7 @@ Java_com_example_nativelib_FFMpegPlay_play(JNIEnv *env, jobject thiz, jstring ur
     initVideo();
     initAudio();
     startLooprtDecode();
+
     env->ReleaseStringUTFChars(url_, url);
     return false;
 }
@@ -410,15 +417,18 @@ void startLooprtDecode() {
 }
 
 void *decodePacket(void *params) {
-    LOGI("读取数据包");
+    LOGI("decodePacket 读取数据包");
+
+    auto startTime = std::chrono::steady_clock::now();
+
     while (startDecode) {
-        LOGI("start read");
+        LOGI("decodePacket start read");
         //创建packet接收
         AVPacket *avPacket = av_packet_alloc();
         //读取数据
         int result = av_read_frame(avFormatContext, avPacket);
         if (result < 0) {
-            LOGI("read done!!!");
+            LOGI("decodePacket read done!!!");
             videoQueue->setDone();
             av_packet_unref(avPacket);
             //结尾
@@ -427,15 +437,18 @@ void *decodePacket(void *params) {
         if (avPacket->stream_index == videoIndex) {
             //延迟帧率ms
 //            usleep(videoSleep * 1000);
-            LOGI("视频包大小:%d", avPacket->size);
+            LOGI("decodePacket 视频包大小:%d", avPacket->size);
             videoQueue->push(avPacket);
         } else if (avPacket->stream_index == audioIndex) {
             if (initAudioSuccess()) {
-                LOGI("音频包大小:%d", avPacket->size);
+                LOGI("decodePacket 音频包大小:%d", avPacket->size);
                 audioQueue->push(avPacket);
             }
         }
     }
+    auto endTime = std::chrono::steady_clock::now();
+    auto diffMilli = std::chrono::duration<double, std::milli>(endTime - startTime).count();
+    LOGI("decodePacket 耗时:%f毫秒", diffMilli);
     return nullptr;
 }
 
@@ -506,9 +519,9 @@ void pcmBufferCallBack(SLAndroidSimpleBufferQueueItf bf, void *context) {
         LOGI("audio swr_convert dataSize:%d", dataSize);
 
         auto endTime = std::chrono::steady_clock::now();
-        auto diff = std::chrono::duration<double, std::micro>(endTime - startTime).count();
+        auto diff = std::chrono::duration<double, std::milli>(endTime - startTime).count();
 
-        LOGI("audio 解码耗时 by micro:%f sample_rate:%d,channels:%d,format:%d,", diff,
+        LOGI("audio 解码耗时:%f毫秒 sample_rate:%d,channels:%d,format:%d,", diff,
              audioFrame->sample_rate, audioFrame->channels, audioFrame->format);
 
         av_frame_unref(audioFrame);
@@ -541,7 +554,11 @@ void *decodeVideo(void *params) {
         AVPacket *avPacket = av_packet_alloc();
         int result;
         videoQueue->get(avPacket);
-        LOGI("video videoQueue get packet size:%d", avPacket->size);
+
+        int nalType = avPacket->data[4] & 0x1F;
+        LOGI("video videoQueue get packet size:%d pts:%lld dts:%lld flags:%d nalType:%d",
+             avPacket->size,
+             avPacket->pts, avPacket->dts, avPacket->flags, nalType);
 
         if (!openHwCoder) {
             //硬解写h264会崩溃
@@ -609,9 +626,10 @@ void *decodeVideo(void *params) {
                 LOGI("video avcodec_receive_frame AVERROR_EOF");
                 goto start;
             } else if (result == 0) {
-                LOGI("video 帧数据 width:%d,height:%d,frameFormat:%s %d",
+                LOGI("video 帧数据 width:%d,height:%d,frameFormat:%s %d,flags:%d,key_frame:%d",
                      avFrame->width, avFrame->height,
-                     av_get_pix_fmt_name((AVPixelFormat) avFrame->format), avFrame->format);
+                     av_get_pix_fmt_name((AVPixelFormat) avFrame->format), avFrame->format,
+                     avFrame->flags, avFrame->key_frame);
 
                 const char *type;
                 AVPictureType pictureType = avFrame->pict_type;
@@ -784,10 +802,16 @@ int sampleConvertOpensles(int sample_rate) {
 
 }
 
+void release() {
+    startDecode = false;
+    videoQueue->clearAvpacket();
+    audioQueue->clearAvpacket();
+}
+
 extern "C"
 JNIEXPORT void JNICALL
 Java_com_example_nativelib_FFMpegPlay_release(JNIEnv *env, jobject thiz) {
-    startDecode = false;
+    release();
 }
 
 int initMuxerParams(char *destPath) {
@@ -961,4 +985,216 @@ Java_com_example_nativelib_FFMpegPlay_cutting(JNIEnv *env, jobject thiz, jstring
     }
 
     env->ReleaseStringUTFChars(dest_path_, destPath);
+}
+
+list<long long> sendDoneSet;
+extern "C"
+JNIEXPORT void JNICALL
+Java_com_example_nativelib_FFMpegPlay_seekTo(JNIEnv *env, jobject thiz, jfloat _duration) {
+    release();
+    jfloat duration = _duration;
+    auto inStream = avFormatContext->streams[videoIndex];
+    auto timeBase = av_q2d(inStream->time_base);
+    //s=pts*timebase
+    long long startPts = duration / timeBase;
+    int result = 0;
+    if (duration == 0) {
+        avcodec_flush_buffers(videoContext);
+        //int av_seek_frame(AVFormatContext *s, int stream_index, int64_t timestamp,
+    }
+    //stream_index为-1,timestamp为时间(us)
+    //stream_index为视频index,timestamp为pts
+//    result = av_seek_frame(avFormatContext, videoIndex, startPts,
+//                            AVSEEK_FLAG_ANY
+//    );
+
+    /** AVSEEK_FLAG_BACKWARD:是seek到请求的timestamp之前最近的关键帧
+AVSEEK_FLAG_BYTE: 是基于字节位置的查找
+AVSEEK_FLAG_ANY: 是可以seek到任意帧，注意不一定是关键帧，因此使用时可能会导致花屏
+AVSEEK_FLAG_FRAME:是基于帧数量快进
+
+     AVSEEK_FLAG_ANY+AVSEEK_FLAG_FRAME只能ip
+     */
+    result = avformat_seek_file(avFormatContext, videoIndex, INT64_MIN, startPts, INT64_MAX,
+                                AVSEEK_FLAG_ANY
+    );
+
+
+    LOGI("seek result:%d duration:%f startPts:%lld", result, duration, startPts);
+    start:
+    while (true) {
+        auto startTime = std::chrono::steady_clock::now();
+        auto endTime = std::chrono::steady_clock::now();
+        auto diffMilli = std::chrono::duration<double, std::milli>(endTime - startTime).count();
+        int result;
+        //创建packet接收
+        AVPacket *avPacket = av_packet_alloc();
+        //读取数据
+        int isVideo = 0;
+        do {
+            result = av_read_frame(avFormatContext, avPacket);
+            if (result < 0) {
+                LOGI("seek decodePacket read done!!!");
+                av_packet_unref(avPacket);
+                //结尾
+                return;
+            }
+            if (avPacket->stream_index == videoIndex) {
+                LOGI("seek decodePacket 视频包大小:%d pts:%lld", avPacket->size, avPacket->pts);
+            }
+            isVideo = avPacket->stream_index == videoIndex;
+            if (!isVideo) {
+                av_packet_unref(avPacket);
+            }
+        } while (!isVideo);
+//        if (isVideo) {
+//            goto done;
+//        }
+        int nalType = avPacket->data[4] & 0x1F;
+        LOGI("seek video packet size:%d flags:%d pts:%lld dts:%lld nalType:%d", avPacket->size,
+             avPacket->flags, avPacket->pts, avPacket->dts, nalType);
+
+        auto pts = avPacket->pts;
+        auto findResult = std::find(sendDoneSet.begin(), sendDoneSet.end(), pts);
+        if (findResult != sendDoneSet.end()) {
+            av_packet_unref(avPacket);
+            LOGI("seek findResult pts:%lld", pts);
+            continue;
+        }
+
+        /**发送数据包,通知解码
+         * avcodec_send_packet
+         * 0:通知解码成功
+         * AVERROR(EAGAIN):缓冲区已满,需要调用avcodec_receive_frame获取解码后的数据,当前数据包不能丢弃,否则会丢帧
+         * AVERROR_EOF:结束,但是可以继续从缓冲区获取数据
+         *
+         * 获取解码后的数据
+         * avcodec_receive_frame
+         * 0:获取解码数据成功
+         * AVERROR(EAGAIN):缓冲区已空,需要发送新的数据包,此情况判断如果avcodec_send_packet==AVERROR(EAGAIN),继续发送当前数据包,并且需要判断返回值,对应判断是否需要继续获取解码数据
+         * AVERROR_EOF:缓冲区刷新完成,后续不再有解码数据
+         *
+         * 如果无发送包,但是缓冲区还有数据,可以设置avPacket->data=null,avPacket->size=0;发送后再获取解码数据
+         */
+        result = avcodec_send_packet(videoContext, avPacket);
+
+        //是否需要重新send
+        int needReSend = 0;
+        if (result == 0) {
+            LOGI("seek video avcodec_send_packet success");
+            sendDoneSet.push_front(pts);
+            if (avPacket->pts > startPts) {
+                av_packet_unref(avPacket);
+                LOGI("seek video avPacket->pts>startPts");
+//            avcodec_flush_buffers(videoContext);
+                goto done;
+            }
+            av_packet_unref(avPacket);
+        } else if (result == AVERROR(EAGAIN)) {
+            needReSend = 1;
+            //缓冲区已满，要从内部缓冲区读取解码后的音视频帧
+            LOGI("seek video avcodec_send_packet AVERROR(EAGAIN)");
+        } else if (result == AVERROR_EOF) {
+            av_packet_unref(avPacket);
+            // 数据包送入结束不再送入,但是可以继续可以从内部缓冲区读取解码后的音视频帧
+            LOGI("seek video avcodec_send_packet AVERROR_EOF");
+        } else {
+            LOGE("seek video avcodec_send_packet error code:%d", result);
+            continue;
+        }
+
+        do {
+            frame:
+            LOGI("seek video start receive frame");
+            AVFrame *avFrame = av_frame_alloc();
+            // AVERROR(EAGAIN):缓冲区已空，没有帧输出，需要更多的送入数据包
+            // AVERROR_EOF:解码缓冲区已经刷新完成,后续不再有音视频帧输出
+            result = avcodec_receive_frame(videoContext, avFrame);
+
+            if (result == AVERROR(EAGAIN)) {
+                LOGI("seek video avcodec_receive_frame AVERROR(EAGAIN)");
+                av_frame_unref(avFrame);
+                if (needReSend) {
+                    int tResult = avcodec_send_packet(videoContext, avPacket);
+                    LOGI("seek video avcodec_send_packet needReSend %d", tResult);
+                    if (tResult == 0 || tResult == AVERROR(EAGAIN)) {
+                        if (tResult == 0) {
+                            sendDoneSet.push_front(pts);
+                            av_packet_unref(avPacket);
+                            needReSend = 0;
+                        }
+                        goto frame;
+                    } else {
+                        av_packet_unref(avPacket);
+                        goto done;
+                    }
+                } else {
+                    LOGI("seek video re read frame");
+//                    avPacket->data = nullptr;
+//                    avPacket->size = 0;
+//                    int tReuslt = avcodec_send_packet(videoContext, avPacket);
+//                    LOGI("seek video avcodec_send_packet null data %d", tReuslt);
+                    goto start;
+                }
+            } else if (result == AVERROR_EOF) {
+                av_frame_unref(avFrame);
+
+//                avcodec_flush_buffers(videoContext);
+                LOGI("seek video avcodec_receive_frame AVERROR_EOF");
+                goto start;
+            } else if (result == 0) {
+                LOGI("seek video 帧数据 width:%d,height:%d,frameFormat:%s %d,flags:%d,key_frame:%d,pts:%lld",
+                     avFrame->width, avFrame->height,
+                     av_get_pix_fmt_name((AVPixelFormat) avFrame->format), avFrame->format,
+                     avFrame->flags, avFrame->key_frame, avFrame->pts);
+
+                const char *type;
+                AVPictureType pictureType = avFrame->pict_type;
+                switch (pictureType) {
+                    case AV_PICTURE_TYPE_I: {
+                        type = "I帧";
+                        break;
+                    }
+                    case AV_PICTURE_TYPE_P: {
+                        type = "P帧";
+                        break;
+                    }
+                    case AV_PICTURE_TYPE_B: {
+                        type = "B帧";
+                        break;
+                    }
+                    default : {
+                        type = "其他";
+                        break;
+                    }
+                }
+                endTime = std::chrono::steady_clock::now();
+                diffMilli = std::chrono::duration<double, std::milli>(endTime - startTime).count();
+
+                LOGI("seek video 解码耗时:%f毫秒 帧类型:%s-%d", diffMilli, type, pictureType);
+                showFrameToWindow(&avFrame);
+
+                av_frame_unref(avFrame);
+            } else {
+                av_frame_unref(avFrame);
+                LOGE("video avcodec_receive_frame error code:%d", result);
+                if (needReSend) {
+                    goto frame;
+                }
+            }
+        } while (result == 0);
+    }
+    done:
+    LOGI("seek frame result:%d", result);
+}
+extern "C"
+JNIEXPORT void JNICALL
+Java_com_example_nativelib_FFMpegPlay_resume(JNIEnv *env, jobject thiz) {
+    startDecode = true;
+    startLooprtDecode();
+}
+extern "C"
+JNIEXPORT void JNICALL
+Java_com_example_nativelib_FFMpegPlay_pause(JNIEnv *env, jobject thiz) {
+    release();
 }
