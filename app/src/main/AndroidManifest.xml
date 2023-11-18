@@ -47,7 +47,7 @@
         <activity android:name=".test.ParseDataActivity" />
         <activity android:name=".videoplay.VideoPlayActiivty" />
         <activity android:name=".live.LiveActivity" />
-        <activity android:name=".ffmpeg.FFMPEGActivity" />
+        <activity android:name=".ffmpegcompose.FFMPEGComposeActivity" />
 
         <service
             android:name=".MediaService"

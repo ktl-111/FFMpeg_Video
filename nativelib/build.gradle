@@ -16,12 +16,12 @@ android {
         externalNativeBuild {
             cmake {
                 cppFlags ""
-                abiFilters 'armeabi-v7a'
+                abiFilters 'armeabi-v7a', 'arm64-v8a'
 //                arguments "-DANDROID_STL=c++_shared"
             }
         }
         ndk {
-            abiFilters 'armeabi-v7a'
+            abiFilters 'armeabi-v7a', 'arm64-v8a'
         }
     }
 

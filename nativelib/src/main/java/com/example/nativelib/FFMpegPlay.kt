@@ -3,15 +3,41 @@ package com.example.nativelib
 import android.util.Log
 import android.view.Surface
 import android.view.SurfaceView
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 
 class FFMpegPlay(private val surfaceView: SurfaceView) {
-    val TAG = "FFMpegPlay"
+    private val TAG = "FFMpegPlay"
     external fun play(url: String, surface: Surface): Boolean
     external fun cutting(destPath: String)
     external fun release()
     external fun resume()
     external fun pause()
     external fun seekTo(duration: Float)
+    external fun getVideoFrames(
+        width: Int,
+        height: Int,
+        precise: Boolean,
+        callback: VideoFrameCallback
+    )
+
+    private fun allocateFrame(width: Int, height: Int): ByteBuffer {
+        return ByteBuffer.allocateDirect(width * height * 4).order(ByteOrder.LITTLE_ENDIAN)
+    }
+
+    interface VideoFrameCallback {
+        fun onStart(duration: Double): DoubleArray
+        fun onProgress(
+            frame: ByteBuffer,
+            pts: Double,
+            width: Int,
+            height: Int,
+            rotate: Int,
+            index: Int
+        ): Boolean
+
+        fun onEnd()
+    }
 
     init {
         System.loadLibrary("nativelib")

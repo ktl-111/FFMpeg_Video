@@ -1,6 +1,7 @@
 #include <jni.h>
 #include "loghelper.h"
 #include "Queue.h"
+#include "FFVideoReader.h"
 #include <pthread.h>
 #include <unistd.h>
 
@@ -22,6 +23,7 @@ extern "C" {
 #include <SLES/OpenSLES_Android.h>
 #include "libavcodec/jni.h"
 #include "libavcodec/mediacodec.h"
+#include "libavcodec/bsf.h"
 }
 
 _JavaVM *javaVM = nullptr;
@@ -29,6 +31,7 @@ jobject instance = nullptr;
 jmethodID onCallData = nullptr;
 jmethodID onCallCurrTime = nullptr;
 jclass jclazz = nullptr;
+char *path = nullptr;
 //是否开启硬解
 int openHwCoder = 1;
 //解码线程数
@@ -120,12 +123,12 @@ Java_com_example_nativelib_FFMpegPlay_play(JNIEnv *env, jobject thiz, jstring ur
     onCallData = env->GetMethodID(jclazz, "onCallData", "([B)V");
     onCallCurrTime = env->GetMethodID(jclazz, "onCallCurrTime", "(F)V");
 
-    char *url = const_cast<char *>(env->GetStringUTFChars(url_, 0));
+    path = const_cast<char *>(env->GetStringUTFChars(url_, 0));
 
-    LOGI("play url:%s,是否开启硬解:%d", url, openHwCoder);
+    LOGI("play url:%s,是否开启硬解:%d", path, openHwCoder);
     //注册所有组件
-    av_register_all();
-    if (url[0] == 'h') {
+//    av_register_all();
+    if (path[0] == 'h') {
         LOGI("play init network");
         //初始化网络模块
         avformat_network_init();
@@ -134,10 +137,10 @@ Java_com_example_nativelib_FFMpegPlay_play(JNIEnv *env, jobject thiz, jstring ur
     //分配 avFormatContext
     avFormatContext = avformat_alloc_context();
     //打开文件输入流
-    result = avformat_open_input(&avFormatContext, url, nullptr, nullptr);
+    result = avformat_open_input(&avFormatContext, path, nullptr, nullptr);
     if (result < 0) {
         LOGE("avformat_open_input result:%d", result);
-        env->ReleaseStringUTFChars(url_, url);
+        env->ReleaseStringUTFChars(url_, path);
         return false;
     }
 
@@ -146,7 +149,7 @@ Java_com_example_nativelib_FFMpegPlay_play(JNIEnv *env, jobject thiz, jstring ur
 
     if (result < 0) {
         LOGE("avformat_find_stream_info result:%d", result);
-        env->ReleaseStringUTFChars(url_, url);
+        env->ReleaseStringUTFChars(url_, path);
         return false;
     }
     int fps = 0;
@@ -157,7 +160,7 @@ Java_com_example_nativelib_FFMpegPlay_play(JNIEnv *env, jobject thiz, jstring ur
             //视频流
             videoIndex = i;
             //查找对应的编解码器,传入获取到的id
-            AVCodec *avCodec = nullptr;
+            const AVCodec *avCodec = nullptr;
             if (openHwCoder) {
                 avCodec = avcodec_find_decoder_by_name("h264_mediacodec");
                 if (nullptr == avCodec) {
@@ -229,7 +232,7 @@ Java_com_example_nativelib_FFMpegPlay_play(JNIEnv *env, jobject thiz, jstring ur
             //音频流
             audioIndex = i;
             //查找对应的编解码器,传入获取到的id
-            AVCodec *avCodec = avcodec_find_decoder(codecpar->codec_id);
+            const AVCodec *avCodec = avcodec_find_decoder(codecpar->codec_id);
             //分配解码器分配上下文
             audioContext = avcodec_alloc_context3(avCodec);
             //将数据流相关的编解码参数来填充编解码器上下文
@@ -242,7 +245,8 @@ Java_com_example_nativelib_FFMpegPlay_play(JNIEnv *env, jobject thiz, jstring ur
             if (result != 0) {
                 LOGE("audio avcodec_open2 %d", result);
             }
-            LOGI("audio 音频流index:%d,sample_rate:%d,channels:%d,frame_size:%d,codecId:%d,name:%p", i,
+            LOGI("audio 音频流index:%d,sample_rate:%d,channels:%d,frame_size:%d,codecId:%d,name:%p",
+                 i,
                  codecpar->sample_rate,
                  codecpar->channels, codecpar->frame_size, codecpar->codec_id, &avCodec->name);
         } else {
@@ -265,7 +269,7 @@ Java_com_example_nativelib_FFMpegPlay_play(JNIEnv *env, jobject thiz, jstring ur
     initAudio();
     startLooprtDecode();
 
-    env->ReleaseStringUTFChars(url_, url);
+//    env->ReleaseStringUTFChars(url_, path);
     return false;
 }
 
@@ -687,7 +691,7 @@ void showFrameToWindow(AVFrame **pFrame) {
     if (hwFmt) {
         auto startTime = std::chrono::steady_clock::now();
         //直接渲染到surface
-        int result = av_mediacodec_release_buffer((AVMediaCodecBuffer *) (*pFrame)->data[3], 1);
+        int result = av_mediacodec_release_buffer((AVMediaCodecBuffer * )(*pFrame)->data[3], 1);
         auto endTime = std::chrono::steady_clock::now();
         auto diffMilli = std::chrono::duration<double, std::milli>(endTime - startTime).count();
         LOGI("video av_mediacodec_release_buffer 耗时:%f毫秒 result:%d", diffMilli, result);
@@ -1216,4 +1220,81 @@ extern "C"
 JNIEXPORT void JNICALL
 Java_com_example_nativelib_FFMpegPlay_pause(JNIEnv *env, jobject thiz) {
     release();
+}
+extern "C"
+JNIEXPORT void JNICALL
+Java_com_example_nativelib_FFMpegPlay_getVideoFrames(JNIEnv *env, jobject thiz,
+                                                     jint width, jint height, jboolean precise,
+                                                     jobject callback) {
+    jclass jclazz = env->GetObjectClass(thiz);
+
+    //构造帧buffer
+    jmethodID allocateFrame = env->GetMethodID(jclazz, "allocateFrame",
+                                               "(II)Ljava/nio/ByteBuffer;");
+
+    // callback
+    jclazz = env->GetObjectClass(callback);
+
+    jmethodID onStart = env->GetMethodID(jclazz, "onStart", "(D)[D");
+    jmethodID onProgress = env->GetMethodID(jclazz, "onProgress", "(Ljava/nio/ByteBuffer;DIIII)Z");
+    jmethodID onEnd = env->GetMethodID(jclazz, "onEnd", "()V");
+
+    FFVideoReader *videoReader = new FFVideoReader();
+    videoReader->setDiscardType(DISCARD_NONREF);
+    std::string s_path = path;
+    LOGI("getVideoFrames path:%s", path)
+    videoReader->init(s_path);
+
+
+    int videoWidth = videoReader->getMediaInfo().width;
+    int videoHeight = videoReader->getMediaInfo().height;
+    if (width <= 0 && height <= 0) {
+        width = videoWidth;
+        height = videoHeight;
+    } else if (width > 0 && height <= 0) { // scale base width
+        width += width % 2;
+        if (width > videoWidth) {
+            width = videoWidth;
+        }
+        height = (jint) (1.0 * width * videoHeight / videoWidth);
+        height += height % 2;
+    } else if (width <= 0) { // scale base height
+        height += height % 2;
+        if (height > videoHeight) {
+            height = videoHeight;
+        }
+        width = (jint) (1.0 * height * videoWidth / videoHeight);
+    }
+    LOGI("video size: %dx%d, get frame size: %dx%d", videoWidth, videoHeight, width, height)
+
+    //获取pts数组
+    jdoubleArray ptsArrays = (jdoubleArray) env->CallObjectMethod(callback, onStart,
+                                                                  videoReader->getDuration());
+    jdouble *ptsArr = env->GetDoubleArrayElements(ptsArrays, nullptr);
+
+    int ptsSize = env->GetArrayLength(ptsArrays);
+    int rotate = videoReader->getRotate();
+    LOGI("timestamps size: %d rotate:%d", ptsSize, rotate);
+
+    for (int i = 0; i < ptsSize; ++i) {
+        jobject frameBuffer = env->CallObjectMethod(thiz, allocateFrame, width, height);
+        uint8_t *buffer = (uint8_t *) env->GetDirectBufferAddress(frameBuffer);
+        //设置buffer地址
+        memset(buffer, 0, width * height * 4);
+        int64_t pts = ptsArr[i];
+        videoReader->getFrame(pts, width, height, buffer, precise);
+        jboolean abort = env->CallBooleanMethod(callback, onProgress, frameBuffer, ptsArr[i], width,
+                                                height, rotate, i);
+        if (abort) {
+            LOGE("onProgress abort");
+            break;
+        }
+
+    }
+    videoReader->release();
+    delete videoReader;
+    env->CallVoidMethod(callback, onEnd);
+    if (ptsArr != nullptr) {
+        env->ReleaseDoubleArrayElements(ptsArrays, ptsArr, 0);
+    }
 }
