@@ -134,7 +134,7 @@ Java_com_example_nativelib_FFMpegPlay_play(JNIEnv *env, jobject thiz, jstring ur
         avformat_network_init();
     }
     int result;
-    //分配 avFormatContext
+    //分配 mAvFormatContext
     avFormatContext = avformat_alloc_context();
     //打开文件输入流
     result = avformat_open_input(&avFormatContext, path, nullptr, nullptr);
@@ -1026,7 +1026,7 @@ Java_com_example_nativelib_FFMpegPlay_seekTo(JNIEnv *env, jobject thiz, jfloat _
 
     //stream_index为-1,timestamp为时间(us)
     //stream_index为视频index,timestamp为pts
-//    result = av_seek_frame(avFormatContext, videoIndex, startPts,
+//    result = av_seek_frame(mAvFormatContext, videoIndex, startPts,
 //                            AVSEEK_FLAG_ANY
 //    );
 

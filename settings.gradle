@@ -27,3 +27,4 @@ dependencyResolutionManagement {
 rootProject.name = "VideoLearn"
 include ':app'
 include ':nativelib'
+include ':play'

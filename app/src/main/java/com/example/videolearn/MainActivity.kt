@@ -12,7 +12,7 @@ import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import com.example.videolearn.ffmpegcompose.FFMPEGComposeActivity
+import com.example.videolearn.ffmpegcompose.FFMpegComposeActivity
 import com.example.videolearn.live.LiveActivity
 import com.example.videolearn.shotscreen.ShotScreenActivity
 import com.example.videolearn.test.ParseDataActivity
@@ -72,7 +72,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun ffmpeg() {
-        startActivity(Intent(this, FFMPEGComposeActivity::class.java))
+        startActivity(Intent(this, FFMpegComposeActivity::class.java))
     }
 
     fun test() {

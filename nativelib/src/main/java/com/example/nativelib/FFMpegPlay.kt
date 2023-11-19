@@ -7,7 +7,8 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
 class FFMpegPlay(private val surfaceView: SurfaceView) {
-    private val TAG = "FFMpegPlay"
+    private val TAG = "FFMpegPlayer"
+
     external fun play(url: String, surface: Surface): Boolean
     external fun cutting(destPath: String)
     external fun release()
