@@ -280,6 +280,7 @@ void FFMpegPlayer::AudioDecodeLoop() {
     mAudioDecoder->setOnFrameArrived([this, env](AVFrame *frame) {
         if (!mHasAbort && mAudioDecoder) {
             mAudioDecoder->avSync(frame);
+            mAudioDecoder->playAudio(frame);
             if (mPlayerJni.isValid()) {
                 double timestamp = mAudioDecoder->getTimestamp();
                 env->CallVoidMethod(mPlayerJni.instance, mPlayerJni.onPlayProgress, timestamp);

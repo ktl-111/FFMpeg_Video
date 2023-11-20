@@ -77,7 +77,6 @@ dependencies {
     implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-core:1.5.2'
     implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.5.2'
 
-
     implementation "org.java-websocket:Java-WebSocket:1.4.0"
 
     implementation 'androidx.activity:activity-compose:1.3.1'
@@ -98,4 +97,6 @@ dependencies {
     implementation "androidx.camera:camera-lifecycle:$cameraVersion"
 // CameraX View class[可选]最佳实践，最好用里面的PreviewView，它会自行判断用SurfaceView还是TextureView来实现
     implementation "androidx.camera:camera-view:$cameraVersion"
+
+    implementation 'io.github.lucksiege:pictureselector:v3.11.1'
 }

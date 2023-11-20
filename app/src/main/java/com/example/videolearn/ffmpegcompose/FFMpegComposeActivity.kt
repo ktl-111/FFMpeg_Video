@@ -1,8 +1,12 @@
 package com.example.videolearn.ffmpegcompose
 
+import android.Manifest
+import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.Matrix
+import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.os.Environment
 import android.provider.MediaStore
@@ -68,8 +72,11 @@ import com.example.videolearn.MediaScope
 import com.example.videolearn.R
 import com.example.videolearn.ffmpegcompose.bean.VideoBean
 import com.example.videolearn.utils.DisplayUtil
-import com.example.videolearn.utils.FileUtils
 import com.example.videolearn.utils.ResultUtils
+import com.luck.picture.lib.basic.PictureSelector
+import com.luck.picture.lib.config.SelectMimeType
+import com.luck.picture.lib.entity.LocalMedia
+import com.luck.picture.lib.interfaces.OnResultCallbackListener
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.delay
@@ -389,22 +396,46 @@ class FFMpegComposeActivity : AppCompatActivity() {
     }
 
     private fun select() {
-        val intent = Intent(Intent.ACTION_PICK, MediaStore.Video.Media.EXTERNAL_CONTENT_URI)
-        ResultUtils.getInstance(this)
-            .request(
-                intent, 100
-            ) { requestCode, resultCode, data ->
-                if (requestCode == 100 && resultCode == RESULT_OK) {
-                    val uri = data.data!!
-
-                    val cursor = contentResolver.query(uri, null, null, null, null)!!
-                    cursor.moveToFirst()
-
-                    val columnIndex = cursor.getColumnIndex("_data")
-                    path = cursor.getString(columnIndex)
-                    Log.i(TAG, "onActivityResult: path:${path}")
-                }
+        val permission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            Manifest.permission.READ_MEDIA_VIDEO
+        } else {
+            Manifest.permission.READ_EXTERNAL_STORAGE
+        }
+        ResultUtils.getInstance(this).singlePermissions(
+            permission
+        ) { result ->
+            Log.i(TAG, "select: $result")
+            if (!result) {
+                return@singlePermissions
             }
+            PictureSelector.create(this)
+                .openSystemGallery(SelectMimeType.ofVideo())
+                .forSystemResult(object : OnResultCallbackListener<LocalMedia> {
+                    override fun onResult(result: ArrayList<LocalMedia>) {
+                        path = result.get(0).availablePath
+                        Log.i(TAG, "onResult: ${path}")
+                    }
+
+                    override fun onCancel() {
+
+                    }
+                })
+        }
+    }
+
+    fun getRealPathFromURI(context: Context, uri: Uri): String? {
+        var filePath: String? = ""
+        if (uri.scheme == "content") {
+            val cursor = context.contentResolver.query(uri, null, null, null, null)
+            if (cursor != null && cursor.moveToFirst()) {
+                val index = cursor.getColumnIndexOrThrow(MediaStore.Images.Media.DATA)
+                filePath = cursor.getString(index)
+                cursor.close()
+            }
+        } else if (uri.scheme == "file") {
+            filePath = uri.path
+        }
+        return filePath
     }
 
     private fun cutting() {

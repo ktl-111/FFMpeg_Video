@@ -40,14 +40,14 @@ public:
 
     int mDataSize = 0;
     uint8_t *mAudioBuffer = nullptr;
+
+    void playAudio(AVFrame *frame);
 private:
-    uint8_t *audioOutBuffer;
     int64_t mStartTimeMsForSync = -1;
     SLAndroidSimpleBufferQueueItf pcmBufferQueue;
     const AVCodec *mAudioCodec = nullptr;
 
     SwrContext *mSwrContext = nullptr;
-
     void updateTimestamp(AVFrame *frame);
     int resample(AVFrame *frame);
 };
