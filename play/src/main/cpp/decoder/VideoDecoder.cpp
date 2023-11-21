@@ -394,7 +394,7 @@ int VideoDecoder::seek(double pos) {
     int64_t seekPos = av_rescale_q((int64_t) (pos * AV_TIME_BASE), AV_TIME_BASE_Q, mTimeBase);
     int ret = avformat_seek_file(mFtx, getStreamIndex(),
                                  INT64_MIN, seekPos, INT64_MAX,
-                                 AVSEEK_FLAG_BACKWARD | AVSEEK_FLAG_FRAME);
+                                 AVSEEK_FLAG_ANY);
     LOGE("[video] seek to: %f, seekPos: %" PRId64 ", ret: %d", pos, seekPos, ret)
     // seek后需要恢复起始时间
     mFixStartTime = true;

@@ -52,4 +52,10 @@ class PlayManager : IPaly {
         }
     }
 
+    override fun seekTo(seek: Double) {
+        if (this::mProxy.isInitialized) {
+            mProxy.seekTo(seek)
+        }
+    }
+
 }

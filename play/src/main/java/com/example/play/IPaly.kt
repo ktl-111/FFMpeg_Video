@@ -10,4 +10,5 @@ interface IPaly {
     fun resume()
     fun pause()
     fun release()
+    fun seekTo(seek: Double)
 }

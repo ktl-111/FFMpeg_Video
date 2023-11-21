@@ -19,7 +19,14 @@ object FFMpegUtils {
         /**
          * 每抽帧一次回调一次
          */
-        fun onProgress(frame: ByteBuffer, timestamps: Double, width: Int, height: Int, rotate: Int, index: Int): Boolean
+        fun onProgress(
+            frame: ByteBuffer,
+            timestamps: Double,
+            width: Int,
+            height: Int,
+            rotate: Int,
+            index: Int
+        ): Boolean
 
         /**
          * 抽帧动作结束
@@ -27,21 +34,23 @@ object FFMpegUtils {
         fun onEnd()
     }
 
-    fun getVideoFrames(path: String,
-                       width: Int,
-                       height: Int,
-                       precise: Boolean,
-                       cb: VideoFrameArrivedInterface
+    fun getVideoFrames(
+        path: String?,
+        width: Int,
+        height: Int,
+        precise: Boolean,
+        cb: VideoFrameArrivedInterface
     ) {
-        if (path == "") return
+        if (path.isNullOrEmpty()) return
         getVideoFramesCore(path, width, height, precise, cb)
     }
 
-    private external fun getVideoFramesCore(path: String,
-                                            width: Int,
-                                            height: Int,
-                                            precise: Boolean,
-                                            cb: VideoFrameArrivedInterface
+    private external fun getVideoFramesCore(
+        path: String,
+        width: Int,
+        height: Int,
+        precise: Boolean,
+        cb: VideoFrameArrivedInterface
     )
 
     private fun allocateFrame(width: Int, height: Int): ByteBuffer {

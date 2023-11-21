@@ -1,15 +1,11 @@
 package com.example.videolearn.ffmpegcompose
 
 import android.Manifest
-import android.content.Context
-import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.Matrix
-import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Environment
-import android.provider.MediaStore
 import android.util.Log
 import android.view.Surface
 import android.view.SurfaceHolder
@@ -64,7 +60,6 @@ import androidx.constraintlayout.compose.ChainStyle
 import androidx.constraintlayout.compose.ConstraintLayout
 import androidx.constraintlayout.compose.Dimension
 import androidx.core.graphics.drawable.toBitmap
-import com.example.nativelib.FFMpegPlay
 import com.example.play.IPalyListener
 import com.example.play.PlayManager
 import com.example.play.utils.FFMpegUtils
@@ -91,8 +86,7 @@ class FFMpegComposeActivity : AppCompatActivity() {
     val TAG = "FFMPEGActivity"
     private lateinit var surface: Surface
     private lateinit var surfaceView: SurfaceView
-    private var ffMpegPlay: FFMpegPlay? = null
-    private var ffmpegManager: PlayManager? = null
+    private var playManager: PlayManager? = null
     private var path: String? = null
     private val videoList = mutableStateListOf<VideoBean>()
     private var mVideoDuration = 0L
@@ -111,13 +105,20 @@ class FFMpegComposeActivity : AppCompatActivity() {
 //        it.add(BtnBean("testSeek") {
 //            testSeek()
 //        })
+        it.add(BtnBean("start") {
+            start()
+        })
+        it.add(BtnBean("stop") {
+            stop()
+        })
+        it.add(BtnBean("resume") {
+            resume()
+        })
         it.add(BtnBean("pause") {
             pause()
         })
-        it.add(BtnBean("play") {
-            play()
-        })
     }
+
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -151,7 +152,7 @@ class FFMpegComposeActivity : AppCompatActivity() {
         }
     }
 
-    private fun play() {
+    private fun start() {
         val path = path!!
         if (!path.startsWith("http")) {
             if (!File(path).exists()) {
@@ -159,111 +160,9 @@ class FFMpegComposeActivity : AppCompatActivity() {
                 return
             }
         }
-        val newSingleThreadExecutor = Executors.newSingleThreadExecutor()
-//        ffMpegPlay ?: let {
-//            FFMpegPlay(surfaceView).apply {
-//                ffMpegPlay = this
-//                val fileName = "ffmpeg"
-//                FileUtils.deleteBytesFile(fileName)
-//                FileUtils.deleteContentFile(fileName)
-////                dataCallback = {
-////                    newSingleThreadExecutor.submit {
-////                        kotlin.runCatching {
-////                            FileUtils.writeBytes(it, fileName)
-////                            FileUtils.writeContent(it, fileName)
-////                        }.onFailure {
-////                            it.printStackTrace()
-////                        }
-////                    }
-////                }
-//                configCallback = { duration, fps ->
-//                    mVideoDuration = duration
-//                    MediaScope.launch(Dispatchers.IO) {
-//                        getVideoFrames(
-//                            DisplayUtil.dp2px(this@FFMpegComposeActivity, itemSize.toFloat()),
-//                            0,
-//                            true,
-//                            object :
-//                                FFMpegPlay.VideoFrameCallback {
-//                                override fun onStart(duration: Double): DoubleArray {
-//                                    val size = duration.toInt()
-//                                    Log.i(TAG, "onStart duration:${duration}")
-//                                    val ptsArrays = DoubleArray(size)
-//                                    for (i in 0 until size) {
-//                                        ptsArrays[i] = i.toDouble()
-//                                    }
-//                                    return ptsArrays
-//                                }
-//
-//                                override fun onProgress(
-//                                    frame: ByteBuffer,
-//                                    pts: Double,
-//                                    width: Int,
-//                                    height: Int,
-//                                    rotate: Int,
-//                                    index: Int
-//                                ): Boolean {
-//                                    MediaScope.launch {
-//                                        val videoBean = videoList[index]
-//                                        Log.i(
-//                                            TAG,
-//                                            "onProgress pts:${pts} index:${index} rotate:${rotate} videoBean:${videoBean} ${width}*${height}"
-//                                        )
-//                                        val bitMap = frame.let {
-//                                            val bitmap =
-//                                                Bitmap.createBitmap(
-//                                                    width,
-//                                                    height,
-//                                                    Bitmap.Config.ARGB_8888
-//                                                )
-//                                            bitmap!!.copyPixelsFromBuffer(it)
-//                                            if (rotate != 0) {
-//                                                val matrix = Matrix()
-//                                                matrix.postRotate(rotate.toFloat())
-//                                                Bitmap.createBitmap(
-//                                                    bitmap,
-//                                                    0,
-//                                                    0,
-//                                                    bitmap.width,
-//                                                    bitmap.height,
-//                                                    matrix,
-//                                                    true
-//                                                )
-//                                            } else {
-//                                                bitmap
-//                                            }
-//                                        }
-//                                        videoBean.also {
-//                                            it.bitmap.value = bitMap
-//                                        }
-//                                    }
-//                                    return false
-//                                }
-//
-//                                override fun onEnd() {
-//                                    Log.i(TAG, "onEnd: ")
-//                                }
-//                            })
-//                    }
-//                    MediaScope.launch(Dispatchers.Main) {
-//                        mFps.value = fps
-//                        val list = mutableListOf<VideoBean>().apply {
-//                            for (time in 0..duration) {
-//                                add(VideoBean(time))
-//                            }
-//                        }
-//                        videoList.addAll(list)
-//                    }
-//                }
-//                playTimeCallback = { time ->
-//                    updateUi(time)
-//                }
-//
-//            }
-//        }.play(path, surface = surface)
-
-        ffmpegManager ?: let {
+        playManager ?: let {
             PlayManager().apply {
+                playManager = this
                 init(object : IPalyListener {
                     override fun onVideoConfig(witdh: Int, height: Int, duration: Long, fps: Int) {
                         val ratio = witdh.toFloat() / height
@@ -286,81 +185,10 @@ class FFMpegComposeActivity : AppCompatActivity() {
                                 it.height = videoHeight
                             }
                             surfaceView.requestLayout()
-                        }
-                        MediaScope.launch(Dispatchers.IO) {
-                            FFMpegUtils.getVideoFrames(path,
-                                DisplayUtil.dp2px(this@FFMpegComposeActivity, itemSize.toFloat()),
-                                0,
-                                true,
-                                object :
-                                    FFMpegUtils.VideoFrameArrivedInterface {
-                                    override fun onStart(duration: Double): DoubleArray {
-                                        val size = duration.toInt()
-                                        Log.i(TAG, "onStart duration:${duration}")
-                                        val ptsArrays = DoubleArray(size)
-                                        for (i in 0 until size) {
-                                            ptsArrays[i] = i.toDouble()
-                                        }
-                                        mFps.value = fps
-                                        val list = mutableListOf<VideoBean>().apply {
-                                            for (time in 0..duration.toLong()) {
-                                                add(VideoBean(time))
-                                            }
-                                        }
-                                        videoList.addAll(list)
-                                        return ptsArrays
-                                    }
 
-                                    override fun onProgress(
-                                        frame: ByteBuffer,
-                                        pts: Double,
-                                        width: Int,
-                                        height: Int,
-                                        rotate: Int,
-                                        index: Int
-                                    ): Boolean {
-                                        MediaScope.launch {
-                                            val videoBean = videoList[index]
-                                            Log.i(
-                                                TAG,
-                                                "onProgress pts:${pts} index:${index} rotate:${rotate} videoBean:${videoBean} ${width}*${height}"
-                                            )
-                                            val bitMap = frame.let {
-                                                val bitmap =
-                                                    Bitmap.createBitmap(
-                                                        width,
-                                                        height,
-                                                        Bitmap.Config.ARGB_8888
-                                                    )
-                                                bitmap!!.copyPixelsFromBuffer(it)
-                                                if (rotate != 0) {
-                                                    val matrix = Matrix()
-                                                    matrix.postRotate(rotate.toFloat())
-                                                    Bitmap.createBitmap(
-                                                        bitmap,
-                                                        0,
-                                                        0,
-                                                        bitmap.width,
-                                                        bitmap.height,
-                                                        matrix,
-                                                        true
-                                                    )
-                                                } else {
-                                                    bitmap
-                                                }
-                                            }
-                                            videoBean.also {
-                                                it.bitmap.value = bitMap
-                                            }
-                                        }
-                                        return false
-                                    }
-
-                                    override fun onEnd() {
-                                        Log.i(TAG, "onEnd: ")
-                                    }
-                                })
+                            mFps.value = fps
                         }
+                        initGetVideoFrames()
                     }
 
                     override fun onPalyProgress(time: Double) {
@@ -376,23 +204,26 @@ class FFMpegComposeActivity : AppCompatActivity() {
         }.start()
     }
 
+    private fun stop() {
+        Log.i(TAG, "stop: ")
+        playManager?.stop()
+    }
+
+    private fun resume() {
+        Log.i(TAG, "resume: ")
+        playManager?.resume()
+    }
+
+    private fun pause() {
+        Log.i(TAG, "pause: ")
+        playManager?.pause()
+    }
+
     private fun updateUi(time: Float) {
         MediaScope.launch(Dispatchers.Main) {
             mCurrPlayTime.value = time
             Log.i(TAG, "updateUi: ${time}")
         }
-    }
-
-    private fun resume() {
-        Log.i(TAG, "resume: ")
-        MediaScope.launch {
-            ffMpegPlay?.resume()
-        }
-    }
-
-    private fun pause() {
-        Log.i(TAG, "pause: ")
-        ffMpegPlay?.pause()
     }
 
     private fun select() {
@@ -423,19 +254,32 @@ class FFMpegComposeActivity : AppCompatActivity() {
         }
     }
 
-    fun getRealPathFromURI(context: Context, uri: Uri): String? {
-        var filePath: String? = ""
-        if (uri.scheme == "content") {
-            val cursor = context.contentResolver.query(uri, null, null, null, null)
-            if (cursor != null && cursor.moveToFirst()) {
-                val index = cursor.getColumnIndexOrThrow(MediaStore.Images.Media.DATA)
-                filePath = cursor.getString(index)
-                cursor.close()
-            }
-        } else if (uri.scheme == "file") {
-            filePath = uri.path
+    private fun seek(index: Int, offset: Int, itemWidthPx: Float) {
+        if (!isSeek.value) {
+            return
         }
-        return filePath
+        MediaScope.launch(singleCoroutine) {
+            val scale = offset / itemWidthPx
+            val seek = 1f * scale + index
+            if (seek == preTime) {
+                Log.i(TAG, "itemChange seek == preTime")
+                return@launch
+            }
+            mCurrPlayTime.value = seek
+            if (seek != 0f) {
+                val diffSeek = abs(seek - preTime)
+                val minSeek = 1f / mFps.value
+                if (diffSeek < minSeek) {
+                    Log.i(TAG, "itemChange filter diffSeek:$diffSeek minSeek:${minSeek}")
+                    return@launch
+                }
+            }
+            preTime = seek
+            Log.i(TAG, "itemChange seek:$seek index:$index offset:$offset")
+            playManager?.apply {
+                seekTo(seek.toDouble())
+            }
+        }
     }
 
     private fun cutting() {
@@ -459,32 +303,6 @@ class FFMpegComposeActivity : AppCompatActivity() {
     val singleCoroutine = Executors.newSingleThreadExecutor().asCoroutineDispatcher()
     var preTime = 0f
 
-    private fun seek(index: Int, offset: Int, itemWidthPx: Float) {
-        if (!isSeek.value) {
-            return
-        }
-        MediaScope.launch(singleCoroutine) {
-            val scale = offset / itemWidthPx
-            val seek = 1f * scale + index
-            if (seek == preTime) {
-                Log.i(TAG, "itemChange seek == preTime")
-                return@launch
-            }
-            mCurrPlayTime.value = seek
-            if (seek != 0f) {
-                val diffSeek = abs(seek - preTime)
-                val minSeek = 1f / mFps.value
-                if (diffSeek < minSeek) {
-                    Log.i(TAG, "itemChange filter diffSeek:$diffSeek minSeek:${minSeek}")
-                    return@launch
-                }
-            }
-            preTime = seek
-            Log.i(TAG, "itemChange seek:$seek index:$index offset:$offset")
-//            ffMpegPlay?.seekTo(seek)
-        }
-    }
-
     private fun testSeek() {
         MediaScope.launch {
             var seek = 0f
@@ -500,7 +318,83 @@ class FFMpegComposeActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
-        ffMpegPlay?.release()
+        playManager?.release()
+    }
+
+    private fun initGetVideoFrames() {
+        MediaScope.launch(Dispatchers.IO) {
+            FFMpegUtils.getVideoFrames(path,
+                DisplayUtil.dp2px(this@FFMpegComposeActivity, itemSize.toFloat()),
+                0,
+                true,
+                object :
+                    FFMpegUtils.VideoFrameArrivedInterface {
+                    override fun onStart(duration: Double): DoubleArray {
+                        val size = duration.toInt()
+                        Log.i(TAG, "onStart duration:${duration}")
+                        val ptsArrays = DoubleArray(size)
+                        for (i in 0 until size) {
+                            ptsArrays[i] = i.toDouble()
+                        }
+                        val list = mutableListOf<VideoBean>().apply {
+                            for (time in 0..duration.toLong()) {
+                                add(VideoBean(time))
+                            }
+                        }
+                        videoList.addAll(list)
+                        return ptsArrays
+                    }
+
+                    override fun onProgress(
+                        frame: ByteBuffer,
+                        pts: Double,
+                        width: Int,
+                        height: Int,
+                        rotate: Int,
+                        index: Int
+                    ): Boolean {
+                        MediaScope.launch {
+                            val videoBean = videoList[index]
+                            Log.i(
+                                TAG,
+                                "onProgress pts:${pts} index:${index} rotate:${rotate} videoBean:${videoBean} ${width}*${height}"
+                            )
+                            val bitMap = frame.let {
+                                val bitmap =
+                                    Bitmap.createBitmap(
+                                        width,
+                                        height,
+                                        Bitmap.Config.ARGB_8888
+                                    )
+                                bitmap!!.copyPixelsFromBuffer(it)
+                                if (rotate != 0) {
+                                    val matrix = Matrix()
+                                    matrix.postRotate(rotate.toFloat())
+                                    Bitmap.createBitmap(
+                                        bitmap,
+                                        0,
+                                        0,
+                                        bitmap.width,
+                                        bitmap.height,
+                                        matrix,
+                                        true
+                                    )
+                                } else {
+                                    bitmap
+                                }
+                            }
+                            videoBean.also {
+                                it.bitmap.value = bitMap
+                            }
+                        }
+                        return false
+                    }
+
+                    override fun onEnd() {
+                        Log.i(TAG, "onEnd: ")
+                    }
+                })
+        }
     }
 
     @Preview
@@ -602,7 +496,7 @@ class FFMpegComposeActivity : AppCompatActivity() {
                                         resume()
                                     } else if (event.type == PointerEventType.Press) {
                                         isSeek.value = true
-                                        pause()
+//                                        pause()
                                     }
                                 }
                             }

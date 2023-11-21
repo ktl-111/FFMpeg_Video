@@ -80,13 +80,16 @@ JNIEXPORT void JNICALL
 Java_com_example_play_proxy_FFMpegProxy_nativeRelease(JNIEnv *env, jobject thiz,
                                                       jlong native_manager) {
     FFMpegPlayer *pPlayer = reinterpret_cast<FFMpegPlayer *>(native_manager);
-    if (pPlayer != nullptr) {
-        pPlayer->release();
-    }
     delete pPlayer;
 }
 extern "C"
-JNIEXPORT jlong JNICALL
-Java_com_example_play_proxy_FFMpegProxy_nativeTest(JNIEnv *env, jobject thiz) {
-    return 479815690048;
+JNIEXPORT jboolean JNICALL
+Java_com_example_play_proxy_FFMpegProxy_nativeSeekTo(JNIEnv *env, jobject thiz,
+                                                     jlong native_manager,
+                                                     jdouble seekTime) {
+    FFMpegPlayer *pPlayer = reinterpret_cast<FFMpegPlayer *>(native_manager);
+    if (pPlayer != nullptr) {
+        return pPlayer->seekTo(seekTime);
+    }
+    return false;
 }

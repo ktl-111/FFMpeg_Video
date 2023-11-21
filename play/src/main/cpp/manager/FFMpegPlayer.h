@@ -53,6 +53,7 @@ enum PlayerState {
     START,
     PLAYING,
     PAUSE,
+    SEEK,
     STOP
 };
 
@@ -74,7 +75,7 @@ public:
 
     void stop();
 
-    void release();
+    bool seekTo(double seekTime);
 
 private:
     bool mHasAbort = false;
