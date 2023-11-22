@@ -390,7 +390,7 @@ void VideoDecoder::avSync(AVFrame *frame) {
 }
 
 int VideoDecoder::seek(double pos) {
-    flush();
+//    flush();
     int64_t seekPos = av_rescale_q((int64_t) (pos * AV_TIME_BASE), AV_TIME_BASE_Q, mTimeBase);
     int ret = avformat_seek_file(mFtx, getStreamIndex(),
                                  INT64_MIN, seekPos, INT64_MAX,

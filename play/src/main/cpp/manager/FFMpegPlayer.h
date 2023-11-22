@@ -56,6 +56,11 @@ enum PlayerState {
     SEEK,
     STOP
 };
+enum ReadPackType {
+    ANY,
+    VIDEO,
+    AUDIO
+};
 
 class FFMpegPlayer {
 public:
@@ -109,7 +114,7 @@ private:
 
     void AudioDecodeLoop();
 
-    int readAvPacketToQueue();
+    int readAvPacketToQueue(ReadPackType type);
 
     bool pushPacketToQueue(AVPacket *packet, const std::shared_ptr<AVPacketQueue> &queue) const;
 

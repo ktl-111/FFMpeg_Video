@@ -318,7 +318,10 @@ class FFMpegComposeActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
-        playManager?.release()
+        playManager?.also {
+            it.stop()
+            it.release()
+        }
     }
 
     private fun initGetVideoFrames() {
