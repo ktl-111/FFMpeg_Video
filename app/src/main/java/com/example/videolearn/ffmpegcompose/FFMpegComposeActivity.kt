@@ -285,17 +285,22 @@ class FFMpegComposeActivity : AppCompatActivity() {
     private fun cutting() {
         path?.also {
             if (it.isNotEmpty() && !it.startsWith("http")) {
-                MediaScope.launch {
-                    val outFile = File(application.externalCacheDir, "testout.mp4")
-                    if (!outFile.exists()) {
-                        outFile.createNewFile()
-                    } else {
-                        outFile.delete()
+                ResultUtils.getInstance(this)
+                    .singlePermissions(Manifest.permission.WRITE_EXTERNAL_STORAGE) { reuslt ->
+                        Log.i(TAG, "cutting: $reuslt")
+                        if (!reuslt) {
+                            return@singlePermissions
+                        }
+                        val outFile = File(Environment.getExternalStorageDirectory(), "testout.mp4")
+                        if (!outFile.exists()) {
+                            outFile.createNewFile()
+                        } else {
+                            outFile.delete()
+                        }
+                        Log.i(TAG, "cutting file:${outFile.absolutePath}")
+                        val destPath = outFile.absolutePath
+                        FFMpegUtils.cutting(path!!, destPath)
                     }
-                    Log.i(TAG, "cutting file:${outFile.absolutePath}")
-                    val destPath = outFile.absolutePath
-//                    ffMpegPlay?.cutting(destPath)
-                }
             }
         }
     }

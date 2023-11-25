@@ -20,12 +20,7 @@ object FFMpegUtils {
          * 每抽帧一次回调一次
          */
         fun onProgress(
-            frame: ByteBuffer,
-            timestamps: Double,
-            width: Int,
-            height: Int,
-            rotate: Int,
-            index: Int
+            frame: ByteBuffer, timestamps: Double, width: Int, height: Int, rotate: Int, index: Int
         ): Boolean
 
         /**
@@ -35,23 +30,21 @@ object FFMpegUtils {
     }
 
     fun getVideoFrames(
-        path: String?,
-        width: Int,
-        height: Int,
-        precise: Boolean,
-        cb: VideoFrameArrivedInterface
+        path: String?, width: Int, height: Int, precise: Boolean, cb: VideoFrameArrivedInterface
     ) {
         if (path.isNullOrEmpty()) return
         getVideoFramesCore(path, width, height, precise, cb)
     }
 
     private external fun getVideoFramesCore(
-        path: String,
-        width: Int,
-        height: Int,
-        precise: Boolean,
-        cb: VideoFrameArrivedInterface
+        path: String, width: Int, height: Int, precise: Boolean, cb: VideoFrameArrivedInterface
     )
+
+    fun cutting(srcPath: String, destPath: String): Boolean {
+        return nativeCutting(srcPath, destPath)
+    }
+
+    private external fun nativeCutting(srcPath: String, destPath: String): Boolean
 
     private fun allocateFrame(width: Int, height: Int): ByteBuffer {
         return ByteBuffer.allocateDirect(width * height * 4).order(ByteOrder.LITTLE_ENDIAN)
