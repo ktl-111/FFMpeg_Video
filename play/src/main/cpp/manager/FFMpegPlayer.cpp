@@ -21,7 +21,7 @@ void FFMpegPlayer::init(JNIEnv *env, jobject thiz) {
     LOGI("FFMpegPlayer init")
     mPlayerJni.reset();
     mPlayerJni.instance = env->NewGlobalRef(thiz);
-    mPlayerJni.onVideoConfig = env->GetMethodID(jclazz, "onNativeVideoConfig", "(IIJI)V");
+    mPlayerJni.onVideoConfig = env->GetMethodID(jclazz, "onNativeVideoConfig", "(IIDD)V");
     mPlayerJni.onPlayProgress = env->GetMethodID(jclazz, "onNativePalyProgress", "(D)V");
     mPlayerJni.onPlayCompleted = env->GetMethodID(jclazz, "onNativePalyComplete", "()V");
 }

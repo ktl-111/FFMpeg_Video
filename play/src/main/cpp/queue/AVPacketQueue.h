@@ -5,7 +5,7 @@
 #include <pthread.h>
 
 extern "C" {
-#include "../include/libavcodec/packet.h"
+#include "libavcodec/avcodec.h"
 #include "../include/libavutil/avutil.h"
 }
 

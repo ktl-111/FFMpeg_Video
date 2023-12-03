@@ -1,6 +1,10 @@
 #include <jni.h>
 #include "FFMpegPlayer.h"
 
+void my_logoutput(void *ptr, int level, const char *fmt, va_list vl) {
+    LOGI("%s", fmt)
+}
+
 extern "C"
 JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *vm, void *reserved) {
     jint result = -1;
@@ -9,7 +13,8 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *vm, void *reserved) {
         return result;
     }
     LOGI("JNI_OnLoad");
-
+    av_log_set_level(AV_LOG_TRACE);
+    av_log_set_callback(my_logoutput);
     return JNI_VERSION_1_4;
 }
 

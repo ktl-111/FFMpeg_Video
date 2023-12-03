@@ -136,7 +136,6 @@ bool VideoDecoder::prepare(JNIEnv *env) {
         ANativeWindow_setBuffersGeometry(nativeWindow, getWidth(), getHeight(),
                                          WINDOW_FORMAT_RGBA_8888);
     }
-
     // open codec
     int ret = avcodec_open2(mCodecContext, mVideoCodec, nullptr);
     if (ret != 0) {
@@ -150,7 +149,7 @@ bool VideoDecoder::prepare(JNIEnv *env) {
     mAvFrame = av_frame_alloc();
     mStartTimeMsForSync = -1;
     mRetryReceiveCount = RETRY_RECEIVE_COUNT;
-    LOGI("codec name: %s", mVideoCodec->name)
+    LOGI("codec name: %s,mFps: %f", mVideoCodec->name, mFps)
 
     return true;
 }
@@ -371,7 +370,7 @@ int VideoDecoder::getHeight() const {
     return mHeight;
 }
 
-int VideoDecoder::getFps() const {
+double VideoDecoder::getFps() const {
     return mFps;
 }
 

@@ -58,7 +58,7 @@ class FFMpegProxy : IPaly {
     private external fun nativePause(nativeManager: Long)
     private external fun nativeRelease(nativeManager: Long)
     private external fun nativeSeekTo(nativeManager: Long, seek: Double):Boolean
-    private fun onNativeVideoConfig(width: Int, height: Int, duration: Long, fps: Int) {
+    private fun onNativeVideoConfig(width: Int, height: Int, duration: Double, fps: Double) {
         Log.i(
             TAG,
             "onNativeVideoConfig: ${width}*${height} duration:${duration} fps:${fps} palyListener:${palyListener}"

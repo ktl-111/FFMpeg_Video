@@ -1,7 +1,7 @@
 package com.example.videolearn.live
 
 import android.util.Log
-import com.example.nativelib.NativeLib
+//import com.example.nativelib.NativeLib
 import com.example.videolearn.MediaScope
 import kotlinx.coroutines.launch
 import java.util.concurrent.LinkedBlockingQueue
@@ -18,8 +18,8 @@ object ConsumerLive {
 
     fun connectService() {
         MediaScope.launch {
-            val result = NativeLib.connectBiliService(URL)
-            Log.i(TAG, "connectService: $result")
+//            val result = NativeLib.connectBiliService(URL)
+//            Log.i(TAG, "connectService: $result")
         }
     }
 
@@ -33,12 +33,12 @@ object ConsumerLive {
                 val rtmpPackage = queue.take()
                 if (rtmpPackage.buffer.isNotEmpty()) {
                     Log.i(TAG, "推流 type:${rtmpPackage.type} size:${rtmpPackage.buffer.size}")
-                    NativeLib.sendData(
-                        rtmpPackage.buffer,
-                        rtmpPackage.buffer.size,
-                        rtmpPackage.times,
-                        rtmpPackage.type
-                    )
+//                    NativeLib.sendData(
+//                        rtmpPackage.buffer,
+//                        rtmpPackage.buffer.size,
+//                        rtmpPackage.times,
+//                        rtmpPackage.type
+//                    )
                 }
 
             }

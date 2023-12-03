@@ -1,7 +1,7 @@
 package com.example.play
 
 interface IPalyListener {
-    fun onVideoConfig(witdh: Int, height: Int, duration: Long, fps: Int)
+    fun onVideoConfig(witdh: Int, height: Int, duration: Double, fps: Double)
 
     /**
      * On paly progress

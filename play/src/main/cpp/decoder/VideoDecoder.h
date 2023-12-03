@@ -25,7 +25,7 @@ public:
 
     int getHeight() const;
 
-    int getFps() const;
+    double getFps() const;
 
     void setSurface(jobject surface);
 
@@ -50,7 +50,7 @@ public:
 private:
     int mWidth = -1;
     int mHeight = -1;
-    int mFps = -1;
+    double mFps = -1;
     int scale = 1;
     uint8_t *shadowedOutbuffer;
     ANativeWindow *nativeWindow;

@@ -132,7 +132,8 @@ class FFMpegComposeActivity : AppCompatActivity() {
 //        path = File(application.externalCacheDir, "ffmpeg3.mp4").absolutePath
 //        path = File(Environment.getExternalStorageDirectory(), "ffmpeg.mp4").absolutePath
 //        path = File(Environment.getExternalStorageDirectory(), "ffmpeg3.mp4").absolutePath
-        path = File(Environment.getExternalStorageDirectory(), "longvideo.mp4").absolutePath
+//        path = File(Environment.getExternalStorageDirectory(), "longvideo.mp4").absolutePath
+        path = File(Environment.getExternalStorageDirectory(), "douyon.mp4").absolutePath
 //        path = File(Environment.getExternalStorageDirectory(), "VID_20230511_004231.mp4").absolutePath
 //        path = File(application.externalCacheDir, "vid_test1.mp4").absolutePath
     }
@@ -164,7 +165,12 @@ class FFMpegComposeActivity : AppCompatActivity() {
             PlayManager().apply {
                 playManager = this
                 init(object : IPalyListener {
-                    override fun onVideoConfig(witdh: Int, height: Int, duration: Long, fps: Int) {
+                    override fun onVideoConfig(
+                        witdh: Int,
+                        height: Int,
+                        duration: Double,
+                        fps: Double
+                    ) {
                         val ratio = witdh.toFloat() / height
                         Log.i(
                             TAG, "onConfig: video width:$witdh,height$height ratio:$ratio\n" +
@@ -186,13 +192,13 @@ class FFMpegComposeActivity : AppCompatActivity() {
                             }
                             surfaceView.requestLayout()
 
-                            mFps.value = fps
+                            mFps.value = fps.toInt()
                         }
-                        initGetVideoFrames()
+//                        initGetVideoFrames()
                     }
 
                     override fun onPalyProgress(time: Double) {
-                        updateUi(time.toFloat() / 1000)
+//                        updateUi(time.toFloat() / 1000)
                     }
 
                     override fun onPalyComplete() {
@@ -291,7 +297,8 @@ class FFMpegComposeActivity : AppCompatActivity() {
                         if (!reuslt) {
                             return@singlePermissions
                         }
-                        val outFile = File(Environment.getExternalStorageDirectory(), "testout.mp4")
+//                        val outFile = File(Environment.getExternalStorageDirectory(), "testout.mp4")
+                        val outFile = File(application.externalCacheDir, "testout.mp4")
                         if (!outFile.exists()) {
                             outFile.createNewFile()
                         } else {
