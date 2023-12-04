@@ -95,8 +95,8 @@ bool VideoDecoder::prepare(JNIEnv *env) {
                 }
             }
         } else {
-            LOGE("not find %s", mediacodecName.c_str())
             mVideoCodec = avcodec_find_decoder(params->codec_id);
+            LOGE("not find %s,find %s", mediacodecName.c_str(), mVideoCodec->name)
         }
     } else {
         mVideoCodec = avcodec_find_decoder(params->codec_id);
@@ -156,11 +156,7 @@ bool VideoDecoder::prepare(JNIEnv *env) {
 
 bool VideoDecoder::isHwDecoder() {
     bool isEvenEdge = isEven(mAvFrame->width) && isEven(mAvFrame->height);
-    return mAvFrame->format == hw_pix_fmt || mAvFrame->format == AV_PIX_FMT_RGB24
-           || (isEvenEdge && (mAvFrame->format ==
-                              AV_PIX_FMT_YUV420P ||
-                              mAvFrame->format ==
-                              AV_PIX_FMT_NV12));
+    return mAvFrame->format == hw_pix_fmt;
 }
 
 int VideoDecoder::decode(AVPacket *avPacket) {
@@ -226,17 +222,11 @@ int VideoDecoder::decode(AVPacket *avPacket) {
                     mAvFrame->pts, precisionSeekConsume)
         }
 
-        bool isEvenEdge = isEven(mAvFrame->width) && isEven(mAvFrame->height);
-        if (mAvFrame->format == hw_pix_fmt || mAvFrame->format == AV_PIX_FMT_RGB24
-            || (isEvenEdge && (mAvFrame->format ==
-                               AV_PIX_FMT_YUV420P ||
-                               mAvFrame->format ==
-                               AV_PIX_FMT_NV12))) {
+        if (isHwDecoder()) {
             if (mOnFrameArrivedListener) {
                 mOnFrameArrivedListener(mAvFrame);
             }
-        } else if (mAvFrame->format !=
-                   AV_PIX_FMT_NONE) { // mAvFrame->format == AV_PIX_FMT_YUV420P10LE先转为RGBA进行渲染
+        } else { // mAvFrame->format == AV_PIX_FMT_YUV420P10LE先转为RGBA进行渲染
             AVFrame *swFrame = av_frame_alloc();
             int size = av_image_get_buffer_size(AV_PIX_FMT_RGBA, mAvFrame->width, mAvFrame->height,
                                                 1);
@@ -254,8 +244,6 @@ int VideoDecoder::decode(AVPacket *avPacket) {
             av_frame_free(&swFrame);
             av_freep(&swFrame);
             av_free(shadowedOutbuffer);
-        } else {
-            LOGE("[video] frame format is AV_PIX_FMT_NONE")
         }
 
         av_frame_unref(mAvFrame);
