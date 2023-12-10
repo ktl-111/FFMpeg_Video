@@ -3,6 +3,12 @@
 #include <loghelper.h>
 #include "../reader/FFVideoReader.h"
 
+extern "C" {
+#include "libavfilter/avfilter.h"
+#include "libavfilter/buffersrc.h"
+#include "libavfilter/buffersink.h"
+}
+
 extern "C"
 JNIEXPORT void JNICALL
 Java_com_example_play_utils_FFMpegUtils_getVideoFramesCore(JNIEnv *env, jobject thiz, jstring path,
@@ -82,215 +88,359 @@ Java_com_example_play_utils_FFMpegUtils_getVideoFramesCore(JNIEnv *env, jobject 
         env->ReleaseDoubleArrayElements(ptsArrays, ptsArr, 0);
     }
 }
-
-
 extern "C"
 JNIEXPORT jboolean JNICALL
-Java_com_example_play_utils_FFMpegUtils_nativeCutting(JNIEnv *env, jobject thiz, jstring srcPath,
-                                                      jstring desPath) {
-    const char *c_srcPath = env->GetStringUTFChars(srcPath, nullptr);
-    const char *c_desPath = env->GetStringUTFChars(desPath, nullptr);
-    AVFormatContext *avFormatContext = avformat_alloc_context();
-    avformat_open_input(&avFormatContext, c_srcPath, nullptr, nullptr);
-    int videIndex = av_find_best_stream(avFormatContext, AVMEDIA_TYPE_VIDEO, -1, -1, nullptr, 0);
-    AVFormatContext *outFormatContext;
-    //打开文件输入流
-    int result;
+Java_com_example_play_utils_FFMpegUtils_nativeCutting(JNIEnv *env, jobject thiz,
+                                                      jstring src_path, jstring dest_path,
+                                                      jdouble start_time,
+                                                      jdouble end_time, jint fps) {
+    const char *c_srcPath = env->GetStringUTFChars(src_path, nullptr);
+    const char *c_desPath = env->GetStringUTFChars(dest_path, nullptr);
+    int timeBaseDiff = 1500;
+    AVRational outTimeBase = {1, fps * timeBaseDiff};
+    LOGI("cutting config,start_time:%lf end_time:%lf fps:%d timeBase:{%d,%d}", start_time, end_time,
+         fps, outTimeBase.num, outTimeBase.den)
 
-    result = avformat_alloc_output_context2(&outFormatContext, nullptr, nullptr, c_desPath);
-    if (result < 0) {
-        LOGI("cutting avformat_alloc_output_context2 result:%d", result);
+    AVFormatContext *inFormatContext = avformat_alloc_context();
+    int result = 0;
+    result = avformat_open_input(&inFormatContext, c_srcPath, NULL, NULL);
+    if (result != 0) {
+        LOGE("cutting not open input file,%d %s", result, av_err2str(result));
+        return -1;
+    }
+
+    if (avformat_find_stream_info(inFormatContext, NULL) < 0) {
+        LOGE("cutting avformat_find_stream_info fail");
+        return -1;
+    }
+
+    int video_stream_index = av_find_best_stream(inFormatContext, AVMEDIA_TYPE_VIDEO, -1, -1,
+                                                 nullptr, 0);
+    if (video_stream_index == AVERROR_STREAM_NOT_FOUND) {
+        LOGI("cutting not find video index,%d %s", result, av_err2str(result))
+        return -1;
+    }
+
+    AVStream *inSteram = inFormatContext->streams[video_stream_index];
+    AVRational &inTimeBase = inSteram->time_base;
+    AVCodecParameters *codec_params = inSteram->codecpar;
+    const AVCodec *decoder = avcodec_find_decoder(codec_params->codec_id);
+    if (!decoder) {
+        LOGE("cutting not find decoder,%d %s", result, av_err2str(result))
+        return -1;
+    }
+
+    AVCodecContext *decodecContext = avcodec_alloc_context3(decoder);
+    result = avcodec_parameters_to_context(decodecContext, codec_params);
+    decodecContext->width /= 2;
+    decodecContext->height /= 2;
+    LOGI("decodecContext %d*%d ", decodecContext->width, decodecContext->height)
+    if (result != 0) {
+        LOGE("cutting avcodec_parameters_to_context fail,%d %s", result, av_err2str(result))
+        return -1;
+    }
+
+    result = avcodec_open2(decodecContext, decoder, NULL);
+    if (result != 0) {
+        LOGE("cutting avcodec_open2 fail,%d %s", result, av_err2str(result))
         return -1;
     }
 
 
-    result = avio_open(&outFormatContext->pb, c_desPath, AVIO_FLAG_WRITE);
-    if (result < 0) {
-        LOGE("cutting avio_open result:%d", result);
+    //设置filter
+    const AVFilter *buffersrc = avfilter_get_by_name("buffer");
+    const AVFilter *buffersink = avfilter_get_by_name("buffersink");
+    AVFilterGraph *filter_graph = avfilter_graph_alloc();
+
+    if (!buffersrc || !buffersink || !filter_graph) {
+        LOGE("cutting buffersrc  buffersink avfilter_graph_alloc fail")
         return -1;
     }
-    AVStream *inStream = avFormatContext->streams[videIndex];
+    AVFilterContext *buffersinkContext;
+    AVFilterContext *buffersrcContext;
+    char args[512];
+    /* buffer video source: the decoded frames from the decoder will be inserted here. */
+    snprintf(args, sizeof(args),
+             "video_size=%dx%d:pix_fmt=%d:time_base=%d/%d:pixel_aspect=%d/%d",
+             decodecContext->width, decodecContext->height, decodecContext->pix_fmt,
+             inTimeBase.num,
+             inTimeBase.den,
+             decodecContext->sample_aspect_ratio.num, decodecContext->sample_aspect_ratio.den);
+    LOGI("cutting args %s", args)
+    result = avfilter_graph_create_filter(&buffersrcContext, buffersrc, "in",
+                                          args, NULL, filter_graph);
+
+    if (result != 0) {
+        LOGE("cutting buffersrc fail,%d %s", result, av_err2str(result))
+        return -1;
+    }
+
+    result = avfilter_graph_create_filter(&buffersinkContext, buffersink, "out",
+                                          NULL, NULL, filter_graph);
+    if (result != 0) {
+        LOGE("cutting buffersink fail,%d %s", result, av_err2str(result))
+        return -1;
+    }
+    AVFilterInOut *outputs = avfilter_inout_alloc();
+    AVFilterInOut *inputs = avfilter_inout_alloc();
+    //in->fps filter的输入端口名称
+    //outputs->源头的输出
+    outputs->name = av_strdup("in");
+    outputs->filter_ctx = buffersrcContext;
+    outputs->pad_idx = 0;
+    outputs->next = NULL;
+    //out->fps filter的输出端口名称
+    //outputs->filter后的输入
+    inputs->name = av_strdup("out");
+    inputs->filter_ctx = buffersinkContext;
+    inputs->pad_idx = 0;
+    inputs->next = NULL;
+    const char *fpsTag = "fps=";
+    char *fpsFilter = new char[strlen(fpsTag), sizeof(fps)];
+    sprintf(fpsFilter, "%s%d", fpsTag, fps);
+    LOGI("cutting fpsfilter:%s", fpsFilter)
+    //buffer->输出(outputs)->filter in(av_strdup("in")->fps filter->filter out(av_strdup("out"))->输入(inputs)->buffersink
+    result = avfilter_graph_parse_ptr(filter_graph, fpsFilter, &inputs, &outputs, NULL);
+    if (result != 0) {
+        LOGE("cutting avfilter_graph_parse_ptr fail,%d %s", result, av_err2str(result))
+        return -1;
+    }
+    result = avfilter_graph_config(filter_graph, NULL);
+    if (result != 0) {
+        LOGE("cutting avfilter_graph_config fail,%d %s", result, av_err2str(result))
+        return -1;
+    }
+
+
+    AVFormatContext *outFormatContext = avformat_alloc_context();
+    result = avformat_alloc_output_context2(&outFormatContext, NULL, NULL, c_desPath);
+    if (result != 0) {
+        LOGE("cutting avformat_alloc_output_context2 fail,%d %s", result, av_err2str(result))
+        return -1;
+    }
+
     AVStream *outStream = avformat_new_stream(outFormatContext, NULL);
-//    outStream->avg_frame_rate = av_make_q(15, 1);
-//    outStream->time_base = av_inv_q(outStream->avg_frame_rate);
-//    videoContext->framerate = outStream->avg_frame_rate;
-
-    result = avcodec_parameters_copy(outStream->codecpar, inStream->codecpar);
-    if (result < 0) {
-        LOGE("cutting avcodec_parameters_copy result:%d", result);
-        return -1;
-    }
-    //设置codec_tag=0,内部会找对应封装格式的tag
-    outStream->codecpar->codec_tag = 0;
-    outStream->avg_frame_rate = {30, 1};
-    outStream->time_base = {1, 30000};
-    outStream->discard = AVDISCARD_BIDIR;
-    result = avformat_write_header(outFormatContext, nullptr);
-    if (result < 0) {
-        LOGE("cutting avformat_write_header result:%d", result);
+    if (!outStream) {
+        LOGE("cutting avformat_new_stream fail,%d %s", result, av_err2str(result))
         return -1;
     }
 
-//    const AVCodec *avCodec = avcodec_find_encoder(outStream->codecpar->codec_id);
-//    const AVCodec *deCodec = avcodec_find_decoder(outStream->codecpar->codec_id);
-//    LOGI("cutting find %s", avCodec->name)
-//
-//    AVCodecContext *videoContext = avcodec_alloc_context3(avCodec);
-//    AVCodecContext *dc = avcodec_alloc_context3(deCodec);
-////将数据流相关的编解码参数来填充编解码器上下文
-//    avcodec_parameters_to_context(videoContext, outStream->codecpar);
-//    videoContext->pix_fmt = avCodec->pix_fmts[0];
-//    videoContext->time_base = outStream->time_base;
-//    result = avcodec_open2(videoContext, avCodec, 0);
+    if (avcodec_parameters_copy(outStream->codecpar, codec_params) < 0) {
+        LOGE("cutting avcodec_parameters_copy fail,%d %s", result, av_err2str(result))
+        return -1;
+    }
+
+//    result = avcodec_parameters_from_context(outStream->codecpar, encodeContext);
 //    if (result < 0) {
-//        LOGE("cutting avcodec_open2 false result:%d %s", result, av_err2str(result));
-//        return false;
+//        LOGE("cutting avcodec_parameters_from_context fail,%d %s", result, av_err2str(result))
+//        return -1;
 //    }
 
-    LOGI("cutting befer inStream{%d,%d} outStream{%d,%d} inStream.avg_frame_rate{%d,%d} outStream.avg_frame_rate{%d,%d} codeid:%s",
-         inStream->time_base.num,
-         inStream->time_base.den, outStream->time_base.num, outStream->time_base.den,
-         inStream->avg_frame_rate.num, inStream->avg_frame_rate.den, outStream->avg_frame_rate.num,
-         outStream->avg_frame_rate.den, avcodec_get_name(outStream->codecpar->codec_id))
+    //设置对应参数
+    outStream->codecpar->codec_tag = 0;
+    outStream->avg_frame_rate = {fps, 1};
+    outStream->time_base = outTimeBase;
 
-    double startTime = 0.0;
-    double endTime = startTime + 5.0;
-    auto timeBase = av_q2d(inStream->time_base);
-    auto outTimeBase = av_q2d(outStream->time_base);
-    int rnd = AV_ROUND_NEAR_INF | AV_ROUND_PASS_MINMAX;
-    //s=pts*timebase
-    auto startPts = startTime / timeBase;
-    auto endPts = endTime / timeBase;
-    LOGI("cutting startPts:%f inStream{%d,%d} outStream{%d,%d}", startPts, inStream->time_base.num,
-         inStream->time_base.den, outStream->time_base.num, outStream->time_base.den)
-
-//    result = avformat_seek_file(avFormatContext, videIndex, INT64_MIN, startPts, INT64_MAX,
-//                                AVSEEK_FLAG_BACKWARD | AVSEEK_FLAG_FRAME);
-//    result = av_seek_frame(avFormatContext, videIndex, startPts,
-//                           AVSEEK_FLAG_ANY);
-    if (result < 0) {
-        LOGE("cutting av_seek_frame result:%d", result)
+    //查找解码器
+    const AVCodec *encoder = avcodec_find_encoder(codec_params->codec_id);
+    if (!encoder) {
+        LOGE("not find encoder")
         return -1;
     }
-    int64_t t_pts = -1;
-    int64_t t_dts = -1;
-    for (;;) {
-        auto avPacket = av_packet_alloc();
+    LOGI("find encoder %s", encoder->name)
+    AVCodecContext *encodeContext = avcodec_alloc_context3(encoder);
+    encodeContext->codec_type = AVMEDIA_TYPE_VIDEO;
+    encodeContext->width = decodecContext->width;
+    encodeContext->height = decodecContext->height;
+    encodeContext->time_base = outStream->time_base;
+    encodeContext->framerate = outStream->avg_frame_rate;
+    if (encoder->pix_fmts) {
+        //设置解码器支持的第一个
+        encodeContext->pix_fmt = encoder->pix_fmts[0];
+    } else {
+        encodeContext->pix_fmt = decodecContext->pix_fmt;
+    }
+    encodeContext->sample_aspect_ratio = decodecContext->sample_aspect_ratio;
+    encodeContext->max_b_frames = 0;//不需要B帧
+    encodeContext->gop_size = outStream->avg_frame_rate.num;//多少帧一个I帧
+    outStream->start_time = 0;
+    result = avcodec_open2(encodeContext, encoder, NULL);
+    if (result != 0) {
+        LOGI("cutting avcodec_open2 fail,%d %s", result, av_err2str(result))
+        return -1;
+    }
 
-        result = av_read_frame(avFormatContext, avPacket);
+    // 打开输出文件
+    if (avio_open(&outFormatContext->pb, c_desPath, AVIO_FLAG_WRITE) < 0 ||
+        avformat_write_header(outFormatContext, NULL) < 0) {
+        LOGE("cutting not open des");
+        return -1;
+    }
+
+    LOGI("cutting seek")
+    av_seek_frame(inFormatContext, video_stream_index, start_time / av_q2d(inTimeBase),
+                  AVSEEK_FLAG_ANY);
+
+    int writeFramsCount = 0;
+    while (1) {
+        AVPacket *packet = av_packet_alloc();
+        int result = av_read_frame(inFormatContext, packet);
         if (result != 0) {
-            LOGI("cutting read done!!!");
-            av_packet_unref(avPacket);
+            LOGE("cutting av_read_frame fail %d %s", result, av_err2str(result))
             break;
         }
-        if (avPacket->stream_index != videIndex) {
-            av_packet_unref(avPacket);
-            continue;
-        }
-        LOGI("===========start cutting video=============");
-
-        if (avPacket->pts > endPts) {
-            LOGE("cutting pts>endPts pts:%f endPts:%f", avPacket->pts * timeBase,
-                 endPts * timeBase)
-            av_packet_unref(avPacket);
-            break;
-        }
-
-
-        LOGI("cutting pts avPacket->pts:(%f) startPts(%f) inStream{%d,%d} outStream{%d,%d} inStreamDuration:%lf",
-             timeBase * avPacket->pts, timeBase * startPts,
-             inStream->time_base.num, inStream->time_base.den,
-             outStream->time_base.num, outStream->time_base.den,
-             avPacket->duration * av_q2d(inStream->time_base))
-        LOGI("cutting dts avPacket->dts:(%f) dts:%ld",
-             timeBase * avPacket->dts, avPacket->dts)
-        auto duration =
-                avPacket->duration * av_q2d(inStream->time_base) / av_q2d(outStream->time_base);
-        int writeFrame = 0;
-        double pts = timeBase * avPacket->pts;
-        double dura = avPacket->duration * timeBase;
-        auto inFrameNumber = pts / dura;
-        if (avPacket->flags != 1) {
-
-            /* delta0 is the "drift" between the input frame and
-             * where it would fall in the output. */
-            double inPts =
-                    avPacket->pts * av_q2d(inStream->time_base) / av_q2d(outStream->time_base);
-            double diffDura = inPts / inFrameNumber;
-            LOGI("cutting pts/dur %lf %lf %lf changeinpts:%lf", pts, dura, inFrameNumber, inPts)
-            double tTps = 0;
-            while (tTps < inPts) {
-                double delta0 = tTps - writeFrame;
-                double delta = delta0;
-                LOGE("cutting while tTps:%lf writeFrame:%d duration:%lf delta0:%lf delta:%lf", tTps,
-                     writeFrame, duration,
-                     delta0, delta)
-                tTps += diffDura;
-                if (delta <= -0.6 * 1000) {
-                    continue;
+        if (packet->stream_index == video_stream_index) {
+            // 初始化filter图的帧
+            AVFrame *frame = av_frame_alloc();
+            int sendResult = -1;
+            int receiveResult = -1;
+            LOGI("cutting send pts:%lld %f dts:%lld %f duration:%lld %f flags:%d ", packet->pts,
+                 packet->pts * av_q2d(inTimeBase),
+                 packet->dts, packet->dts * av_q2d(inTimeBase),
+                 packet->duration, packet->duration * av_q2d(inTimeBase),
+                 packet->flags)
+            do {
+                sendResult = avcodec_send_packet(decodecContext, packet);
+                if (sendResult == 0 || sendResult == AVERROR(EAGAIN)) {
+                    receiveResult = avcodec_receive_frame(decodecContext, frame);
+                    if (receiveResult == 0) {
+                        LOGI("cutting receiveResult frame pts:%lld %lf,dts:%lld %d*%d", frame->pts,
+                             frame->pts * av_q2d(inTimeBase),
+                             frame->pkt_dts,
+                             frame->width, frame->height)
+                    }
                 }
-                writeFrame += 1000;
-            }
-
-
-            double outPts = writeFrame;
-
-            double delta0 = inPts - outPts;
-            double delta = delta0;
-            double diff = -(av_q2d(outStream->time_base) * 0.6);
-            LOGI("cutting duration:%f delta0:%f delta:%f inPts:%f outPts:%f dif:%lf inFrameNumber:%lf",
-                 duration,
-                 delta0, delta,
-                 inPts,
-                 outPts, diff, inFrameNumber)
-//        if (delta0 < 0 && delta > 0) {
-//            duration += delta0;
-//            delta0 = 0;
-//        }
-            if (delta <= -0.6 * 1000) {
-                LOGE("cutting filter %lf inFrameNumber:%f", diff, inFrameNumber)
+                LOGI("cutting decode %d %d", sendResult, receiveResult)
+            } while (sendResult == AVERROR(EAGAIN) && receiveResult == AVERROR(EAGAIN));
+            if (receiveResult == AVERROR(EAGAIN)) {
+                av_frame_unref(frame);
+                av_packet_unref(packet);
                 continue;
             }
-        }
-        av_packet_rescale_ts(avPacket, inStream->time_base, outStream->time_base);
-        // 时间基转换
-//        avPacket->pts = av_rescale_q_rnd(avPacket->pts, inStream->time_base,
-//                                         outStream->time_base,
-//                                         (AVRounding) rnd);
-//
-//        LOGI("cutting dts %ld %f %f", avPacket->dts, avPacket->dts * av_q2d(inStream->time_base),
-//             avPacket->dts * av_q2d(inStream->time_base) /
-//             av_q2d(outStream->time_base))
-//        avPacket->dts = av_rescale_q_rnd(avPacket->dts, inStream->time_base,
-//                                         outStream->time_base,
-//                                         (AVRounding) rnd);
-//
-        avPacket->duration = 1000;
-        avPacket->pos = -1;
-        LOGI("cutting av_rescale_q_rnd pts:%f,dts:%f,fps:%f,duration:%f,packet flags:%d inFrameNumber:%f",
-             outTimeBase * avPacket->pts, outTimeBase * avPacket->dts,
-             av_q2d(outStream->avg_frame_rate), outTimeBase * avPacket->duration, avPacket->flags,
-             inFrameNumber)
 
-        if (avPacket->pts < avPacket->dts) {
-            LOGE("cutting pts<dts")
-            av_packet_unref(avPacket);
-            //处理异常数据,pts必大于dts
-            continue;
-        }
-        result = av_write_frame(outFormatContext, avPacket);
+            if (frame->pts > end_time / av_q2d(inTimeBase)) {
+                LOGI("cutting pts > endpts %lld %f %f", frame->pts, 5 / av_q2d(inTimeBase),
+                     frame->pts * av_q2d(inTimeBase))
+                av_frame_unref(frame);
+                av_packet_unref(packet);
+                break;
+            }
 
-//        result = av_interleaved_write_frame(outFormatContext, avPacket);
-        if (result < 0) {
-            av_packet_unref(avPacket);
-            LOGE("cutting av_interleaved_write_frame result:%d", result);
-            break;
+            AVFrame *filtered_frame = av_frame_alloc();
+            // 将帧发送到filter图中
+            int frameFlags = av_buffersrc_add_frame_flags(buffersrcContext, frame,
+                                                          AV_BUFFERSRC_FLAG_KEEP_REF);
+            int buffersinkGetFrame = av_buffersink_get_frame(buffersinkContext, filtered_frame);
+            if (frameFlags <
+                0 ||
+                buffersinkGetFrame < 0) {
+                LOGE("无法通过filter图处理帧 %d %d", frameFlags, buffersinkGetFrame);
+                if (buffersinkGetFrame == AVERROR(EAGAIN)) {
+                    av_frame_unref(frame);
+                    av_frame_unref(filtered_frame);
+                    av_packet_unref(packet);
+                    continue;
+                }
+                return -1;
+            }
+            do {
+                sendResult = -1;
+                receiveResult = -1;
+                AVPacket *receivePacket = av_packet_alloc();
+                filtered_frame->pict_type = AV_PICTURE_TYPE_NONE;
+                sendResult = avcodec_send_frame(encodeContext, filtered_frame);
+                if (sendResult == 0) {
+                    receiveResult = avcodec_receive_packet(encodeContext, receivePacket);
+                    if (receiveResult == 0) {
+                        receivePacket->stream_index = video_stream_index;
+                        receivePacket->pts = writeFramsCount;
+                        receivePacket->dts = receivePacket->pts - timeBaseDiff;
+                        receivePacket->duration = timeBaseDiff;
+
+                        LOGI("cutting av_interleaved_write_frame result pts:%ld %f dts:%ld %f duration:%ld %f",
+                             receivePacket->pts,
+                             receivePacket->pts * av_q2d(encodeContext->time_base),
+                             receivePacket->dts,
+                             receivePacket->dts * av_q2d(encodeContext->time_base),
+                             receivePacket->duration,
+                             receivePacket->duration * av_q2d(encodeContext->time_base))
+
+                        result = av_write_frame(outFormatContext,
+                                                receivePacket);
+                        if (result == 0) {
+                            writeFramsCount += timeBaseDiff;
+                        } else {
+                            LOGI("cutting av_interleaved_write_frame fail result %d %s", result,
+                                 av_err2str(result))
+                        }
+                    }
+                }
+                LOGI("cutting encode sendResult:%d receiveResult:%d", sendResult, receiveResult)
+                av_packet_unref(receivePacket);
+            } while (sendResult == AVERROR(EAGAIN) && receiveResult == AVERROR(EAGAIN));
+            // 清理资源
+            av_frame_unref(frame);
+            av_frame_unref(filtered_frame);
+            av_packet_unref(packet);
+            if (receiveResult == AVERROR(EAGAIN)) {
+                continue;
+            }
+            LOGI("cutting av_write_frame")
+        } else {
+            av_packet_unref(packet);
         }
-        LOGI("cutting done %f %d", inFrameNumber, avPacket->flags);
-        av_packet_unref(avPacket);
+
     }
-    LOGI("cutting done!!!")
-    outFormatContext->duration = 5 / av_q2d(outStream->time_base);
+
+    int sendResult = -1;
+    int receiveResult = -1;
+    do {
+        sendResult = -1;
+        receiveResult = -1;
+        AVPacket *receivePacket = av_packet_alloc();
+        sendResult = avcodec_send_frame(encodeContext, nullptr);
+        if (sendResult == 0 || sendResult == AVERROR_EOF || sendResult == AVERROR_EOF) {
+            receiveResult = avcodec_receive_packet(encodeContext, receivePacket);
+            if (receiveResult == 0) {
+                receivePacket->stream_index = video_stream_index;
+                receivePacket->pts = writeFramsCount;
+                receivePacket->dts = receivePacket->pts;
+                receivePacket->duration = timeBaseDiff;
+
+                LOGI("cutting av_interleaved_write_frame result pts:%ld %f dts:%ld %f duration:%ld %f",
+                     receivePacket->pts,
+                     receivePacket->pts * av_q2d(encodeContext->time_base),
+                     receivePacket->dts,
+                     receivePacket->dts * av_q2d(encodeContext->time_base),
+                     receivePacket->duration,
+                     receivePacket->duration * av_q2d(encodeContext->time_base))
+
+                int result = av_write_frame(outFormatContext,
+                                            receivePacket);
+                if (result == 0) {
+                    writeFramsCount += timeBaseDiff;
+                } else {
+                    LOGI("cutting av_interleaved_write_frame fail result %d %s", result,
+                         av_err2str(result))
+                }
+            }
+        }
+        LOGI("cutting encode flush sendResult:%d %s receiveResult:%d AVERROR_EOF:%d AVERROR(EAGAIN):%d",
+             sendResult, av_err2str(sendResult), receiveResult, AVERROR_EOF, AVERROR(EAGAIN))
+        av_packet_unref(receivePacket);
+    } while (receiveResult >= 0);
     av_write_trailer(outFormatContext);
-    return 0;
+    // 关闭输出文件
+    avio_close(outFormatContext->pb);
+
+    avcodec_free_context(&decodecContext);
+    avformat_close_input(&inFormatContext);
+    avfilter_graph_free(&filter_graph);
+    avfilter_inout_free(&inputs);
+    avfilter_inout_free(&outputs);
+    env->ReleaseStringUTFChars(src_path, c_srcPath);
+    env->ReleaseStringUTFChars(dest_path, c_desPath);
+
+    LOGI("cutting done!!!");
+    return true;
 }

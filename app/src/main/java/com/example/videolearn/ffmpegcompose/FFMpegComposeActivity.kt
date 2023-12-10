@@ -306,7 +306,7 @@ class FFMpegComposeActivity : AppCompatActivity() {
                         }
                         Log.i(TAG, "cutting file:${outFile.absolutePath}")
                         val destPath = outFile.absolutePath
-                        FFMpegUtils.cutting(path!!, destPath)
+                        FFMpegUtils.cutting(path!!, destPath, 3.toDouble(), 10.toDouble(), 24)
                     }
             }
         }
