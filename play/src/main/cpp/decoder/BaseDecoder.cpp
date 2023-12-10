@@ -23,7 +23,7 @@ bool BaseDecoder::prepare(JNIEnv *env) {
     return false;
 }
 
-int BaseDecoder::decode(AVPacket *packet) {
+int BaseDecoder::decode(AVPacket *packet,AVFrame *frame) {
     return 0;
 }
 

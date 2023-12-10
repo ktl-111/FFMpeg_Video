@@ -1,68 +1,63 @@
-#include "AVPacketQueue.h"
+#include "AVFrameQueue.h"
 #include <ctime>
 #include "../utils/loghelper.h"
 
-AVPacketQueue::AVPacketQueue(int64_t maxSize) {
+extern "C" {
+#include "libavutil/time.h"
+}
+
+AVFrameQueue::AVFrameQueue(int64_t maxSize) {
     pthread_mutex_init(&mMutex, nullptr);
     pthread_cond_init(&mCond, nullptr);
     mMaxSize = maxSize;
 }
 
-AVPacketQueue::~AVPacketQueue() {
-    LOGI("~AVPacketQueue")
+AVFrameQueue::~AVFrameQueue() {
+    LOGI("~AVFrameQueue")
     clear();
     pthread_mutex_destroy(&mMutex);
     pthread_cond_destroy(&mCond);
 }
 
-void AVPacketQueue::push(AVPacket *packet) {
+void AVFrameQueue::push(AVFrame *packet) {
     pthread_mutex_lock(&mMutex);
     mQueue.push(packet);
     pthread_mutex_unlock(&mMutex);
     notify();
 }
 
-AVPacket *AVPacketQueue::pop() {
+AVFrame *AVFrameQueue::pop() {
     pthread_mutex_lock(&mMutex);
-    AVPacket *packet = mQueue.front();
+    AVFrame *packet = mQueue.front();
     mQueue.pop();
     pthread_mutex_unlock(&mMutex);
     return packet;
 }
 
-int AVPacketQueue::popTo(AVPacket *packet) {
+int AVFrameQueue::popTo(AVFrame *packet) {
     pthread_mutex_lock(&mMutex);
     bool isEmpty = mQueue.empty() && mQueue.size() <= 0;
     if (isEmpty) {
         pthread_mutex_unlock(&mMutex);
         return -1;
     }
-    AVPacket *pkt = mQueue.front();
+    AVFrame *pkt = mQueue.front();
     if (pkt == nullptr) {
-        LOGE("[AVPacketQueue], popTo failed")
+        LOGE("[AVFrameQueue], popTo failed")
     }
 
-    int ref = av_packet_ref(packet, pkt);
+    int ref = av_frame_ref(packet, pkt);
     if (ref != 0) {
-        LOGE("[AVPacketQueue], popTo failed, ref: %d", ref);
+        LOGE("[AVFrameQueue], popTo failed, ref: %d", ref);
     }
 
-    // flush packet
-    if (pkt->size == 0 && pkt->data == nullptr) {
-        // av_packet_ref出来后，packet->data不为nullptr了，这里强制reset下
-        LOGI("[AVPacketQueue], flush packet index: %d", pkt->stream_index)
-        packet->size = 0;
-        packet->data = nullptr;
-    }
-
-    av_packet_free(&pkt);
-    av_free(pkt);
+    av_frame_free(&pkt);
     mQueue.pop();
     pthread_mutex_unlock(&mMutex);
     return 0;
 }
 
-bool AVPacketQueue::isFull() {
+bool AVFrameQueue::isFull() {
     int64_t queueSize;
     pthread_mutex_lock(&mMutex);
     queueSize = (int) mQueue.size();
@@ -71,7 +66,7 @@ bool AVPacketQueue::isFull() {
     return queueSize >= mMaxSize;
 }
 
-void AVPacketQueue::wait(unsigned int timeOutMs) {
+void AVFrameQueue::wait(unsigned int timeOutMs) {
     pthread_mutex_lock(&mMutex);
     LOGI("packet queue wait %d", timeOutMs)
     if (timeOutMs > 0) {
@@ -89,13 +84,13 @@ void AVPacketQueue::wait(unsigned int timeOutMs) {
     pthread_mutex_unlock(&mMutex);
 }
 
-void AVPacketQueue::notify() {
+void AVFrameQueue::notify() {
     pthread_mutex_lock(&mMutex);
     pthread_cond_signal(&mCond);
     pthread_mutex_unlock(&mMutex);
 }
 
-bool AVPacketQueue::isEmpty() {
+bool AVFrameQueue::isEmpty() {
     int64_t size;
     pthread_mutex_lock(&mMutex);
     size = (int64_t) mQueue.size();
@@ -103,15 +98,14 @@ bool AVPacketQueue::isEmpty() {
     return size <= 0;
 }
 
-void AVPacketQueue::clear() {
+void AVFrameQueue::clear() {
     pthread_mutex_lock(&mMutex);
     int64_t size = mQueue.size();
-    LOGI("[AVPacketQueue], clear queue, size: %" PRId64, size)
+    LOGI("[AVFrameQueue], clear queue, size: %" PRId64, size)
     while (!mQueue.empty() && size > 0) {
-        AVPacket *packet = mQueue.front();
+        AVFrame *packet = mQueue.front();
         if (packet != nullptr) {
-            av_packet_free(&packet);
-            av_freep(&packet);
+            av_frame_free(&packet);
         }
         mQueue.pop();
     }

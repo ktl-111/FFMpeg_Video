@@ -33,7 +33,7 @@ public:
 
     virtual bool prepare(JNIEnv *env) override;
 
-    virtual int decode(AVPacket *packet) override;
+    virtual int decode(AVPacket *packet,AVFrame *frame) override;
 
     virtual void avSync(AVFrame *frame) override;
 
@@ -46,6 +46,7 @@ public:
     int getRotate();
 
     virtual void showFrameToWindow(AVFrame *frame);
+    virtual void resultCallback(AVFrame *pFrame);
 
 private:
     int mWidth = -1;
@@ -60,10 +61,6 @@ private:
 
     int64_t mStartTimeMsForSync = -1;
     int64_t mCurTimeStampMs = 0;
-
-    int64_t mSeekPos = INT64_MAX;
-    int64_t mSeekStartTimeMs = -1;
-    int64_t mSeekEndTimeMs = -1;
 
     jobject mSurface = nullptr;
 

@@ -24,7 +24,7 @@ public:
 
     virtual bool prepare(JNIEnv *env) override;
 
-    virtual int decode(AVPacket *packet) override;
+    virtual int decode(AVPacket *packet,AVFrame *frame) override;
 
     virtual void avSync(AVFrame *frame) override;
 

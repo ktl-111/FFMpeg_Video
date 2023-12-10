@@ -194,11 +194,11 @@ class FFMpegComposeActivity : AppCompatActivity() {
 
                             mFps.value = fps.toInt()
                         }
-//                        initGetVideoFrames()
+                        initGetVideoFrames()
                     }
 
                     override fun onPalyProgress(time: Double) {
-//                        updateUi(time.toFloat() / 1000)
+                        updateUi(time.toFloat() / 1000)
                     }
 
                     override fun onPalyComplete() {
@@ -508,7 +508,7 @@ class FFMpegComposeActivity : AppCompatActivity() {
                                 if (event.changes.size == 1) {
                                     if (event.type == PointerEventType.Release) {
                                         isSeek.value = false
-                                        resume()
+//                                        resume()
                                     } else if (event.type == PointerEventType.Press) {
                                         isSeek.value = true
 //                                        pause()

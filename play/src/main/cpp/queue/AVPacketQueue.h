@@ -33,7 +33,7 @@ public:
     void notify();
 
 private:
-    int64_t mMaxSize = INT64_MAX;
+    int64_t mMaxSize = 60;
 
     std::queue<AVPacket *> mQueue;
 

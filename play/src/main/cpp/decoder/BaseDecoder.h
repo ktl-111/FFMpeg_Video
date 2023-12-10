@@ -25,7 +25,7 @@ public:
 
     virtual bool prepare(JNIEnv *env);
 
-    virtual int decode(AVPacket *packet);
+    virtual int decode(AVPacket *packet,AVFrame *frame);
 
     virtual void avSync(AVFrame *frame);
 

@@ -12,6 +12,7 @@
 #include "../decoder/VideoDecoder.h"
 #include "../decoder/AudioDecoder.h"
 #include "../queue/AVPacketQueue.h"
+#include "../queue/AVFrameQueue.h"
 
 extern "C" {
 #include "../include/libavutil/avutil.h"
@@ -85,11 +86,6 @@ public:
 private:
     bool mHasAbort = false;
     bool mIsMute = false;
-    bool mIsSeek = false;
-
-    volatile double mVideoSeekPos = -1;
-    volatile double mAudioSeekPos = -1;
-
 
     JavaVM *mJvm = nullptr;
     PlayerJniContext mPlayerJni{};
@@ -100,9 +96,11 @@ private:
     AVFormatContext *mAvFormatContext;
 
     std::thread *mReadPacketThread = nullptr;
+    std::thread *mVideoDecodeThread = nullptr;
 
     std::thread *mVideoThread = nullptr;
     std::shared_ptr<AVPacketQueue> mVideoPacketQueue = nullptr;
+    std::shared_ptr<AVFrameQueue> mVideoFrameQueue = nullptr;
     std::shared_ptr<VideoDecoder> mVideoDecoder = nullptr;
 
     std::thread *mAudioThread = nullptr;
@@ -117,9 +115,10 @@ private:
     int readAvPacketToQueue(ReadPackType type);
 
     bool pushPacketToQueue(AVPacket *packet, const std::shared_ptr<AVPacketQueue> &queue) const;
+    bool pushFrameToQueue(AVFrame *packet, const std::shared_ptr<AVFrameQueue> &queue) const;
 
     void ReadPacketLoop();
-
+    void ReadVideoFrameLoop();
     void updatePlayerState(PlayerState state);
 
     void onPlayCompleted(JNIEnv *env);

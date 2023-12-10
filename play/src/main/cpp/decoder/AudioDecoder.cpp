@@ -177,7 +177,7 @@ bool AudioDecoder::prepare(JNIEnv *env) {
     return ret == 0;
 }
 
-int AudioDecoder::decode(AVPacket *avPacket) {
+int AudioDecoder::decode(AVPacket *avPacket,AVFrame *frame) {
     int64_t start = getCurrentTimeMs();
     int sendRes = avcodec_send_packet(mCodecContext, avPacket);
     int index = av_index_search_timestamp(mFtx->streams[getStreamIndex()], avPacket->pts,
