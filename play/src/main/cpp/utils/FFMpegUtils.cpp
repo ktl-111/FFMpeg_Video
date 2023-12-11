@@ -2,6 +2,7 @@
 #include <string>
 #include <loghelper.h>
 #include "../reader/FFVideoReader.h"
+#include "libyuv/scale.h"
 
 extern "C" {
 #include "libavfilter/avfilter.h"
@@ -132,8 +133,8 @@ Java_com_example_play_utils_FFMpegUtils_nativeCutting(JNIEnv *env, jobject thiz,
 
     AVCodecContext *decodecContext = avcodec_alloc_context3(decoder);
     result = avcodec_parameters_to_context(decodecContext, codec_params);
-    decodecContext->width /= 2;
-    decodecContext->height /= 2;
+    int dstWidth = decodecContext->width / 2;
+    int dstHeight = decodecContext->height / 2;
     LOGI("decodecContext %d*%d ", decodecContext->width, decodecContext->height)
     if (result != 0) {
         LOGE("cutting avcodec_parameters_to_context fail,%d %s", result, av_err2str(result))
@@ -240,7 +241,9 @@ Java_com_example_play_utils_FFMpegUtils_nativeCutting(JNIEnv *env, jobject thiz,
     outStream->codecpar->codec_tag = 0;
     outStream->avg_frame_rate = {fps, 1};
     outStream->time_base = outTimeBase;
-
+    outStream->codecpar->width = dstWidth;
+    outStream->codecpar->height = dstHeight;
+    outStream->start_time = 0;
     //查找解码器
     const AVCodec *encoder = avcodec_find_encoder(codec_params->codec_id);
     if (!encoder) {
@@ -250,8 +253,8 @@ Java_com_example_play_utils_FFMpegUtils_nativeCutting(JNIEnv *env, jobject thiz,
     LOGI("find encoder %s", encoder->name)
     AVCodecContext *encodeContext = avcodec_alloc_context3(encoder);
     encodeContext->codec_type = AVMEDIA_TYPE_VIDEO;
-    encodeContext->width = decodecContext->width;
-    encodeContext->height = decodecContext->height;
+    encodeContext->width = outStream->codecpar->width;
+    encodeContext->height = outStream->codecpar->height;
     encodeContext->time_base = outStream->time_base;
     encodeContext->framerate = outStream->avg_frame_rate;
     if (encoder->pix_fmts) {
@@ -263,7 +266,9 @@ Java_com_example_play_utils_FFMpegUtils_nativeCutting(JNIEnv *env, jobject thiz,
     encodeContext->sample_aspect_ratio = decodecContext->sample_aspect_ratio;
     encodeContext->max_b_frames = 0;//不需要B帧
     encodeContext->gop_size = outStream->avg_frame_rate.num;//多少帧一个I帧
-    outStream->start_time = 0;
+
+    LOGI("cutting config sample_aspect_ratio:{%d,%d}", encodeContext->sample_aspect_ratio.num,
+         encodeContext->sample_aspect_ratio.den)
     result = avcodec_open2(encodeContext, encoder, NULL);
     if (result != 0) {
         LOGI("cutting avcodec_open2 fail,%d %s", result, av_err2str(result))
@@ -294,7 +299,7 @@ Java_com_example_play_utils_FFMpegUtils_nativeCutting(JNIEnv *env, jobject thiz,
             AVFrame *frame = av_frame_alloc();
             int sendResult = -1;
             int receiveResult = -1;
-            LOGI("cutting send pts:%lld %f dts:%lld %f duration:%lld %f flags:%d ", packet->pts,
+            LOGI("cutting send pts:%ld %f dts:%ld %f duration:%ld %f flags:%d ", packet->pts,
                  packet->pts * av_q2d(inTimeBase),
                  packet->dts, packet->dts * av_q2d(inTimeBase),
                  packet->duration, packet->duration * av_q2d(inTimeBase),
@@ -304,7 +309,7 @@ Java_com_example_play_utils_FFMpegUtils_nativeCutting(JNIEnv *env, jobject thiz,
                 if (sendResult == 0 || sendResult == AVERROR(EAGAIN)) {
                     receiveResult = avcodec_receive_frame(decodecContext, frame);
                     if (receiveResult == 0) {
-                        LOGI("cutting receiveResult frame pts:%lld %lf,dts:%lld %d*%d", frame->pts,
+                        LOGI("cutting receiveResult frame pts:%ld %lf,dts:%ld %d*%d", frame->pts,
                              frame->pts * av_q2d(inTimeBase),
                              frame->pkt_dts,
                              frame->width, frame->height)
@@ -319,7 +324,7 @@ Java_com_example_play_utils_FFMpegUtils_nativeCutting(JNIEnv *env, jobject thiz,
             }
 
             if (frame->pts > end_time / av_q2d(inTimeBase)) {
-                LOGI("cutting pts > endpts %lld %f %f", frame->pts, 5 / av_q2d(inTimeBase),
+                LOGI("cutting pts > endpts %ld %f %f", frame->pts, 5 / av_q2d(inTimeBase),
                      frame->pts * av_q2d(inTimeBase))
                 av_frame_unref(frame);
                 av_packet_unref(packet);
@@ -348,7 +353,30 @@ Java_com_example_play_utils_FFMpegUtils_nativeCutting(JNIEnv *env, jobject thiz,
                 receiveResult = -1;
                 AVPacket *receivePacket = av_packet_alloc();
                 filtered_frame->pict_type = AV_PICTURE_TYPE_NONE;
-                sendResult = avcodec_send_frame(encodeContext, filtered_frame);
+                AVFrame *dstFrame = av_frame_alloc();
+                av_frame_ref(dstFrame, filtered_frame);
+                int64_t scaleBufferSize = dstWidth * dstHeight * 3 / 2;
+                uint8_t *scaleBuffer = (uint8_t *) malloc(scaleBufferSize);
+
+                int ret = libyuv::I420Scale(
+                        frame->data[0], frame->linesize[0],
+                        frame->data[1], frame->linesize[1],
+                        frame->data[2], frame->linesize[2],
+                        frame->width, frame->height,
+                        scaleBuffer, dstWidth,
+                        scaleBuffer + dstWidth * dstHeight, dstWidth / 2,
+                        scaleBuffer + dstWidth * dstHeight * 5 / 4, dstWidth / 2,
+                        dstWidth, dstHeight, libyuv::kFilterNone);
+                LOGI("cutting I420Scale %d", ret)
+                dstFrame->data[0] = scaleBuffer;
+                dstFrame->data[1] = scaleBuffer + dstWidth * dstHeight;
+                dstFrame->data[2] = scaleBuffer + dstWidth * dstHeight * 5 / 4;
+                dstFrame->linesize[0] = dstWidth;
+                dstFrame->linesize[1] = dstWidth / 2;
+                dstFrame->linesize[2] = dstWidth / 2;
+                dstFrame->width = dstWidth;
+                dstFrame->height = dstHeight;
+                sendResult = avcodec_send_frame(encodeContext, dstFrame);
                 if (sendResult == 0) {
                     receiveResult = avcodec_receive_packet(encodeContext, receivePacket);
                     if (receiveResult == 0) {
@@ -376,12 +404,14 @@ Java_com_example_play_utils_FFMpegUtils_nativeCutting(JNIEnv *env, jobject thiz,
                     }
                 }
                 LOGI("cutting encode sendResult:%d receiveResult:%d", sendResult, receiveResult)
-                av_packet_unref(receivePacket);
+                free(scaleBuffer);
+                av_frame_free(&dstFrame);
+                av_packet_free(&receivePacket);
             } while (sendResult == AVERROR(EAGAIN) && receiveResult == AVERROR(EAGAIN));
             // 清理资源
-            av_frame_unref(frame);
-            av_frame_unref(filtered_frame);
-            av_packet_unref(packet);
+            av_frame_free(&frame);
+            av_frame_free(&filtered_frame);
+            av_packet_free(&packet);
             if (receiveResult == AVERROR(EAGAIN)) {
                 continue;
             }
