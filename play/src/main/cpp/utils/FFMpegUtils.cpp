@@ -231,19 +231,16 @@ Java_com_example_play_utils_FFMpegUtils_nativeCutting(JNIEnv *env, jobject thiz,
         return -1;
     }
 
-//    result = avcodec_parameters_from_context(outStream->codecpar, encodeContext);
-//    if (result < 0) {
-//        LOGE("cutting avcodec_parameters_from_context fail,%d %s", result, av_err2str(result))
-//        return -1;
-//    }
-
     //设置对应参数
     outStream->codecpar->codec_tag = 0;
     outStream->avg_frame_rate = {fps, 1};
     outStream->time_base = outTimeBase;
+    outStream->start_time = 0;
     outStream->codecpar->width = dstWidth;
     outStream->codecpar->height = dstHeight;
-    outStream->start_time = 0;
+    av_dict_copy(&outStream->metadata, inSteram->metadata, 0);
+    outStream->side_data = inSteram->side_data;
+    outStream->nb_side_data = inSteram->nb_side_data;
     //查找解码器
     const AVCodec *encoder = avcodec_find_encoder(codec_params->codec_id);
     if (!encoder) {
@@ -272,6 +269,12 @@ Java_com_example_play_utils_FFMpegUtils_nativeCutting(JNIEnv *env, jobject thiz,
     result = avcodec_open2(encodeContext, encoder, NULL);
     if (result != 0) {
         LOGI("cutting avcodec_open2 fail,%d %s", result, av_err2str(result))
+        return -1;
+    }
+
+    result = avcodec_parameters_from_context(outStream->codecpar, encodeContext);
+    if (result < 0) {
+        LOGE("cutting avcodec_parameters_from_context fail,%d %s", result, av_err2str(result))
         return -1;
     }
 
@@ -359,10 +362,10 @@ Java_com_example_play_utils_FFMpegUtils_nativeCutting(JNIEnv *env, jobject thiz,
                 uint8_t *scaleBuffer = (uint8_t *) malloc(scaleBufferSize);
 
                 int ret = libyuv::I420Scale(
-                        frame->data[0], frame->linesize[0],
-                        frame->data[1], frame->linesize[1],
-                        frame->data[2], frame->linesize[2],
-                        frame->width, frame->height,
+                        filtered_frame->data[0], filtered_frame->linesize[0],
+                        filtered_frame->data[1], filtered_frame->linesize[1],
+                        filtered_frame->data[2], filtered_frame->linesize[2],
+                        filtered_frame->width, filtered_frame->height,
                         scaleBuffer, dstWidth,
                         scaleBuffer + dstWidth * dstHeight, dstWidth / 2,
                         scaleBuffer + dstWidth * dstHeight * 5 / 4, dstWidth / 2,
