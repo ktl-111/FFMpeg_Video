@@ -27,6 +27,7 @@ AVPacket *AVPacketQueue::pop() {
     AVPacket *packet = mQueue.front();
     mQueue.pop();
     pthread_mutex_unlock(&mMutex);
+    notify();
     return packet;
 }
 
@@ -59,6 +60,7 @@ int AVPacketQueue::popTo(AVPacket *packet) {
     av_free(pkt);
     mQueue.pop();
     pthread_mutex_unlock(&mMutex);
+    notify();
     return 0;
 }
 
@@ -73,7 +75,7 @@ bool AVPacketQueue::isFull() {
 
 void AVPacketQueue::wait(unsigned int timeOutMs) {
     pthread_mutex_lock(&mMutex);
-    LOGI("packet queue wait %d", timeOutMs)
+    LOGI("[AVPacketQueue], packet queue wait %d", timeOutMs)
     if (timeOutMs > 0) {
         struct timespec abs_time{};
         struct timeval now_time{};

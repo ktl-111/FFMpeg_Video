@@ -48,6 +48,7 @@ public:
     virtual void showFrameToWindow(AVFrame *frame);
     virtual void resultCallback(AVFrame *pFrame);
 
+    void updateTimestamp(AVFrame *frame);
 private:
     int mWidth = -1;
     int mHeight = -1;
@@ -71,8 +72,6 @@ private:
     AVMediaCodecContext *mMediaCodecContext = nullptr;
 
     SwsContext *mSwsContext = nullptr;
-
-    void updateTimestamp(AVFrame *frame);
 
     int swsScale(AVFrame *srcFrame, AVFrame *swFrame);
 

@@ -31,28 +31,50 @@ AVFrame *AVFrameQueue::pop() {
     AVFrame *packet = mQueue.front();
     mQueue.pop();
     pthread_mutex_unlock(&mMutex);
+    notify();
     return packet;
 }
 
-int AVFrameQueue::popTo(AVFrame *packet) {
+int AVFrameQueue::popTo(AVFrame *dstFrame) {
     pthread_mutex_lock(&mMutex);
     bool isEmpty = mQueue.empty() && mQueue.size() <= 0;
     if (isEmpty) {
         pthread_mutex_unlock(&mMutex);
         return -1;
     }
-    AVFrame *pkt = mQueue.front();
-    if (pkt == nullptr) {
+    AVFrame *frame = mQueue.front();
+    if (frame == nullptr) {
         LOGE("[AVFrameQueue], popTo failed")
     }
 
-    int ref = av_frame_ref(packet, pkt);
+    int ref = av_frame_ref(dstFrame, frame);
     if (ref != 0) {
         LOGE("[AVFrameQueue], popTo failed, ref: %d", ref);
     }
 
-    av_frame_free(&pkt);
+    av_frame_free(&frame);
     mQueue.pop();
+    pthread_mutex_unlock(&mMutex);
+    notify();
+    return 0;
+}
+
+int AVFrameQueue::back(AVFrame *dstFrame) {
+    pthread_mutex_lock(&mMutex);
+    bool isEmpty = mQueue.empty() && mQueue.size() <= 0;
+    if (isEmpty) {
+        pthread_mutex_unlock(&mMutex);
+        return -1;
+    }
+    AVFrame *frame = mQueue.front();
+    if (frame == nullptr) {
+        LOGE("[AVFrameQueue], back failed")
+    }
+
+    int ref = av_frame_ref(dstFrame, frame);
+    if (ref != 0) {
+        LOGE("[AVFrameQueue], back failed, ref: %d", ref);
+    }
     pthread_mutex_unlock(&mMutex);
     return 0;
 }
@@ -68,7 +90,7 @@ bool AVFrameQueue::isFull() {
 
 void AVFrameQueue::wait(unsigned int timeOutMs) {
     pthread_mutex_lock(&mMutex);
-    LOGI("packet queue wait %d", timeOutMs)
+    LOGI("[AVFrameQueue], packet queue wait %d", timeOutMs)
     if (timeOutMs > 0) {
         struct timespec abs_time{};
         struct timeval now_time{};
@@ -88,6 +110,14 @@ void AVFrameQueue::notify() {
     pthread_mutex_lock(&mMutex);
     pthread_cond_signal(&mCond);
     pthread_mutex_unlock(&mMutex);
+}
+
+int64_t AVFrameQueue::getSize() {
+    int64_t size;
+    pthread_mutex_lock(&mMutex);
+    size = (int64_t) mQueue.size();
+    pthread_mutex_unlock(&mMutex);
+    return size;
 }
 
 bool AVFrameQueue::isEmpty() {
@@ -113,3 +143,36 @@ void AVFrameQueue::clear() {
     notify();
 }
 
+int AVFrameQueue::getFrameByTime(AVFrame *dstFrame, double time, AVRational timebase) {
+    pthread_mutex_lock(&mMutex);
+    int ret = -1;
+    bool isPop = false;
+    if (mQueue.size() > 0) {
+        AVFrame *srcFrame = mQueue.front();
+        ret = av_frame_ref(dstFrame, srcFrame);
+        double pts = dstFrame->pts;
+        pts *= av_q2d(timebase);
+        LOGI("[AVFrameQueue], getFrameByTime %lf %d", pts, ret)
+        if (ret == 0 && time >= pts) {
+            mQueue.pop();
+            av_frame_free(&srcFrame);
+            srcFrame = nullptr;
+            isPop = true;
+        } else if (srcFrame->data[0] != NULL && time >= pts) {
+            memcpy(dstFrame->data, srcFrame->data, sizeof(srcFrame->data));
+            mQueue.pop();
+            av_frame_free(&srcFrame);
+            srcFrame = nullptr;
+            ret = 0;
+            isPop = true;
+        }
+    } else {
+        LOGI("[AVFrameQueue] is empty")
+        ret = AVERROR(EAGAIN);
+    }
+    pthread_mutex_unlock(&mMutex);
+    if (isPop) {
+        notify();
+    }
+    return ret;
+}

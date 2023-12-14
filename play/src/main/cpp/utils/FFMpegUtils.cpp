@@ -98,6 +98,7 @@ Java_com_example_play_utils_FFMpegUtils_nativeCutting(JNIEnv *env, jobject thiz,
     const char *c_srcPath = env->GetStringUTFChars(src_path, nullptr);
     const char *c_desPath = env->GetStringUTFChars(dest_path, nullptr);
     int timeBaseDiff = 1500;
+    int scale = 2;
     AVRational outTimeBase = {1, fps * timeBaseDiff};
     LOGI("cutting config,start_time:%lf end_time:%lf fps:%d timeBase:{%d,%d}", start_time, end_time,
          fps, outTimeBase.num, outTimeBase.den)
@@ -133,8 +134,8 @@ Java_com_example_play_utils_FFMpegUtils_nativeCutting(JNIEnv *env, jobject thiz,
 
     AVCodecContext *decodecContext = avcodec_alloc_context3(decoder);
     result = avcodec_parameters_to_context(decodecContext, codec_params);
-    int dstWidth = decodecContext->width / 2;
-    int dstHeight = decodecContext->height / 2;
+    int dstWidth = decodecContext->width / scale;
+    int dstHeight = decodecContext->height / scale;
     LOGI("decodecContext %d*%d ", decodecContext->width, decodecContext->height)
     if (result != 0) {
         LOGE("cutting avcodec_parameters_to_context fail,%d %s", result, av_err2str(result))
@@ -225,7 +226,6 @@ Java_com_example_play_utils_FFMpegUtils_nativeCutting(JNIEnv *env, jobject thiz,
         LOGE("cutting avformat_new_stream fail,%d %s", result, av_err2str(result))
         return -1;
     }
-
     if (avcodec_parameters_copy(outStream->codecpar, codec_params) < 0) {
         LOGE("cutting avcodec_parameters_copy fail,%d %s", result, av_err2str(result))
         return -1;
@@ -379,6 +379,9 @@ Java_com_example_play_utils_FFMpegUtils_nativeCutting(JNIEnv *env, jobject thiz,
                 dstFrame->linesize[2] = dstWidth / 2;
                 dstFrame->width = dstWidth;
                 dstFrame->height = dstHeight;
+                LOGI("cutting I420Scale %d*%d->%d*%d %f", filtered_frame->width,
+                     filtered_frame->height, dstFrame->width, dstFrame->height, dstFrame->pts *
+                                                                                av_q2d(outTimeBase))
                 sendResult = avcodec_send_frame(encodeContext, dstFrame);
                 if (sendResult == 0) {
                     receiveResult = avcodec_receive_packet(encodeContext, receivePacket);

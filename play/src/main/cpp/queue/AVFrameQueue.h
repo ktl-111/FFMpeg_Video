@@ -18,29 +18,32 @@ public:
 
     void push(AVFrame *frame);
 
-    AVFrame* pop();
+    AVFrame *pop();
 
-    int popTo(AVFrame *packet);
+    int popTo(AVFrame *dstFrame);
+    int back(AVFrame *packet);
 
     void clear();
 
     bool isFull();
 
     bool isEmpty();
+    int64_t getSize();
 
     void wait(unsigned int timeOutMs = -1);
 
     void notify();
 
-private:
+    int getFrameByTime(AVFrame *dstFrame, double time, AVRational timebase);
+
     int64_t mMaxSize = 60;
+private:
 
     std::queue<AVFrame *> mQueue;
 
     pthread_cond_t mCond{};
     pthread_mutex_t mMutex{};
 };
-
 
 
 #endif //VIDEOLEARN_AVFRAMEQUEUE_H

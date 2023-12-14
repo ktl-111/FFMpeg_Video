@@ -2,7 +2,7 @@
 #include "FFMpegPlayer.h"
 
 void my_logoutput(void *ptr, int level, const char *fmt, va_list vl) {
-    LOGI("%s", fmt)
+    LOGI(fmt, vl)
 }
 
 extern "C"

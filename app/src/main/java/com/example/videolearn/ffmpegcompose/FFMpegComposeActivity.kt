@@ -1,8 +1,12 @@
 package com.example.videolearn.ffmpegcompose
 
 import android.Manifest
+import android.content.ContentResolver
+import android.content.Context
+import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.Matrix
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Environment
@@ -11,6 +15,7 @@ import android.view.Surface
 import android.view.SurfaceHolder
 import android.view.SurfaceView
 import android.view.ViewGroup.LayoutParams
+import android.webkit.MimeTypeMap
 import android.widget.Toast
 import androidx.activity.compose.setContent
 import androidx.appcompat.app.AppCompatActivity
@@ -19,6 +24,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -32,8 +38,10 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.Button
 import androidx.compose.material.Text
+import androidx.compose.material.TextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
@@ -42,6 +50,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -53,6 +62,7 @@ import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -68,15 +78,13 @@ import com.example.videolearn.R
 import com.example.videolearn.ffmpegcompose.bean.VideoBean
 import com.example.videolearn.utils.DisplayUtil
 import com.example.videolearn.utils.ResultUtils
-import com.luck.picture.lib.basic.PictureSelector
-import com.luck.picture.lib.config.SelectMimeType
-import com.luck.picture.lib.entity.LocalMedia
-import com.luck.picture.lib.interfaces.OnResultCallbackListener
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.io.File
+import java.io.FileOutputStream
+import java.io.IOException
 import java.nio.ByteBuffer
 import java.util.concurrent.Executors
 import kotlin.math.abs
@@ -91,7 +99,7 @@ class FFMpegComposeActivity : AppCompatActivity() {
     private val videoList = mutableStateListOf<VideoBean>()
     private var mVideoDuration = 0L
     private val mFps = mutableStateOf(0)
-    private val mCurrPlayTime = mutableStateOf(0f)
+    private val mCurrPlayTime = mutableStateOf(0.toDouble())
     private var isSeek = mutableStateOf(false)
 
     val itemSize = 40
@@ -102,9 +110,6 @@ class FFMpegComposeActivity : AppCompatActivity() {
         it.add(BtnBean("cutting") {
             cutting()
         })
-//        it.add(BtnBean("testSeek") {
-//            testSeek()
-//        })
         it.add(BtnBean("start") {
             start()
         })
@@ -198,7 +203,7 @@ class FFMpegComposeActivity : AppCompatActivity() {
                     }
 
                     override fun onPalyProgress(time: Double) {
-                        updateUi(time.toFloat() / 1000)
+                        updateUi(time / 1000)
                     }
 
                     override fun onPalyComplete() {
@@ -225,7 +230,7 @@ class FFMpegComposeActivity : AppCompatActivity() {
         playManager?.pause()
     }
 
-    private fun updateUi(time: Float) {
+    private fun updateUi(time: Double) {
         MediaScope.launch(Dispatchers.Main) {
             mCurrPlayTime.value = time
             Log.i(TAG, "updateUi: ${time}")
@@ -245,34 +250,67 @@ class FFMpegComposeActivity : AppCompatActivity() {
             if (!result) {
                 return@singlePermissions
             }
-            PictureSelector.create(this)
-                .openSystemGallery(SelectMimeType.ofVideo())
-                .forSystemResult(object : OnResultCallbackListener<LocalMedia> {
-                    override fun onResult(result: ArrayList<LocalMedia>) {
-                        path = result.get(0).availablePath
-                        Log.i(TAG, "onResult: ${path}")
+            val intent = Intent()
+            intent.type = "video/*"
+            intent.action = Intent.ACTION_GET_CONTENT
+            ResultUtils.getInstance(this)
+                .request(
+                    Intent.createChooser(intent, "选择视频"),
+                    100
+                ) { requestCode, resultCode, data ->
+                    if (resultCode == RESULT_OK) {
+                        val uri = data.data
+                        val uriToFileApiQ = uriToFileApiQ(uri, this)
+                        Log.i(TAG, "onActivityResult: ${uriToFileApiQ?.absolutePath}")
+                        path = uriToFileApiQ?.absolutePath
                     }
-
-                    override fun onCancel() {
-
-                    }
-                })
+                }
         }
     }
+
+    fun uriToFileApiQ(uri: Uri?, context: Context): File? {
+        var file: File? = null
+        if (uri == null) return file
+        //android10以上转换
+        if (uri.scheme == ContentResolver.SCHEME_FILE) {
+            file = File(uri.path)
+        } else if (uri.scheme == ContentResolver.SCHEME_CONTENT) {
+            //把文件复制到沙盒目录
+            val contentResolver = context.contentResolver
+            val displayName = (System.currentTimeMillis() + Math.round((Math.random() + 1) * 1000)
+                    ).toString() + "." + MimeTypeMap.getSingleton()
+                .getExtensionFromMimeType(contentResolver.getType(uri))
+            try {
+                val `is` = contentResolver.openInputStream(uri)
+                val cache = File(context.cacheDir.absolutePath, displayName)
+                val fos = FileOutputStream(cache)
+                `is`!!.copyTo(fos)
+                file = cache
+                fos.close()
+                `is`.close()
+            } catch (e: IOException) {
+                e.printStackTrace()
+            }
+        }
+        return file
+    }
+
+    val singleCoroutine = Executors.newSingleThreadExecutor().asCoroutineDispatcher()
+    var preTime = 0.toDouble()
 
     private fun seek(index: Int, offset: Int, itemWidthPx: Float) {
         if (!isSeek.value) {
             return
         }
         MediaScope.launch(singleCoroutine) {
-            val scale = offset / itemWidthPx
-            val seek = 1f * scale + index
+            val scale = offset / itemWidthPx.toDouble()
+            val seek = 1 * scale + index
             if (seek == preTime) {
                 Log.i(TAG, "itemChange seek == preTime")
                 return@launch
             }
             mCurrPlayTime.value = seek
-            if (seek != 0f) {
+            if (seek != 0.toDouble()) {
                 val diffSeek = abs(seek - preTime)
                 val minSeek = 1f / mFps.value
                 if (diffSeek < minSeek) {
@@ -283,37 +321,38 @@ class FFMpegComposeActivity : AppCompatActivity() {
             preTime = seek
             Log.i(TAG, "itemChange seek:$seek index:$index offset:$offset")
             playManager?.apply {
-                seekTo(seek.toDouble())
+                seekTo(seek)
+            }
+        }
+    }
+
+    private fun seekto(seekTime: Double) {
+        MediaScope.launch(singleCoroutine) {
+            Log.i(TAG, "seekto: ${seekTime}")
+            playManager?.apply {
+                seekTo(seekTime)
             }
         }
     }
 
     private fun cutting() {
         path?.also {
-            if (it.isNotEmpty() && !it.startsWith("http")) {
-                ResultUtils.getInstance(this)
-                    .singlePermissions(Manifest.permission.WRITE_EXTERNAL_STORAGE) { reuslt ->
-                        Log.i(TAG, "cutting: $reuslt")
-                        if (!reuslt) {
-                            return@singlePermissions
-                        }
+            MediaScope.launch {
+                if (it.isNotEmpty() && !it.startsWith("http")) {
 //                        val outFile = File(Environment.getExternalStorageDirectory(), "testout.mp4")
-                        val outFile = File(application.externalCacheDir, "testout.mp4")
-                        if (!outFile.exists()) {
-                            outFile.createNewFile()
-                        } else {
-                            outFile.delete()
-                        }
-                        Log.i(TAG, "cutting file:${outFile.absolutePath}")
-                        val destPath = outFile.absolutePath
-                        FFMpegUtils.cutting(path!!, destPath, 3.toDouble(), 10.toDouble(), 24)
+                    val outFile = File(application.externalCacheDir, "testout.mp4")
+                    if (!outFile.exists()) {
+                        outFile.createNewFile()
+                    } else {
+                        outFile.delete()
                     }
+                    Log.i(TAG, "cutting file:${outFile.absolutePath}")
+                    val destPath = outFile.absolutePath
+                    FFMpegUtils.cutting(path!!, destPath, 3.toDouble(), 10.toDouble(), 24)
+                }
             }
         }
     }
-
-    val singleCoroutine = Executors.newSingleThreadExecutor().asCoroutineDispatcher()
-    var preTime = 0f
 
     private fun testSeek() {
         MediaScope.launch {
@@ -425,7 +464,7 @@ class FFMpegComposeActivity : AppCompatActivity() {
     fun rootView(
         videoList: SnapshotStateList<VideoBean>,
         fps: MutableState<Int>,
-        currPlayTime: MutableState<Float>
+        currPlayTime: MutableState<Double>
     ) {
         Column(
             modifier = Modifier
@@ -578,6 +617,21 @@ class FFMpegComposeActivity : AppCompatActivity() {
                 items(btnList) {
                     commonButton(it.str, modifier = Modifier.weight(1f), it.onclick)
                 }
+            }
+            Row {
+                var text by remember {
+                    mutableStateOf("")
+                }
+                commonButton(text = "seek to", modifier = Modifier.weight(1.0f)) {
+                    seekto(text.toDouble())
+                }
+                TextField(
+                    value = text,
+                    onValueChange = { text = it },
+                    modifier = Modifier.weight(1.0f),
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                )
             }
         }
     }

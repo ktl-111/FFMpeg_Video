@@ -237,10 +237,12 @@ void VideoDecoder::resultCallback(AVFrame *pAvFrame) {
                              pAvFrame->width, pAvFrame->height, 1);
 
         if (swsScale(pAvFrame, swFrame) > 0) {
+            LOGI("resultCallback swsScale done")
             if (mOnFrameArrivedListener) {
                 mOnFrameArrivedListener(swFrame);
             }
-        }else{
+            LOGI("resultCallback swsScale end")
+        } else {
             LOGE("showFrameToWindow swsScale fail")
         }
 
@@ -252,7 +254,7 @@ void VideoDecoder::resultCallback(AVFrame *pAvFrame) {
 
 void VideoDecoder::showFrameToWindow(AVFrame *pFrame) {
     //硬解,并且配置直接关联surface,format为mediacoder
-    LOGI("showFrameToWindow %ld", pFrame->pts)
+    LOGI("showFrameToWindow")
     if (isHwDecoder()) {
         auto startTime = std::chrono::steady_clock::now();
         //直接渲染到surface
@@ -266,7 +268,9 @@ void VideoDecoder::showFrameToWindow(AVFrame *pFrame) {
         //将yuv数据转成rgb
 
         //windowBuffer 入参出参,
-        ANativeWindow_lock(nativeWindow, &windowBuffer, nullptr);
+
+        int result = ANativeWindow_lock(nativeWindow, &windowBuffer, nullptr);
+        LOGI("showFrameToWindow ANativeWindow_lock %d %s", result, av_err2str(result))
 
         //转成数组
         auto *dstWindow = static_cast<uint8_t *>(windowBuffer.bits);
@@ -281,11 +285,10 @@ void VideoDecoder::showFrameToWindow(AVFrame *pFrame) {
         }
         auto endTime = std::chrono::steady_clock::now();
         auto diffMilli = std::chrono::duration<double, std::milli>(endTime - startTime).count();
-        LOGI("video rgb->显示 耗时:%f毫秒", diffMilli);
-        ANativeWindow_unlockAndPost(nativeWindow);
+        LOGI("video rgb->显示 耗时:%f毫秒", diffMilli)
+        result = ANativeWindow_unlockAndPost(nativeWindow);
+        LOGI("showFrameToWindow ANativeWindow_unlockAndPost %d %s", result, av_err2str(result))
     }
-
-
 }
 
 int VideoDecoder::swsScale(AVFrame *srcFrame, AVFrame *swFrame) {
@@ -372,11 +375,11 @@ void VideoDecoder::avSync(AVFrame *frame) {
 }
 
 int VideoDecoder::seek(double pos) {
-//    flush();
+    flush();
     int64_t seekPos = av_rescale_q((int64_t) (pos * AV_TIME_BASE), AV_TIME_BASE_Q, mTimeBase);
     int ret = avformat_seek_file(mFtx, getStreamIndex(),
                                  INT64_MIN, seekPos, INT64_MAX,
-                                 AVSEEK_FLAG_ANY);
+                                 AVSEEK_FLAG_FRAME);
     LOGE("[video] seek to: %f, seekPos: %" PRId64 ", ret: %d", pos, seekPos, ret)
     // seek后需要恢复起始时间
     mFixStartTime = true;
