@@ -86,6 +86,8 @@ public:
 private:
     bool mHasAbort = false;
     bool mIsMute = false;
+    double preSeekTime=-1;
+    bool isSeek = false;
 
     JavaVM *mJvm = nullptr;
     PlayerJniContext mPlayerJni{};
@@ -115,7 +117,7 @@ private:
     int readAvPacketToQueue(ReadPackType type);
 
     bool pushPacketToQueue(AVPacket *packet, const std::shared_ptr<AVPacketQueue> &queue) const;
-    bool pushFrameToQueue(AVFrame *packet, const std::shared_ptr<AVFrameQueue> &queue) const;
+    bool pushFrameToQueue(AVFrame *frame, const std::shared_ptr<AVFrameQueue> &queue) const;
 
     void ReadPacketLoop();
     void ReadVideoFrameLoop();

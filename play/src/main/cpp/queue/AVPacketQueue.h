@@ -23,7 +23,6 @@ public:
     int popTo(AVPacket *packet);
 
     void clear();
-
     bool isFull();
 
     bool isEmpty();

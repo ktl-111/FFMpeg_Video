@@ -156,7 +156,7 @@ bool VideoDecoder::prepare(JNIEnv *env) {
 
     mStartTimeMsForSync = -1;
     mRetryReceiveCount = RETRY_RECEIVE_COUNT;
-    LOGI("codec name: %s,mFps: %f", mVideoCodec->name, mFps)
+    LOGI("[video] prepare name: %s,mFps: %f,%d*%d", mVideoCodec->name, mFps, mWidth, mHeight)
 
     return true;
 }
@@ -214,33 +214,34 @@ int VideoDecoder::decode(AVPacket *avPacket, AVFrame *frame) {
             "[video] avcodec_receive_frame...pts: %" PRId64 ", time: %f, format: %d, need retry: %d",
             pAvFrame->pts, ptsMs, pAvFrame->format, mNeedResent)
 
-    if (mOutConfig) {
-        if (!mBuffersinkContext || !mBuffersrcContext) {
-            initFilter();
-        }
-
-        AVFrame *filtered_frame = av_frame_alloc();
-        int frameFlags = av_buffersrc_add_frame_flags(mBuffersrcContext, pAvFrame,
-                                                      AV_BUFFERSRC_FLAG_KEEP_REF);
-        int buffersinkGetFrame = av_buffersink_get_frame(mBuffersinkContext, filtered_frame);
-        if (frameFlags <
-            0 ||
-            buffersinkGetFrame < 0) {
-            LOGE("decode 无法通过filter图处理帧 %d %d", frameFlags, buffersinkGetFrame);
-            if (buffersinkGetFrame == AVERROR(EAGAIN)) {
-                av_frame_free(&filtered_frame);
-            }
-            return AVERROR(EAGAIN);
-        }
-        av_frame_ref(frame, filtered_frame);
-        frame->pts = filtered_frame->pts * TimeBaseDiff;
-        frame->pkt_dts = filtered_frame->pts * TimeBaseDiff;
-        frame->time_base = mOutConfig->getTimeBase();
-        av_frame_free(&filtered_frame);
-    } else {
-        av_frame_ref(frame, pAvFrame);
-        frame->time_base = mTimeBase;
-    }
+//    if (mOutConfig && mOutConfig->getFps() != getCodecContext()->framerate.num) {
+//        if (!mBuffersinkContext || !mBuffersrcContext) {
+//            initFilter();
+//        }
+//        AVFrame *filtered_frame = av_frame_alloc();
+//        int frameFlags = av_buffersrc_add_frame_flags(mBuffersrcContext, pAvFrame,
+//                                                      AV_BUFFERSRC_FLAG_KEEP_REF);
+////        int buffersinkGetFrame = av_buffersink_get_frame(mBuffersinkContext, filtered_frame);
+//        int buffersinkGetFrame = av_buffersink_get_frame_flags(mBuffersinkContext, filtered_frame,
+//                                                               AV_BUFFERSINK_FLAG_PEEK);
+//        if (frameFlags <
+//            0 ||
+//            buffersinkGetFrame < 0) {
+//            LOGE("decode 无法通过filter图处理帧 %d %d", frameFlags, buffersinkGetFrame);
+//            if (buffersinkGetFrame == AVERROR(EAGAIN)) {
+//                av_frame_free(&filtered_frame);
+//            }
+//            return AVERROR(EAGAIN);
+//        }
+//        av_frame_ref(frame, filtered_frame);
+//        frame->pts = filtered_frame->pts * TimeBaseDiff;
+//        frame->pkt_dts = filtered_frame->pts * TimeBaseDiff;
+//        frame->time_base = mOutConfig->getTimeBase();
+//        av_frame_free(&filtered_frame);
+//    } else {
+    av_frame_ref(frame, pAvFrame);
+    frame->time_base = mTimeBase;
+//    }
 
     av_frame_free(&pAvFrame);
 
@@ -500,9 +501,9 @@ int VideoDecoder::getHeight() const {
 }
 
 double VideoDecoder::getFps() const {
-    if (mOutConfig) {
-        return mOutConfig->getFps();
-    }
+//    if (mOutConfig) {
+//        return mOutConfig->getFps();
+//    }
     return mFps;
 }
 
@@ -525,7 +526,7 @@ int VideoDecoder::seek(double pos) {
     int64_t seekPos = av_rescale_q((int64_t) (pos * AV_TIME_BASE), AV_TIME_BASE_Q, mTimeBase);
     int ret = avformat_seek_file(mFtx, getStreamIndex(),
                                  INT64_MIN, seekPos, INT64_MAX,
-                                 AVSEEK_FLAG_FRAME);
+                                 0);
     LOGE("[video] seek to: %f, seekPos: %" PRId64 ", ret: %d", pos, seekPos, ret)
     // seek后需要恢复起始时间
     mFixStartTime = true;

@@ -21,7 +21,7 @@ public:
     AVFrame *pop();
 
     int popTo(AVFrame *dstFrame);
-    int back(AVFrame *packet);
+    int front(AVFrame *packet);
 
     void clear();
 
@@ -34,7 +34,7 @@ public:
 
     void notify();
 
-    int getFrameByTime(AVFrame *dstFrame, double time, AVRational timebase);
+    int getFrameByTime(AVFrame *dstFrame, double time, bool  isBack);
 
     int64_t mMaxSize = 60;
 private:
