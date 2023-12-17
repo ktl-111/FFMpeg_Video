@@ -71,7 +71,7 @@ public:
 
     void init(JNIEnv *env, jobject thiz);
 
-    bool prepare(JNIEnv *env, std::string &path, jobject surface);
+    bool prepare(JNIEnv *env, std::string &path, jobject surface, jobject out_config);
 
     void start();
 

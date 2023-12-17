@@ -29,15 +29,13 @@ extern "C"
 JNIEXPORT jboolean JNICALL
 Java_com_example_play_proxy_FFMpegProxy_nativePrepare(JNIEnv *env, jobject thiz,
                                                       jlong native_manager, jstring path,
-                                                      jobject surface) {
-    LOGI("nativePrepare manager:%ld", native_manager)
+                                                      jobject surface, jobject out_config) {
     auto *pPlayer = reinterpret_cast<FFMpegPlayer *>(native_manager);
-    LOGI("nativePrepare manager:%p", &pPlayer)
     const char *c_path = env->GetStringUTFChars(path, nullptr);
     std::string s_path = c_path;
     bool result = false;
     if (pPlayer != nullptr) {
-        result = pPlayer->prepare(env, s_path, surface);
+        result = pPlayer->prepare(env, s_path, surface, out_config);
     }
     if (c_path != nullptr) {
         env->ReleaseStringUTFChars(path, c_path);

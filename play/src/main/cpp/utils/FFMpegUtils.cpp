@@ -3,6 +3,7 @@
 #include <loghelper.h>
 #include "../reader/FFVideoReader.h"
 #include "libyuv/scale.h"
+#include "../globals.h"
 
 extern "C" {
 #include "libavfilter/avfilter.h"
@@ -97,9 +98,8 @@ Java_com_example_play_utils_FFMpegUtils_nativeCutting(JNIEnv *env, jobject thiz,
                                                       jdouble end_time, jint fps) {
     const char *c_srcPath = env->GetStringUTFChars(src_path, nullptr);
     const char *c_desPath = env->GetStringUTFChars(dest_path, nullptr);
-    int timeBaseDiff = 1500;
     int scale = 2;
-    AVRational outTimeBase = {1, fps * timeBaseDiff};
+    AVRational outTimeBase = {1, fps * TimeBaseDiff};
     LOGI("cutting config,start_time:%lf end_time:%lf fps:%d timeBase:{%d,%d}", start_time, end_time,
          fps, outTimeBase.num, outTimeBase.den)
 
@@ -286,8 +286,10 @@ Java_com_example_play_utils_FFMpegUtils_nativeCutting(JNIEnv *env, jobject thiz,
     }
 
     LOGI("cutting seek")
-    av_seek_frame(inFormatContext, video_stream_index, start_time / av_q2d(inTimeBase),
-                  AVSEEK_FLAG_ANY);
+    if (start_time > 0) {
+        av_seek_frame(inFormatContext, video_stream_index, start_time / av_q2d(inTimeBase),
+                      AVSEEK_FLAG_ANY);
+    }
 
     int writeFramsCount = 0;
     while (1) {
@@ -333,7 +335,6 @@ Java_com_example_play_utils_FFMpegUtils_nativeCutting(JNIEnv *env, jobject thiz,
                 av_packet_unref(packet);
                 break;
             }
-
             AVFrame *filtered_frame = av_frame_alloc();
             // 将帧发送到filter图中
             int frameFlags = av_buffersrc_add_frame_flags(buffersrcContext, frame,
@@ -344,13 +345,20 @@ Java_com_example_play_utils_FFMpegUtils_nativeCutting(JNIEnv *env, jobject thiz,
                 buffersinkGetFrame < 0) {
                 LOGE("无法通过filter图处理帧 %d %d", frameFlags, buffersinkGetFrame);
                 if (buffersinkGetFrame == AVERROR(EAGAIN)) {
-                    av_frame_unref(frame);
-                    av_frame_unref(filtered_frame);
-                    av_packet_unref(packet);
+                    av_frame_free(&frame);
+                    av_frame_free(&filtered_frame);
+                    av_packet_free(&packet);
                     continue;
                 }
                 return -1;
             }
+            int64_t pts = av_rescale_q_rnd(filtered_frame->pts,
+                                           {1, 60},
+                                           {1, 24},
+                                           (AVRounding) (AV_ROUND_NEAR_INF | AV_ROUND_PASS_MINMAX));
+            LOGI("cutting filterframe %ld(%f)  %ld", filtered_frame->pts * TimeBaseDiff,
+                 filtered_frame->pts * TimeBaseDiff *
+                 av_q2d(outTimeBase), pts)
             do {
                 sendResult = -1;
                 receiveResult = -1;
@@ -388,8 +396,8 @@ Java_com_example_play_utils_FFMpegUtils_nativeCutting(JNIEnv *env, jobject thiz,
                     if (receiveResult == 0) {
                         receivePacket->stream_index = video_stream_index;
                         receivePacket->pts = writeFramsCount;
-                        receivePacket->dts = receivePacket->pts - timeBaseDiff;
-                        receivePacket->duration = timeBaseDiff;
+                        receivePacket->dts = receivePacket->pts - TimeBaseDiff;
+                        receivePacket->duration = TimeBaseDiff;
 
                         LOGI("cutting av_interleaved_write_frame result pts:%ld %f dts:%ld %f duration:%ld %f",
                              receivePacket->pts,
@@ -402,7 +410,7 @@ Java_com_example_play_utils_FFMpegUtils_nativeCutting(JNIEnv *env, jobject thiz,
                         result = av_write_frame(outFormatContext,
                                                 receivePacket);
                         if (result == 0) {
-                            writeFramsCount += timeBaseDiff;
+                            writeFramsCount += TimeBaseDiff;
                         } else {
                             LOGI("cutting av_interleaved_write_frame fail result %d %s", result,
                                  av_err2str(result))
@@ -441,7 +449,7 @@ Java_com_example_play_utils_FFMpegUtils_nativeCutting(JNIEnv *env, jobject thiz,
                 receivePacket->stream_index = video_stream_index;
                 receivePacket->pts = writeFramsCount;
                 receivePacket->dts = receivePacket->pts;
-                receivePacket->duration = timeBaseDiff;
+                receivePacket->duration = TimeBaseDiff;
 
                 LOGI("cutting av_interleaved_write_frame result pts:%ld %f dts:%ld %f duration:%ld %f",
                      receivePacket->pts,
@@ -454,7 +462,7 @@ Java_com_example_play_utils_FFMpegUtils_nativeCutting(JNIEnv *env, jobject thiz,
                 int result = av_write_frame(outFormatContext,
                                             receivePacket);
                 if (result == 0) {
-                    writeFramsCount += timeBaseDiff;
+                    writeFramsCount += TimeBaseDiff;
                 } else {
                     LOGI("cutting av_interleaved_write_frame fail result %d %s", result,
                          av_err2str(result))

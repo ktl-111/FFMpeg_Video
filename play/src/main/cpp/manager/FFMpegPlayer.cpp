@@ -30,13 +30,12 @@ bool resultIsFail(int result) {
     return result < 0;
 }
 
-bool FFMpegPlayer::prepare(JNIEnv *env, std::string &path, jobject surface) {
+bool FFMpegPlayer::prepare(JNIEnv *env, std::string &path, jobject surface, jobject out_config) {
     if (mJvm == nullptr) {
         env->GetJavaVM(&mJvm);
     }
     // 设置JavaVM，否则无法进行硬解码
     av_jni_set_java_vm(mJvm, nullptr);
-
     //分配 mAvFormatContext
     mAvFormatContext = avformat_alloc_context();
 
@@ -60,11 +59,35 @@ bool FFMpegPlayer::prepare(JNIEnv *env, std::string &path, jobject surface) {
         AVStream *pStream = mAvFormatContext->streams[i];
         AVCodecParameters *codecpar = pStream->codecpar;
         if (codecpar->codec_type == AVMEDIA_TYPE_VIDEO) {
+            std::shared_ptr<OutConfig> outConfig;
+            if (out_config) {
+                jclass outConfigClass = env->GetObjectClass(out_config);
+                jfieldID outWidthId = env->GetFieldID(outConfigClass, "width", "I");
+                jint outWidth = env->GetIntField(out_config, outWidthId);
+
+                jfieldID outHeightId = env->GetFieldID(outConfigClass, "height", "I");
+                jint outHeight = env->GetIntField(out_config, outHeightId);
+
+                jfieldID outFpsId = env->GetFieldID(outConfigClass, "fps", "D");
+                jdouble outFps = env->GetDoubleField(out_config, outFpsId);
+
+                outConfig = std::make_shared<OutConfig>(outWidth, outHeight, outFps);
+
+                LOGI("set out config,width:%d,height:%d,fps:%f", outWidth, outHeight, outFps)
+            } else {
+                LOGE("not out config")
+            }
             //视频流
             LOGI("video stream,index:%d result:%d", i, mPlayerJni.isValid())
             mVideoDecoder = std::make_shared<VideoDecoder>(i, mAvFormatContext);
+            int frameSize = 50;
+            if (outConfig) {
+                mVideoDecoder->setOutConfig(outConfig);
+                frameSize = outConfig->getFps() * 5;
+            }
+
             mVideoPacketQueue = std::make_shared<AVPacketQueue>(50);
-            mVideoFrameQueue = std::make_shared<AVFrameQueue>(50);
+            mVideoFrameQueue = std::make_shared<AVFrameQueue>(frameSize);
             mVideoThread = new std::thread(&FFMpegPlayer::VideoDecodeLoop, this);
             mVideoDecodeThread = new std::thread(&FFMpegPlayer::ReadVideoFrameLoop, this);
 
@@ -143,6 +166,7 @@ bool FFMpegPlayer::seekTo(double seekTime) {
     }
 
     AVFrame *pFrame = av_frame_alloc();
+
     int ret = mVideoFrameQueue->getFrameByTime(pFrame, seekTime, mVideoDecoder->getTimeBase());
     if (ret != 0) {
         LOGE("seek %lf get frame fail %d", seekTime, ret)
@@ -156,7 +180,7 @@ bool FFMpegPlayer::seekTo(double seekTime) {
         }
         return false;
     }
-    double frameTime = pFrame->pts * av_q2d(mVideoDecoder->getTimeBase());
+    double frameTime = pFrame->pts * av_q2d(pFrame->time_base);
     if (seekTime > frameTime) {
         LOGI("seek %lf done,show %lf,continue seek", seekTime, frameTime)
         av_frame_free(&pFrame);

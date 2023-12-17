@@ -1,0 +1,5 @@
+
+#ifndef VIDEOLEARN_GLOBALS_H
+#define VIDEOLEARN_GLOBALS_H
+const int TimeBaseDiff = 1500;
+#endif //VIDEOLEARN_GLOBALS_H

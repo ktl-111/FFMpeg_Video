@@ -54,6 +54,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.painter.BitmapPainter
@@ -72,6 +73,7 @@ import androidx.constraintlayout.compose.Dimension
 import androidx.core.graphics.drawable.toBitmap
 import com.example.play.IPalyListener
 import com.example.play.PlayManager
+import com.example.play.config.OutConfig
 import com.example.play.utils.FFMpegUtils
 import com.example.videolearn.MediaScope
 import com.example.videolearn.R
@@ -99,6 +101,7 @@ class FFMpegComposeActivity : AppCompatActivity() {
     private val videoList = mutableStateListOf<VideoBean>()
     private var mVideoDuration = 0L
     private val mFps = mutableStateOf(0)
+    private val mSize = mutableStateOf(Size(0f, 0f))
     private val mCurrPlayTime = mutableStateOf(0.toDouble())
     private var isSeek = mutableStateOf(false)
 
@@ -127,7 +130,7 @@ class FFMpegComposeActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContent { rootView(videoList, mFps, mCurrPlayTime) }
+        setContent { rootView(videoList, mFps, mCurrPlayTime, mSize) }
         //直播地址
 //         path = "http://zhibo.hkstv.tv/livestream/mutfysrq/playlist.m3u8"
 //         path = "http://39.135.138.58:18890/PLTV/88888888/224/3221225630/index.m3u8"
@@ -198,6 +201,7 @@ class FFMpegComposeActivity : AppCompatActivity() {
                             surfaceView.requestLayout()
 
                             mFps.value = fps.toInt()
+                            mSize.value = Size(witdh.toFloat(), height.toFloat())
                         }
                         initGetVideoFrames()
                     }
@@ -210,7 +214,8 @@ class FFMpegComposeActivity : AppCompatActivity() {
                     }
 
                 })
-                perpare(path, surface)
+                perpare(path, surface, OutConfig(1080 / 2, 720 / 2, 24.toDouble()))
+//                perpare(path, surface)
             }
         }.start()
     }
@@ -348,7 +353,7 @@ class FFMpegComposeActivity : AppCompatActivity() {
                     }
                     Log.i(TAG, "cutting file:${outFile.absolutePath}")
                     val destPath = outFile.absolutePath
-                    FFMpegUtils.cutting(path!!, destPath, 3.toDouble(), 10.toDouble(), 24)
+                    FFMpegUtils.cutting(path!!, destPath, 0.toDouble(), 5.toDouble(), 24)
                 }
             }
         }
@@ -457,14 +462,15 @@ class FFMpegComposeActivity : AppCompatActivity() {
         rootView(videoList.apply {
             add(VideoBean(1))
             add(VideoBean(2))
-        }, mFps, mCurrPlayTime)
+        }, mFps, mCurrPlayTime, mSize)
     }
 
     @Composable
     fun rootView(
         videoList: SnapshotStateList<VideoBean>,
         fps: MutableState<Int>,
-        currPlayTime: MutableState<Double>
+        currPlayTime: MutableState<Double>,
+        size: MutableState<Size>
     ) {
         Column(
             modifier = Modifier
@@ -505,7 +511,10 @@ class FFMpegComposeActivity : AppCompatActivity() {
                         .border(width = 1.dp, color = Color.Red)
                         .align(Alignment.Center)
                 )
-                Text(text = "fps:${fps.value}\ncurrTime:${currPlayTime.value}", color = Color.Red)
+                Text(
+                    text = "fps:${fps.value}    ${size.value.width}*${size.value.height}    currTime:${currPlayTime.value}",
+                    color = Color.Red
+                )
             }
             Column(
                 modifier = Modifier

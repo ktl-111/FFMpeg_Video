@@ -9,6 +9,7 @@ include_directories(utils)
 include_directories(libyuv)
 include_directories(manager)
 include_directories(queue)
+include_directories(config)
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -L${CMAKE_SOURCE_DIR}/ffmpeg/${ANDROID_ABI}")
 
@@ -23,6 +24,7 @@ aux_source_directory(manager MANAGERSOURCE)
 aux_source_directory(decoder DECODESOURCE)
 aux_source_directory(queue QUEUESOURCE)
 aux_source_directory(include INCLUDESOURCE)
+aux_source_directory(config CONFIGESOURCE)
 
 if(${ANDROID_ABI} MATCHES "armeabi-v7a")
     include_directories(include/armeabi-v7a)
@@ -43,6 +45,7 @@ add_library(ffmpegplayer SHARED
         ${MANAGERSOURCE}
         ${DECODESOURCE}
         ${QUEUESOURCE}
+        ${CONFIGESOURCE}
         ${YUVSOURCE})
 
 target_link_libraries(

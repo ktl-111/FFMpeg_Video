@@ -2,6 +2,8 @@
 #include "../utils/loghelper.h"
 #include "../utils/CommonUtils.h"
 #include "../reader/FFVideoReader.h"
+#include "libyuv/scale.h"
+#include "../globals.h"
 
 static enum AVPixelFormat hw_pix_fmt = AV_PIX_FMT_NONE;
 
@@ -28,6 +30,12 @@ VideoDecoder::~VideoDecoder() {
 
 void VideoDecoder::setSurface(jobject surface) {
     mSurface = surface;
+}
+
+void VideoDecoder::setOutConfig(const std::shared_ptr<OutConfig> outConfig) {
+    mOutConfig = outConfig;
+    LOGI("setOutConfig %d*%d src %d*%d", mOutConfig->getWidth(), mOutConfig->getHeight(),
+         (outConfig)->getWidth(), (outConfig)->getHeight())
 }
 
 bool VideoDecoder::prepare(JNIEnv *env) {
@@ -162,7 +170,6 @@ int VideoDecoder::decode(AVPacket *avPacket, AVFrame *frame) {
     // 主动塞到队列中的flush帧
     bool isEof = avPacket->size == 0 && avPacket->data == nullptr;
     int sendRes = avcodec_send_packet(mCodecContext, avPacket);
-    int64_t sendPoint = getCurrentTimeMs() - start;
 
     bool isKeyFrame = avPacket->flags & AV_PKT_FLAG_KEY;
     LOGI(
@@ -173,7 +180,6 @@ int VideoDecoder::decode(AVPacket *avPacket, AVFrame *frame) {
     mNeedResent = sendRes == AVERROR(EAGAIN);
 
     int receiveRes = AVERROR_EOF;
-    int receiveCount = 0;
     AVFrame *pAvFrame = av_frame_alloc();
     start = getCurrentTimeMs();
     // avcodec_receive_frame的-11，表示需要发新帧
@@ -207,49 +213,116 @@ int VideoDecoder::decode(AVPacket *avPacket, AVFrame *frame) {
     LOGI(
             "[video] avcodec_receive_frame...pts: %" PRId64 ", time: %f, format: %d, need retry: %d",
             pAvFrame->pts, ptsMs, pAvFrame->format, mNeedResent)
-    int64_t receivePoint = getCurrentTimeMs() - start;
 
-    av_frame_ref(frame, pAvFrame);
+    if (mOutConfig) {
+        if (!mBuffersinkContext || !mBuffersrcContext) {
+            initFilter();
+        }
+
+        AVFrame *filtered_frame = av_frame_alloc();
+        int frameFlags = av_buffersrc_add_frame_flags(mBuffersrcContext, pAvFrame,
+                                                      AV_BUFFERSRC_FLAG_KEEP_REF);
+        int buffersinkGetFrame = av_buffersink_get_frame(mBuffersinkContext, filtered_frame);
+        if (frameFlags <
+            0 ||
+            buffersinkGetFrame < 0) {
+            LOGE("decode 无法通过filter图处理帧 %d %d", frameFlags, buffersinkGetFrame);
+            if (buffersinkGetFrame == AVERROR(EAGAIN)) {
+                av_frame_free(&filtered_frame);
+            }
+            return AVERROR(EAGAIN);
+        }
+        av_frame_ref(frame, filtered_frame);
+        frame->pts = filtered_frame->pts * TimeBaseDiff;
+        frame->pkt_dts = filtered_frame->pts * TimeBaseDiff;
+        frame->time_base = mOutConfig->getTimeBase();
+        av_frame_free(&filtered_frame);
+    } else {
+        av_frame_ref(frame, pAvFrame);
+        frame->time_base = mTimeBase;
+    }
 
     av_frame_free(&pAvFrame);
-    receiveCount++;
 
-    LOGW(
-            "[video] decode sendPoint: %" PRId64 ", receivePoint: %" PRId64 ", receiveCount: %d",
-            sendPoint, receivePoint, receiveCount)
+    LOGI("[video] decode done,pts:%ld(%f)", frame->pts, frame->pts * av_q2d(frame->time_base));
     return receiveRes;
 }
 
 void VideoDecoder::resultCallback(AVFrame *pAvFrame) {
     updateTimestamp(pAvFrame);
-
     if (isHwDecoder()) {
         if (mOnFrameArrivedListener) {
             mOnFrameArrivedListener(pAvFrame);
         }
     } else { // mAvFrame->format == AV_PIX_FMT_YUV420P10LE先转为RGBA进行渲染
-        AVFrame *swFrame = av_frame_alloc();
-        int size = av_image_get_buffer_size(AV_PIX_FMT_RGBA, pAvFrame->width, pAvFrame->height,
+        int dstWidth;
+        int dstHeight;
+        if (mOutConfig) {
+            dstWidth = getWidth();
+            dstHeight = getHeight();
+        } else {
+            dstWidth = pAvFrame->width;
+            dstHeight = pAvFrame->height;
+        }
+        bool needScale = false;
+        if (dstWidth != pAvFrame->width || dstHeight != pAvFrame->height) {
+            needScale = true;
+        }
+        AVFrame *srcFrame;
+        if (needScale) {
+            int size = av_image_get_buffer_size(mCodecContext->pix_fmt, dstWidth, dstHeight,
+                                                1);
+            uint8_t *scaleBuffer = static_cast<uint8_t *>(av_malloc(size * sizeof(uint8_t)));
+            AVFrame *scaleFrame = av_frame_alloc();
+            av_image_fill_arrays(scaleFrame->data, scaleFrame->linesize, scaleBuffer,
+                                 mCodecContext->pix_fmt,
+                                 dstWidth, dstHeight, 1);
+
+            libyuv::I420Scale(pAvFrame->data[0], pAvFrame->linesize[0],
+                              pAvFrame->data[1], pAvFrame->linesize[1],
+                              pAvFrame->data[2], pAvFrame->linesize[2],
+                              pAvFrame->width, pAvFrame->height,
+                              scaleFrame->data[0], scaleFrame->linesize[0],
+                              scaleFrame->data[1], scaleFrame->linesize[1],
+                              scaleFrame->data[2], scaleFrame->linesize[2],
+                              dstWidth, dstHeight, libyuv::kFilterNone);
+            scaleFrame->format = pAvFrame->format;
+            scaleFrame->width = dstWidth;
+            scaleFrame->height = dstHeight;
+            srcFrame = scaleFrame;
+        } else {
+            srcFrame = pAvFrame;
+        }
+
+        AVFrame *dstFrame = av_frame_alloc();
+        int size = av_image_get_buffer_size(AV_PIX_FMT_RGBA, dstWidth, dstHeight,
                                             1);
         shadowedOutbuffer = static_cast<uint8_t *>(av_malloc(size * sizeof(uint8_t)));
-        av_image_fill_arrays(swFrame->data, swFrame->linesize, shadowedOutbuffer,
+        av_image_fill_arrays(dstFrame->data, dstFrame->linesize, shadowedOutbuffer,
                              AV_PIX_FMT_RGBA,
-                             pAvFrame->width, pAvFrame->height, 1);
+                             dstWidth, dstHeight, 1);
 
-        if (swsScale(pAvFrame, swFrame) > 0) {
+        dstFrame->format = AV_PIX_FMT_RGBA;
+        dstFrame->width = dstWidth;
+        dstFrame->height = dstHeight;
+        if (swsScale(srcFrame, dstFrame) > 0) {
             LOGI("resultCallback swsScale done")
             if (mOnFrameArrivedListener) {
-                mOnFrameArrivedListener(swFrame);
+                mOnFrameArrivedListener(dstFrame);
             }
             LOGI("resultCallback swsScale end")
         } else {
             LOGE("showFrameToWindow swsScale fail")
         }
 
-        av_frame_free(&swFrame);
-        av_freep(&swFrame);
+        av_frame_free(&dstFrame);
+        av_freep(&dstFrame);
         av_free(shadowedOutbuffer);
+        if (needScale) {
+            av_frame_free(&srcFrame);
+        }
     }
+
 }
 
 void VideoDecoder::showFrameToWindow(AVFrame *pFrame) {
@@ -276,7 +349,7 @@ void VideoDecoder::showFrameToWindow(AVFrame *pFrame) {
         auto *dstWindow = static_cast<uint8_t *>(windowBuffer.bits);
 
         startTime = std::chrono::steady_clock::now();
-        for (int i = 0; i < mCodecContext->height / scale; ++i) {
+        for (int i = 0; i < getHeight(); ++i) {
             //从rgbFrame->data中拷贝数据到window中
             //windowBuffer.stride * 4 === 像素*4个字节(rgba)
             memcpy(dstWindow + i * windowBuffer.stride * 4,
@@ -291,11 +364,15 @@ void VideoDecoder::showFrameToWindow(AVFrame *pFrame) {
     }
 }
 
-int VideoDecoder::swsScale(AVFrame *srcFrame, AVFrame *swFrame) {
+int VideoDecoder::swsScale(AVFrame *srcFrame, AVFrame *dstFrame) {
     if (mSwsContext == nullptr) {
+        LOGI("swsScale %d,%d,%d   %d,%d,%d", srcFrame->width, srcFrame->height,
+             AVPixelFormat(srcFrame->format), dstFrame->width, dstFrame->height,
+             AVPixelFormat(dstFrame->format))
         mSwsContext = sws_getContext(srcFrame->width, srcFrame->height,
                                      AVPixelFormat(srcFrame->format),
-                                     srcFrame->width, srcFrame->height, AV_PIX_FMT_RGBA,
+                                     dstFrame->width, dstFrame->height,
+                                     AVPixelFormat(dstFrame->format),
                                      SWS_BICUBIC, nullptr, nullptr, nullptr);
         if (!mSwsContext) {
             return -1;
@@ -308,22 +385,82 @@ int VideoDecoder::swsScale(AVFrame *srcFrame, AVFrame *swFrame) {
                         srcFrame->linesize,
                         0,
                         srcFrame->height,
-                        swFrame->data,
-                        swFrame->linesize
+                        dstFrame->data,
+                        dstFrame->linesize
     );
-
-    // buffer is right, but some property lost
-    if (swFrame->format == AV_PIX_FMT_NONE) {
-        swFrame->format = AV_PIX_FMT_RGBA;
-        swFrame->width = srcFrame->width;
-        swFrame->height = srcFrame->height;
-    }
 
     return ret;
 }
 
 int64_t VideoDecoder::getTimestamp() const {
     return mCurTimeStampMs;
+}
+
+bool VideoDecoder::initFilter() {
+    //设置filter
+    const AVFilter *buffersrc = avfilter_get_by_name("buffer");
+    const AVFilter *buffersink = avfilter_get_by_name("buffersink");
+    AVFilterGraph *filter_graph = avfilter_graph_alloc();
+
+    if (!buffersrc || !buffersink || !filter_graph) {
+        LOGE("initFilter buffersrc  buffersink avfilter_graph_alloc fail")
+        return -1;
+    }
+
+    char args[512];
+    /* buffer video source: the decoded frames from the decoder will be inserted here. */
+    snprintf(args, sizeof(args),
+             "video_size=%dx%d:pix_fmt=%d:time_base=%d/%d:pixel_aspect=%d/%d",
+             getCodecContext()->width, getCodecContext()->height, getCodecContext()->pix_fmt,
+             getTimeBase().num, getTimeBase().den,
+             getCodecContext()->sample_aspect_ratio.num,
+             getCodecContext()->sample_aspect_ratio.den);
+    LOGI("initFilter args %s", args)
+    int result = avfilter_graph_create_filter(&mBuffersrcContext, buffersrc, "in",
+                                              args, NULL, filter_graph);
+
+    if (result != 0) {
+        LOGE("initFilter buffersrc fail,%d %s", result, av_err2str(result))
+        return false;
+    }
+
+    result = avfilter_graph_create_filter(&mBuffersinkContext, buffersink, "out",
+                                          NULL, NULL, filter_graph);
+    if (result != 0) {
+        LOGE("initFilter buffersink fail,%d %s", result, av_err2str(result))
+        return false;
+    }
+    AVFilterInOut *outputs = avfilter_inout_alloc();
+    AVFilterInOut *inputs = avfilter_inout_alloc();
+    //in->fps filter的输入端口名称
+    //outputs->源头的输出
+    outputs->name = av_strdup("in");
+    outputs->filter_ctx = mBuffersrcContext;
+    outputs->pad_idx = 0;
+    outputs->next = NULL;
+    //out->fps filter的输出端口名称
+    //outputs->filter后的输入
+    inputs->name = av_strdup("out");
+    inputs->filter_ctx = mBuffersinkContext;
+    inputs->pad_idx = 0;
+    inputs->next = NULL;
+    const char *fpsTag = "fps=";
+    char *fpsFilter = new char[strlen(fpsTag), sizeof(mOutConfig->getFps())];
+    sprintf(fpsFilter, "%s%f", fpsTag, mOutConfig->getFps());
+    LOGI("initFilter fpsfilter:%s", fpsFilter)
+    //buffer->输出(outputs)->filter in(av_strdup("in")->fps filter->filter out(av_strdup("out"))->输入(inputs)->buffersink
+    result = avfilter_graph_parse_ptr(filter_graph, fpsFilter, &inputs, &outputs, NULL);
+    if (result != 0) {
+        LOGE("checkFrame avfilter_graph_parse_ptr fail,%d %s", result, av_err2str(result))
+        return false;
+    }
+    result = avfilter_graph_config(filter_graph, NULL);
+    if (result != 0) {
+        LOGE("initFilter avfilter_graph_config fail,%d %s", result, av_err2str(result))
+        return false;
+    }
+    LOGI("initFilter success")
+    return true;
 }
 
 void VideoDecoder::updateTimestamp(AVFrame *frame) {
@@ -333,13 +470,13 @@ void VideoDecoder::updateTimestamp(AVFrame *frame) {
     }
 
     int64_t pts = 0;
-    if (frame->pkt_dts != AV_NOPTS_VALUE) {
-        pts = frame->pkt_dts;
-    } else if (frame->pts != AV_NOPTS_VALUE) {
+    if (frame->pts != AV_NOPTS_VALUE) {
         pts = frame->pts;
+    } else if (frame->pkt_dts != AV_NOPTS_VALUE) {
+        pts = frame->pkt_dts;
     }
     // s -> ms
-    mCurTimeStampMs = (int64_t) (pts * av_q2d(mTimeBase) * 1000);
+    mCurTimeStampMs = (int64_t) (pts * av_q2d(frame->time_base) * 1000);
 
     if (mFixStartTime) {
         mStartTimeMsForSync = getCurrentTimeMs() - mCurTimeStampMs;
@@ -349,14 +486,23 @@ void VideoDecoder::updateTimestamp(AVFrame *frame) {
 }
 
 int VideoDecoder::getWidth() const {
+    if (mOutConfig) {
+        return mOutConfig->getWidth();
+    }
     return mWidth;
 }
 
 int VideoDecoder::getHeight() const {
+    if (mOutConfig) {
+        return mOutConfig->getHeight();
+    }
     return mHeight;
 }
 
 double VideoDecoder::getFps() const {
+    if (mOutConfig) {
+        return mOutConfig->getFps();
+    }
     return mFps;
 }
 
@@ -418,6 +564,16 @@ void VideoDecoder::release() {
         mCodecContext = nullptr;
         LOGI("codec...release")
     }
+    mOutConfig = nullptr;
+    if (mBuffersrcContext) {
+        avfilter_free(mBuffersrcContext);
+        mBuffersrcContext = nullptr;
+    }
+    if (mBuffersinkContext) {
+        avfilter_free(mBuffersinkContext);
+        mBuffersinkContext = nullptr;
+    }
+
 }
 
 int VideoDecoder::getRotate() {

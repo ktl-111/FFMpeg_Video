@@ -151,7 +151,7 @@ int AVFrameQueue::getFrameByTime(AVFrame *dstFrame, double time, AVRational time
         AVFrame *srcFrame = mQueue.front();
         ret = av_frame_ref(dstFrame, srcFrame);
         double pts = dstFrame->pts;
-        pts *= av_q2d(timebase);
+        pts *= av_q2d(dstFrame->time_base);
         LOGI("[AVFrameQueue], getFrameByTime %lf %d", pts, ret)
         if (ret == 0 && time >= pts) {
             mQueue.pop();

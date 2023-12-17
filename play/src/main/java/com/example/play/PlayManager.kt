@@ -2,24 +2,25 @@ package com.example.play
 
 import android.util.Log
 import android.view.Surface
+import com.example.play.config.OutConfig
 import com.example.play.proxy.FFMpegProxy
 
 class PlayManager : IPaly {
     private val TAG = "PlayManager"
     private lateinit var mProxy: IPaly
-    private var iPalyListener:IPalyListener?=null
+    private var iPalyListener: IPalyListener? = null
     override fun init(iPalyListener: IPalyListener?) {
         this.iPalyListener = iPalyListener
     }
 
-    override fun perpare(path: String, surface: Surface) {
+    override fun perpare(path: String, surface: Surface, outConfig: OutConfig?) {
         if (path.isEmpty()) {
             Log.i(TAG, "perpare path is empty")
             return
         }
         mProxy = FFMpegProxy()
         mProxy.init(iPalyListener)
-        mProxy.perpare(path, surface)
+        mProxy.perpare(path, surface, outConfig)
     }
 
     override fun start() {

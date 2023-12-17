@@ -4,6 +4,7 @@
 #include <jni.h>
 #include <functional>
 #include <string>
+#include <OutConfig.h>
 #include "BaseDecoder.h"
 #include <android/native_window_jni.h>
 
@@ -12,6 +13,9 @@ extern "C" {
 #include "../include/libswscale/swscale.h"
 #include "../include/libavutil/imgutils.h"
 #include "../include/libavutil/display.h"
+#include "libavfilter/avfilter.h"
+#include "libavfilter/buffersrc.h"
+#include "libavfilter/buffersink.h"
 }
 
 class VideoDecoder : public BaseDecoder {
@@ -29,11 +33,13 @@ public:
 
     void setSurface(jobject surface);
 
+    void setOutConfig(const std::shared_ptr<OutConfig> outConfig);
+
     virtual double getDuration() override;
 
     virtual bool prepare(JNIEnv *env) override;
 
-    virtual int decode(AVPacket *packet,AVFrame *frame) override;
+    virtual int decode(AVPacket *packet, AVFrame *frame) override;
 
     virtual void avSync(AVFrame *frame) override;
 
@@ -46,14 +52,15 @@ public:
     int getRotate();
 
     virtual void showFrameToWindow(AVFrame *frame);
+
     virtual void resultCallback(AVFrame *pFrame);
 
     void updateTimestamp(AVFrame *frame);
+
 private:
     int mWidth = -1;
     int mHeight = -1;
     double mFps = -1;
-    int scale = 1;
     uint8_t *shadowedOutbuffer;
     ANativeWindow *nativeWindow;
     ANativeWindow_Buffer windowBuffer;
@@ -64,7 +71,9 @@ private:
     int64_t mCurTimeStampMs = 0;
 
     jobject mSurface = nullptr;
-
+    std::shared_ptr<OutConfig> mOutConfig = nullptr;
+    AVFilterContext *mBuffersrcContext;
+    AVFilterContext *mBuffersinkContext;
     AVBufferRef *mHwDeviceCtx = nullptr;
 
     const AVCodec *mVideoCodec = nullptr;
@@ -73,9 +82,11 @@ private:
 
     SwsContext *mSwsContext = nullptr;
 
-    int swsScale(AVFrame *srcFrame, AVFrame *swFrame);
+    int swsScale(AVFrame *srcFrame, AVFrame *dstFrame);
 
     bool isHwDecoder();
+
+    bool initFilter();
 };
 
 
