@@ -63,23 +63,21 @@ int AVFrameQueue::front(AVFrame *dstFrame) {
     pthread_mutex_lock(&mMutex);
     bool isEmpty = mQueue.empty() && mQueue.size() <= 0;
     if (isEmpty) {
-        pthread_mutex_unlock(&mMutex);
         LOGE("[AVFrameQueue], front empty")
+        pthread_mutex_unlock(&mMutex);
         return -1;
     }
     AVFrame *frame = mQueue.front();
     if (frame == nullptr) {
         LOGE("[AVFrameQueue], front failed")
-        return -1;
     }
 
     int ref = av_frame_ref(dstFrame, frame);
     if (ref != 0) {
-        LOGE("[AVFrameQueue], front failed, ref: %d", ref);
-        return -1;
+        LOGE("[AVFrameQueue], front failed, ref: %d %s", ref, av_err2str(ref));
     }
     pthread_mutex_unlock(&mMutex);
-    return 0;
+    return ref;
 }
 
 bool AVFrameQueue::isFull() {
@@ -132,6 +130,7 @@ bool AVFrameQueue::isEmpty() {
 }
 
 void AVFrameQueue::clear() {
+    LOGI("[AVFrameQueue], clear queue,start")
     pthread_mutex_lock(&mMutex);
     int64_t size = mQueue.size();
     LOGI("[AVFrameQueue], clear queue, size: %" PRId64, size)
@@ -146,34 +145,33 @@ void AVFrameQueue::clear() {
     notify();
 }
 
-int AVFrameQueue::getFrameByTime(AVFrame *dstFrame, double time, bool isBack) {
+int AVFrameQueue::getFrameByTime(AVFrame *dstFrame, int64_t time, bool isBack) {
     pthread_mutex_lock(&mMutex);
     int ret = -1;
     bool isPop = false;
-    if (mQueue.size() > 0) {
-        AVFrame *srcFrame = mQueue.front();
-        ret = av_frame_ref(dstFrame, srcFrame);
-        double pts = dstFrame->pts;
-        pts *= av_q2d(dstFrame->time_base);
-        LOGI("[AVFrameQueue], getFrameByTime %lf %d", pts, ret)
-        if (!isBack) {
-            if (ret == 0 && time >= pts) {
+    if (mQueue.empty()) {
+        LOGI("[AVFrameQueue] is empty")
+        ret = AVERROR(EAGAIN);
+    } else {
+        while (!mQueue.empty()) {
+            AVFrame *srcFrame = mQueue.front();
+            int64_t pts = srcFrame->pts;
+            pts *= av_q2d(srcFrame->time_base) * 1000;
+            LOGI("[AVFrameQueue], getFrameByTime %ld %ld", pts, time)
+
+            if (pts >= time) {
+                ret = av_frame_ref(dstFrame, srcFrame);
+                if (ret != 0 && srcFrame->data[0] != NULL) {
+                    memcpy(dstFrame->data, srcFrame->data, sizeof(srcFrame->data));
+                }
+                break;
+            } else {
                 mQueue.pop();
                 av_frame_free(&srcFrame);
                 srcFrame = nullptr;
-                isPop = true;
-            } else if (srcFrame->data[0] != NULL && time >= pts) {
-                memcpy(dstFrame->data, srcFrame->data, sizeof(srcFrame->data));
-                mQueue.pop();
-                av_frame_free(&srcFrame);
-                srcFrame = nullptr;
-                ret = 0;
                 isPop = true;
             }
         }
-    } else {
-        LOGI("[AVFrameQueue] is empty")
-        ret = AVERROR(EAGAIN);
     }
     pthread_mutex_unlock(&mMutex);
     if (isPop) {

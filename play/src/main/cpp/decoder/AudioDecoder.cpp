@@ -297,7 +297,7 @@ double AudioDecoder::getDuration() {
     return mDuration;
 }
 
-int AudioDecoder::seek(double pos) {
+int AudioDecoder::seek(int64_t pos) {
 //    flush();
 //    int64_t seekPos = av_rescale_q((int64_t) (pos * AV_TIME_BASE), AV_TIME_BASE_Q, mTimeBase);
 //    int ret = avformat_seek_file(mFtx, getStreamIndex(),

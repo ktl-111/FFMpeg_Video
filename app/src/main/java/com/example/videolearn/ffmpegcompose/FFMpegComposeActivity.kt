@@ -82,7 +82,19 @@ import com.example.videolearn.utils.DisplayUtil
 import com.example.videolearn.utils.ResultUtils
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.asCoroutineDispatcher
+import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.buffer
+import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.channelFlow
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import java.io.File
 import java.io.FileOutputStream
@@ -144,6 +156,7 @@ class FFMpegComposeActivity : AppCompatActivity() {
         path = File(Environment.getExternalStorageDirectory(), "douyon.mp4").absolutePath
 //        path = File(Environment.getExternalStorageDirectory(), "VID_20230511_004231.mp4").absolutePath
 //        path = File(application.externalCacheDir, "vid_test1.mp4").absolutePath
+        initSeekFlow()
     }
 
     private fun playtest() {
@@ -202,8 +215,21 @@ class FFMpegComposeActivity : AppCompatActivity() {
 
                             mFps.value = fps.toInt()
                             mSize.value = Size(witdh.toFloat(), height.toFloat())
+
+                            val size = duration.toInt()
+                            Log.i(TAG, "onStart duration:${duration}")
+                            val ptsArrays = DoubleArray(size)
+                            for (i in 0 until size) {
+                                ptsArrays[i] = i.toDouble()
+                            }
+                            val list = mutableListOf<VideoBean>().apply {
+                                for (time in 0..duration.toLong()) {
+                                    add(VideoBean(time))
+                                }
+                            }
+                            videoList.addAll(list)
                         }
-                        initGetVideoFrames()
+//                        initGetVideoFrames()
                     }
 
                     override fun onPalyProgress(time: Double) {
@@ -302,40 +328,59 @@ class FFMpegComposeActivity : AppCompatActivity() {
 
     val singleCoroutine = Executors.newSingleThreadExecutor().asCoroutineDispatcher()
     var preTime = 0.toDouble()
+    val seekFlow = MutableSharedFlow<Double>(1, 0, BufferOverflow.DROP_OLDEST)
+    fun initSeekFlow() {
+        MediaScope.launch(Dispatchers.IO) {
+            seekFlow
+                .distinctUntilChanged()
+                .onEach { seekTime ->
+                    Log.i(TAG, "flow seek: ${seekTime}")
+                    playManager?.apply {
+                        seekTo((seekTime * 1000).toLong())
+                    }
+                }
+                .collect()
+        }
+    }
 
     private fun seek(index: Int, offset: Int, itemWidthPx: Float) {
         if (!isSeek.value) {
             return
         }
-        MediaScope.launch(singleCoroutine) {
+        MediaScope.launch(Dispatchers.IO) {
             val scale = offset / itemWidthPx.toDouble()
             val seek = 1 * scale + index
-            if (seek == preTime) {
-                Log.i(TAG, "itemChange seek == preTime")
-                return@launch
-            }
-            mCurrPlayTime.value = seek
-            if (seek != 0.toDouble()) {
-                val diffSeek = abs(seek - preTime)
-                val minSeek = 1f / mFps.value
-                if (diffSeek < minSeek) {
-                    Log.i(TAG, "itemChange filter diffSeek:$diffSeek minSeek:${minSeek}")
-                    return@launch
-                }
-            }
-            preTime = seek
-            Log.i(TAG, "itemChange seek:$seek index:$index offset:$offset")
-            playManager?.apply {
-                seekTo(seek)
-            }
+            Log.i(TAG, "ui seek: ${seek}")
+            seekFlow.emit(seek)
         }
+
+//            if (seek == preTime) {
+//                Log.i(TAG, "itemChange seek == preTime")
+//                return@launch
+//            }
+//            mCurrPlayTime.value = seek
+//            if (seek != 0.toDouble()) {
+//                val diffSeek = abs(seek - preTime)
+//                val minSeek = 1f / mFps.value
+//                if (diffSeek < minSeek) {
+//                    Log.i(TAG, "itemChange filter diffSeek:$diffSeek minSeek:${minSeek}")
+//                    return@launch
+//                }
+//            }
+//            preTime = seek
+//
+//            Log.i(TAG, "itemChange seek:$seek index:$index offset:$offset")
+//            playManager?.apply {
+//                seekTo(seek * 1000)
+//            }
     }
 
     private fun seekto(seekTime: Double) {
         MediaScope.launch(singleCoroutine) {
             Log.i(TAG, "seekto: ${seekTime}")
             playManager?.apply {
-                seekTo(seekTime)
+                mCurrPlayTime.value -= 1.0f / mFps.value
+                seekTo((mCurrPlayTime.value * 1000).toLong())
             }
         }
     }
@@ -632,7 +677,13 @@ class FFMpegComposeActivity : AppCompatActivity() {
                     mutableStateOf("")
                 }
                 commonButton(text = "seek to", modifier = Modifier.weight(1.0f)) {
-                    seekto(text.toDouble())
+                    seekto(text.let {
+                        if (it.isEmpty()) {
+                            0.toDouble()
+                        } else {
+                            it.toDouble()
+                        }
+                    })
                 }
                 TextField(
                     value = text,

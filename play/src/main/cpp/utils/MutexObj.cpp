@@ -22,3 +22,11 @@ void MutexObj::wait() {
     pthread_cond_wait(&mCond, &mMutex);
     pthread_mutex_unlock(&mMutex);
 }
+
+void MutexObj::lock() {
+    pthread_mutex_lock(&mMutex);
+}
+
+void MutexObj::unlock() {
+    pthread_mutex_unlock(&mMutex);
+}

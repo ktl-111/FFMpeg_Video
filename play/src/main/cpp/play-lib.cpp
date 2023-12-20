@@ -89,7 +89,7 @@ extern "C"
 JNIEXPORT jboolean JNICALL
 Java_com_example_play_proxy_FFMpegProxy_nativeSeekTo(JNIEnv *env, jobject thiz,
                                                      jlong native_manager,
-                                                     jdouble seekTime) {
+                                                     jlong seekTime) {
     FFMpegPlayer *pPlayer = reinterpret_cast<FFMpegPlayer *>(native_manager);
     if (pPlayer != nullptr) {
         return pPlayer->seekTo(seekTime);

@@ -22,7 +22,9 @@ static enum AVPixelFormat get_hw_format(AVCodecContext *ctx,
     return AV_PIX_FMT_NONE;
 }
 
-VideoDecoder::VideoDecoder(int index, AVFormatContext *ftx) : BaseDecoder(index, ftx) {}
+VideoDecoder::VideoDecoder(int index, AVFormatContext *ftx) : BaseDecoder(index, ftx) {
+    mSeekMutexObj = std::make_shared<MutexObj>();
+}
 
 VideoDecoder::~VideoDecoder() {
     release();
@@ -166,11 +168,10 @@ bool VideoDecoder::isHwDecoder() {
 }
 
 int VideoDecoder::decode(AVPacket *avPacket, AVFrame *frame) {
-    int64_t start = getCurrentTimeMs();
     // 主动塞到队列中的flush帧
+    LOGI("decode start pts:%ld dts:%ld", avPacket->pts, avPacket->dts)
     bool isEof = avPacket->size == 0 && avPacket->data == nullptr;
     int sendRes = avcodec_send_packet(mCodecContext, avPacket);
-
     bool isKeyFrame = avPacket->flags & AV_PKT_FLAG_KEY;
     LOGI(
             "[video] avcodec_send_packet...pts: %" PRId64 ", dts: %" PRId64 ", isKeyFrame: %d, res: %d, isEof: %d",
@@ -181,7 +182,6 @@ int VideoDecoder::decode(AVPacket *avPacket, AVFrame *frame) {
 
     int receiveRes = AVERROR_EOF;
     AVFrame *pAvFrame = av_frame_alloc();
-    start = getCurrentTimeMs();
     // avcodec_receive_frame的-11，表示需要发新帧
     receiveRes = avcodec_receive_frame(mCodecContext, pAvFrame);
 
@@ -193,8 +193,8 @@ int VideoDecoder::decode(AVPacket *avPacket, AVFrame *frame) {
     }
 
     if (receiveRes != 0) {
-        LOGE("[video] avcodec_receive_frame err: %d, resent: %d, retry count: %" PRId64,
-             receiveRes, mNeedResent, mRetryReceiveCount)
+        LOGE("[video] avcodec_receive_frame err: %d, resent: %d, retry count: %" PRId64" %p",
+             receiveRes, mNeedResent, mRetryReceiveCount, &pAvFrame)
         av_frame_free(&pAvFrame);
         // decode and receive frame arrived EOF
         if (isEof && receiveRes == AVERROR_EOF) {
@@ -243,9 +243,9 @@ int VideoDecoder::decode(AVPacket *avPacket, AVFrame *frame) {
     frame->time_base = mTimeBase;
 //    }
 
+    LOGI("[video] decode done,pts:%ld(%f) %p", frame->pts, frame->pts * av_q2d(frame->time_base),
+         &pAvFrame);
     av_frame_free(&pAvFrame);
-
-    LOGI("[video] decode done,pts:%ld(%f)", frame->pts, frame->pts * av_q2d(frame->time_base));
     return receiveRes;
 }
 
@@ -359,7 +359,8 @@ void VideoDecoder::showFrameToWindow(AVFrame *pFrame) {
         }
         auto endTime = std::chrono::steady_clock::now();
         auto diffMilli = std::chrono::duration<double, std::milli>(endTime - startTime).count();
-        LOGI("video rgb->显示 耗时:%f毫秒", diffMilli)
+        LOGI("video rgb->显示 耗时:%f毫秒 pts:%ld(%f)", diffMilli, pFrame->pts,
+             pFrame->pts * av_q2d(pFrame->time_base))
         result = ANativeWindow_unlockAndPost(nativeWindow);
         LOGI("showFrameToWindow ANativeWindow_unlockAndPost %d %s", result, av_err2str(result))
     }
@@ -464,6 +465,14 @@ bool VideoDecoder::initFilter() {
     return true;
 }
 
+void VideoDecoder::lock() {
+    mSeekMutexObj->lock();
+}
+
+void VideoDecoder::unlock() {
+    mSeekMutexObj->unlock();
+}
+
 void VideoDecoder::updateTimestamp(AVFrame *frame) {
     if (mStartTimeMsForSync < 0) {
         LOGE("update video start time")
@@ -478,7 +487,7 @@ void VideoDecoder::updateTimestamp(AVFrame *frame) {
     }
     // s -> ms
     mCurTimeStampMs = (int64_t) (pts * av_q2d(frame->time_base) * 1000);
-
+    LOGI("updateTimestamp updateTimestamp:%ld pts:%ld", mCurTimeStampMs, pts)
     if (mFixStartTime) {
         mStartTimeMsForSync = getCurrentTimeMs() - mCurTimeStampMs;
         mFixStartTime = false;
@@ -521,13 +530,14 @@ void VideoDecoder::avSync(AVFrame *frame) {
     }
 }
 
-int VideoDecoder::seek(double pos) {
-    flush();
-    int64_t seekPos = av_rescale_q((int64_t) (pos * AV_TIME_BASE), AV_TIME_BASE_Q, mTimeBase);
+int VideoDecoder::seek(int64_t pos) {
+    int64_t seekPos = av_rescale_q((int64_t) (pos * AV_TIME_BASE) / 1000, AV_TIME_BASE_Q,
+                                   mTimeBase);
     int ret = avformat_seek_file(mFtx, getStreamIndex(),
                                  INT64_MIN, seekPos, INT64_MAX,
                                  0);
-    LOGE("[video] seek to: %f, seekPos: %" PRId64 ", ret: %d", pos, seekPos, ret)
+    flush();
+    LOGE("[video] seek to: %ld, seekPos: %" PRId64 ", ret: %d", pos, seekPos, ret)
     // seek后需要恢复起始时间
     mFixStartTime = true;
     return ret;

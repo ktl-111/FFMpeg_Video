@@ -46,7 +46,7 @@ int BaseDecoder::getStreamIndex() const {
 void BaseDecoder::avSync(AVFrame *frame) {
 }
 
-int BaseDecoder::seek(double pos) {
+int BaseDecoder::seek(int64_t pos) {
     return -1;
 }
 

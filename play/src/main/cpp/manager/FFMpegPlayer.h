@@ -81,13 +81,15 @@ public:
 
     void stop();
 
-    bool seekTo(double seekTime);
+    bool seekTo(int64_t seekTime);
 
 private:
     bool mHasAbort = false;
     bool mIsMute = false;
-    double preSeekTime=-1;
+    int64_t preSeekTime = -1;
     bool isSeek = false;
+    bool isBackSeek = false;
+    int64_t currSeekTime = -1;
 
     JavaVM *mJvm = nullptr;
     PlayerJniContext mPlayerJni{};

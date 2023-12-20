@@ -29,7 +29,7 @@ public:
 
     virtual void avSync(AVFrame *frame);
 
-    virtual int seek(double pos);
+    virtual int seek(int64_t pos);
 
     virtual void flush();
 

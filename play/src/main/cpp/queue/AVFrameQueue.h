@@ -34,7 +34,7 @@ public:
 
     void notify();
 
-    int getFrameByTime(AVFrame *dstFrame, double time, bool  isBack);
+    int getFrameByTime(AVFrame *dstFrame, int64_t time, bool  isBack);
 
     int64_t mMaxSize = 60;
 private:

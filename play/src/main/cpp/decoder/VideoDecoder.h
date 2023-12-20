@@ -4,8 +4,10 @@
 #include <jni.h>
 #include <functional>
 #include <string>
+#include <map>
 #include <OutConfig.h>
 #include "BaseDecoder.h"
+#include "MutexObj.h"
 #include <android/native_window_jni.h>
 
 extern "C" {
@@ -43,7 +45,7 @@ public:
 
     virtual void avSync(AVFrame *frame) override;
 
-    virtual int seek(double pos) override;
+    virtual int seek(int64_t pos) override;
 
     virtual void release() override;
 
@@ -57,6 +59,10 @@ public:
 
     void updateTimestamp(AVFrame *frame);
 
+    void lock();
+
+    void unlock();
+
 private:
     int mWidth = -1;
     int mHeight = -1;
@@ -64,6 +70,7 @@ private:
     uint8_t *shadowedOutbuffer;
     ANativeWindow *nativeWindow;
     ANativeWindow_Buffer windowBuffer;
+    std::shared_ptr<MutexObj> mSeekMutexObj;
 
     int RETRY_RECEIVE_COUNT = 7;
 

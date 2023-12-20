@@ -28,7 +28,7 @@ public:
 
     virtual void avSync(AVFrame *frame) override;
 
-    virtual int seek(double pos) override;
+    virtual int seek(int64_t pos) override;
 
     virtual void release() override;
 

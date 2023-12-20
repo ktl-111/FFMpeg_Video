@@ -15,6 +15,10 @@ public:
 
     void wait();
 
+    void lock();
+
+    void unlock();
+
 private:
     pthread_cond_t mCond{};
     pthread_mutex_t mMutex{};
