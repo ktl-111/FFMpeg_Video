@@ -163,8 +163,8 @@ bool VideoDecoder::prepare(JNIEnv *env) {
     return true;
 }
 
-bool VideoDecoder::isHwDecoder() {
-    return false;
+bool VideoDecoder::isHwDecoder(AVFrame *frame) {
+    return frame->format == hw_pix_fmt;
 }
 
 int VideoDecoder::decode(AVPacket *avPacket, AVFrame *frame) {
@@ -196,6 +196,7 @@ int VideoDecoder::decode(AVPacket *avPacket, AVFrame *frame) {
         LOGE("[video] avcodec_receive_frame err: %d, resent: %d, retry count: %" PRId64" %p",
              receiveRes, mNeedResent, mRetryReceiveCount, &pAvFrame)
         av_frame_free(&pAvFrame);
+        pAvFrame = nullptr;
         // decode and receive frame arrived EOF
         if (isEof && receiveRes == AVERROR_EOF) {
             mRetryReceiveCount = RETRY_RECEIVE_COUNT;
@@ -251,7 +252,7 @@ int VideoDecoder::decode(AVPacket *avPacket, AVFrame *frame) {
 
 void VideoDecoder::resultCallback(AVFrame *pAvFrame) {
     updateTimestamp(pAvFrame);
-    if (isHwDecoder()) {
+    if (isHwDecoder(pAvFrame)) {
         if (mOnFrameArrivedListener) {
             mOnFrameArrivedListener(pAvFrame);
         }
@@ -329,7 +330,7 @@ void VideoDecoder::resultCallback(AVFrame *pAvFrame) {
 void VideoDecoder::showFrameToWindow(AVFrame *pFrame) {
     //硬解,并且配置直接关联surface,format为mediacoder
     LOGI("showFrameToWindow")
-    if (isHwDecoder()) {
+    if (isHwDecoder(pFrame)) {
         auto startTime = std::chrono::steady_clock::now();
         //直接渲染到surface
         int result = av_mediacodec_release_buffer((AVMediaCodecBuffer *) (pFrame)->data[3], 1);
@@ -466,11 +467,11 @@ bool VideoDecoder::initFilter() {
 }
 
 void VideoDecoder::lock() {
-    mSeekMutexObj->lock();
+//    mSeekMutexObj->lock();
 }
 
 void VideoDecoder::unlock() {
-    mSeekMutexObj->unlock();
+//    mSeekMutexObj->unlock();
 }
 
 void VideoDecoder::updateTimestamp(AVFrame *frame) {
@@ -546,11 +547,6 @@ int VideoDecoder::seek(int64_t pos) {
 void VideoDecoder::release() {
     mFixStartTime = false;
     mStartTimeMsForSync = -1;
-    if (mAvFrame != nullptr) {
-        av_frame_free(&mAvFrame);
-        av_freep(&mAvFrame);
-        LOGI("av frame...release")
-    }
 
     if (mSwsContext != nullptr) {
         sws_freeContext(mSwsContext);

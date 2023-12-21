@@ -35,6 +35,7 @@ int AVPacketQueue::popTo(AVPacket *packet) {
     pthread_mutex_lock(&mMutex);
     bool isEmpty = mQueue.empty() && mQueue.size() <= 0;
     if (isEmpty) {
+        LOGE("[AVPacketQueue],isEmpty")
         pthread_mutex_unlock(&mMutex);
         return -1;
     }

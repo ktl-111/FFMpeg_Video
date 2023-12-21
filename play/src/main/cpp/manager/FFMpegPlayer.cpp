@@ -477,8 +477,8 @@ void FFMpegPlayer::ReadVideoFrameLoop() {
             decodeResult = -1;
             AVPacket *packet = av_packet_alloc();
             int ret = mVideoPacketQueue->popTo(packet);
-            LOGI("ReadVideoFrameLoop popto pts:%ld ret:%d", packet->pts, ret)
             if (ret == 0) {
+                LOGI("ReadVideoFrameLoop popto pts:%ld ret:%d", packet->pts, ret)
                 AVFrame *pFrame = av_frame_alloc();
                 do {
                     mVideoDecoder->lock();

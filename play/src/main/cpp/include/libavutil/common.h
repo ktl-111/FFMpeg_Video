@@ -41,6 +41,7 @@
 
 #include "attributes.h"
 #include "macros.h"
+#include "version.h"
 
 //rounded division & shift
 #define RSHIFT(a,b) ((a) > 0 ? ((a) + ((1<<(b))>>1))>>(b) : ((a) + ((1<<(b))>>1)-1)>>(b))

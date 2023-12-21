@@ -91,7 +91,7 @@ private:
 
     int swsScale(AVFrame *srcFrame, AVFrame *dstFrame);
 
-    bool isHwDecoder();
+    bool isHwDecoder(AVFrame *frame);
 
     bool initFilter();
 };
