@@ -21,6 +21,7 @@ AVFrameQueue::~AVFrameQueue() {
 
 void AVFrameQueue::push(AVFrame *packet) {
     pthread_mutex_lock(&mMutex);
+    LOGI("[AVFrameQueue] push pts:%ld %d", packet->pts, packet->format)
     mQueue.push(packet);
     pthread_mutex_unlock(&mMutex);
     notify();
@@ -46,7 +47,7 @@ int AVFrameQueue::popTo(AVFrame *dstFrame) {
     if (frame == nullptr) {
         LOGE("[AVFrameQueue], popTo failed")
     }
-
+    LOGI("[AVFrameQueue] popTo pts:%ld %d", frame->pts, frame->format)
     int ref = av_frame_ref(dstFrame, frame);
     if (ref != 0) {
         LOGE("[AVFrameQueue], popTo failed, ref: %d", ref);
@@ -56,7 +57,7 @@ int AVFrameQueue::popTo(AVFrame *dstFrame) {
     mQueue.pop();
     pthread_mutex_unlock(&mMutex);
     notify();
-    return 0;
+    return ref;
 }
 
 int AVFrameQueue::front(AVFrame *dstFrame) {

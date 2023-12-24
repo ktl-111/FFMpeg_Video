@@ -66,8 +66,6 @@ protected:
 
     bool mNeedResent = false;
 
-    int64_t mRetryReceiveCount = 7;
-
     bool mFixStartTime = false;
 
 private:

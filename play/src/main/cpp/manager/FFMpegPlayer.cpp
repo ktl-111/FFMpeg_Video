@@ -70,7 +70,8 @@ bool FFMpegPlayer::prepare(JNIEnv *env, std::string &path, jobject surface, jobj
 
                 jfieldID outFpsId = env->GetFieldID(outConfigClass, "fps", "D");
                 jdouble outFps = env->GetDoubleField(out_config, outFpsId);
-
+                outWidth = codecpar->width;
+                outHeight = codecpar->height;
                 outConfig = std::make_shared<OutConfig>(outWidth, outHeight, outFps);
 
                 LOGI("set out config,width:%d,height:%d,fps:%f", outWidth, outHeight, outFps)
@@ -81,10 +82,10 @@ bool FFMpegPlayer::prepare(JNIEnv *env, std::string &path, jobject surface, jobj
             LOGI("video stream,index:%d result:%d", i, mPlayerJni.isValid())
             mVideoDecoder = std::make_shared<VideoDecoder>(i, mAvFormatContext);
             int frameSize = 50;
-//            if (outConfig) {
-//                mVideoDecoder->setOutConfig(outConfig);
+            if (outConfig) {
+                mVideoDecoder->setOutConfig(outConfig);
 //                frameSize = outConfig->getFps() * 5;
-//            }
+            }
 
             mVideoPacketQueue = std::make_shared<AVPacketQueue>(50);
             mVideoFrameQueue = std::make_shared<AVFrameQueue>(frameSize);
@@ -478,32 +479,32 @@ void FFMpegPlayer::ReadVideoFrameLoop() {
             AVPacket *packet = av_packet_alloc();
             int ret = mVideoPacketQueue->popTo(packet);
             if (ret == 0) {
-                LOGI("ReadVideoFrameLoop popto pts:%ld ret:%d", packet->pts, ret)
-                AVFrame *pFrame = av_frame_alloc();
+                LOGI("ReadVideoFrameLoop popto pts:%ld ret:%d size:%ld", packet->pts, ret,
+                     mVideoFrameQueue->getSize())
                 do {
+                    AVFrame *pFrame = av_frame_alloc();
                     mVideoDecoder->lock();
                     decodeResult = mVideoDecoder->decode(packet, pFrame);
                     mVideoDecoder->unlock();
-                } while (mVideoDecoder->isNeedResent());
 
-                av_packet_unref(packet);
-                av_packet_free(&packet);
-                LOGI("[video] ReadVideoFrameLoop decode %d", decodeResult)
-                if (decodeResult == 0) {
-                    if (mVideoFrameQueue->isEmpty()) {
-                        mVideoDecoder->updateTimestamp(pFrame);
-                    }
-                    if (!pushFrameToQueue(pFrame, mVideoFrameQueue)) {
-                        av_frame_free(&pFrame);
+                    LOGI("[video] ReadVideoFrameLoop decode %d", decodeResult)
+                    if (decodeResult == 0) {
+                        if (mVideoFrameQueue->isEmpty()) {
+                            mVideoDecoder->updateTimestamp(pFrame);
+                        }
+                        if (!pushFrameToQueue(pFrame, mVideoFrameQueue)) {
+                            av_frame_free(&pFrame);
+                        } else {
+                            LOGI("pushFrameToQueue success %ld", pFrame->pts)
+                        }
                     } else {
-                        LOGI("pushFrameToQueue success %ld", pFrame->pts)
+                        av_frame_free(&pFrame);
                     }
-                } else {
-                    av_frame_free(&pFrame);
-                }
+                } while (mVideoDecoder->isNeedResent());
             } else {
                 LOGE("ReadVideoFrameLoop pop packet failed...")
             }
+            av_packet_free(&packet);
         } while (decodeResult == AVERROR(EAGAIN));
     }
 
@@ -531,6 +532,7 @@ int FFMpegPlayer::readAvPacketToQueue(ReadPackType type) {
     AVPacket *avPacket = av_packet_alloc();
     mVideoDecoder->lock();
     int ret = av_read_frame(mAvFormatContext, avPacket);
+    LOGI("readAvPacketToQueue end")
     mVideoDecoder->unlock();
     bool suc = false;
     if (ret == 0) {
@@ -596,8 +598,9 @@ bool FFMpegPlayer::pushPacketToQueue(AVPacket *packet,
 
     bool suc = false;
     while (queue->isFull()) {
+        LOGD("pushPacketToQueue is full, wait start")
         queue->wait();
-        LOGD("queue is full, wait 10ms, packet index: %d", packet->stream_index)
+        LOGD("pushPacketToQueue is full, wait start")
     }
     LOGI("pushPacketToQueue pts:%ld", packet->pts)
     queue->push(packet);

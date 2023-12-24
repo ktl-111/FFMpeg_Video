@@ -157,7 +157,6 @@ bool VideoDecoder::prepare(JNIEnv *env) {
     }
 
     mStartTimeMsForSync = -1;
-    mRetryReceiveCount = RETRY_RECEIVE_COUNT;
     LOGI("[video] prepare name: %s,mFps: %f,%d*%d", mVideoCodec->name, mFps, mWidth, mHeight)
 
     return true;
@@ -170,45 +169,68 @@ bool VideoDecoder::isHwDecoder(AVFrame *frame) {
 int VideoDecoder::decode(AVPacket *avPacket, AVFrame *frame) {
     // 主动塞到队列中的flush帧
     LOGI("decode start pts:%ld dts:%ld", avPacket->pts, avPacket->dts)
+    int sendRes = -1;
+    int receiveRes = -1;
+
+    AVFrame *pAvFrame = av_frame_alloc();
     bool isEof = avPacket->size == 0 && avPacket->data == nullptr;
-    int sendRes = avcodec_send_packet(mCodecContext, avPacket);
+    sendRes = -1;
+    receiveRes = -1;
+    sendRes = avcodec_send_packet(mCodecContext, avPacket);
+    mNeedResent = sendRes == AVERROR(EAGAIN) || isEof;
     bool isKeyFrame = avPacket->flags & AV_PKT_FLAG_KEY;
     LOGI(
             "[video] avcodec_send_packet...pts: %" PRId64 ", dts: %" PRId64 ", isKeyFrame: %d, res: %d, isEof: %d",
             avPacket->pts, avPacket->dts, isKeyFrame, sendRes, isEof)
-
-    // avcodec_send_packet的-11表示要先读output，然后pkt需要重发
-    mNeedResent = sendRes == AVERROR(EAGAIN);
-
-    int receiveRes = AVERROR_EOF;
-    AVFrame *pAvFrame = av_frame_alloc();
     // avcodec_receive_frame的-11，表示需要发新帧
     receiveRes = avcodec_receive_frame(mCodecContext, pAvFrame);
 
-    if (isEof && receiveRes != AVERROR_EOF && mRetryReceiveCount >= 0) {
-        mNeedResent = true;
-        mRetryReceiveCount--;
-        LOGE("[video] send eof, not receive eof...retry count: %" PRId64,
-             mRetryReceiveCount)
-    }
+    LOGI("[video] avcodec_receive_frame %d %s", receiveRes, av_err2str(receiveRes))
 
     if (receiveRes != 0) {
-        LOGE("[video] avcodec_receive_frame err: %d, resent: %d, retry count: %" PRId64" %p",
-             receiveRes, mNeedResent, mRetryReceiveCount, &pAvFrame)
+        LOGE("[video] avcodec_receive_frame err: %d, resent: %d", receiveRes, mNeedResent)
         av_frame_free(&pAvFrame);
-        pAvFrame = nullptr;
-        // decode and receive frame arrived EOF
-        if (isEof && receiveRes == AVERROR_EOF) {
-            mRetryReceiveCount = RETRY_RECEIVE_COUNT;
-        }
         // force EOF
-        if (isEof && mRetryReceiveCount < 0) {
+        if (isEof && receiveRes == AVERROR_EOF) {
             receiveRes = AVERROR_EOF;
-            mRetryReceiveCount = RETRY_RECEIVE_COUNT;
             mNeedResent = false;
         }
         return receiveRes;
     }
+
+
+//    AVFrame *pAvFrame = av_frame_alloc();
+//    bool isEof = avPacket->size == 0 && avPacket->data == nullptr;
+//    do {
+//        sendRes = -1;
+//        receiveRes = -1;
+//        sendRes = avcodec_send_packet(mCodecContext, avPacket);
+//        mNeedResent = sendRes == AVERROR(EAGAIN);
+//        bool isKeyFrame = avPacket->flags & AV_PKT_FLAG_KEY;
+//        LOGI(
+//                "[video] avcodec_send_packet...pts: %" PRId64 ", dts: %" PRId64 ", isKeyFrame: %d, res: %d, isEof: %d",
+//                avPacket->pts, avPacket->dts, isKeyFrame, sendRes, isEof)
+//        if (sendRes == 0 || sendRes == AVERROR(EAGAIN)) {
+//            // avcodec_receive_frame的-11，表示需要发新帧
+//            receiveRes = avcodec_receive_frame(mCodecContext, pAvFrame);
+//
+//            LOGI("[video] avcodec_receive_frame %d %s", receiveRes, av_err2str(receiveRes))
+//        }
+//
+//    } while (sendRes != 0);
+//
+//    if (receiveRes != 0) {
+//        LOGE("[video] avcodec_receive_frame err: %d, resent: %d", receiveRes, mNeedResent)
+//        av_frame_free(&pAvFrame);
+//        // force EOF
+//        if (receiveRes == AVERROR(EAGAIN)) {
+//            av_usleep(10 * 1000);
+//        }
+//        if (isEof) {
+//            receiveRes = AVERROR_EOF;
+//        }
+//        return receiveRes;
+//    }
 
     auto ptsMs = pAvFrame->pts * av_q2d(mFtx->streams[getStreamIndex()]->time_base) * 1000;
     LOGI(
@@ -240,18 +262,20 @@ int VideoDecoder::decode(AVPacket *avPacket, AVFrame *frame) {
 //        frame->time_base = mOutConfig->getTimeBase();
 //        av_frame_free(&filtered_frame);
 //    } else {
-    av_frame_ref(frame, pAvFrame);
+    int result = av_frame_copy(frame, pAvFrame);
     frame->time_base = mTimeBase;
 //    }
-
-    LOGI("[video] decode done,pts:%ld(%f) %p", frame->pts, frame->pts * av_q2d(frame->time_base),
-         &pAvFrame);
-    av_frame_free(&pAvFrame);
+//    av_frame_free(&pAvFrame);
+    LOGI("[video] decode done result:%d ,pts:%ld(%f) copy:%d %s format:%d", result, frame->pts,
+         frame->pts * av_q2d(frame->time_base),
+         0, av_err2str(0), frame->format)
     return receiveRes;
 }
 
 void VideoDecoder::resultCallback(AVFrame *pAvFrame) {
     updateTimestamp(pAvFrame);
+    LOGI("resultCallback pts:%ld(%lf) %d", pAvFrame->pts,
+         pAvFrame->pts * av_q2d(pAvFrame->time_base), pAvFrame->format)
     if (isHwDecoder(pAvFrame)) {
         if (mOnFrameArrivedListener) {
             mOnFrameArrivedListener(pAvFrame);
@@ -329,10 +353,13 @@ void VideoDecoder::resultCallback(AVFrame *pAvFrame) {
 
 void VideoDecoder::showFrameToWindow(AVFrame *pFrame) {
     //硬解,并且配置直接关联surface,format为mediacoder
-    LOGI("showFrameToWindow")
+    LOGI("showFrameToWindow pts:%ld(%lf) format:%s data:%p", pFrame->pts,
+         pFrame->pts * av_q2d(pFrame->time_base),
+         av_get_pix_fmt_name((AVPixelFormat) pFrame->format), &pFrame->data[3])
     if (isHwDecoder(pFrame)) {
         auto startTime = std::chrono::steady_clock::now();
         //直接渲染到surface
+        LOGI("video av_mediacodec_release_buffer start");
         int result = av_mediacodec_release_buffer((AVMediaCodecBuffer *) (pFrame)->data[3], 1);
         auto endTime = std::chrono::steady_clock::now();
         auto diffMilli = std::chrono::duration<double, std::milli>(endTime - startTime).count();
@@ -467,11 +494,11 @@ bool VideoDecoder::initFilter() {
 }
 
 void VideoDecoder::lock() {
-//    mSeekMutexObj->lock();
+    mSeekMutexObj->lock();
 }
 
 void VideoDecoder::unlock() {
-//    mSeekMutexObj->unlock();
+    mSeekMutexObj->unlock();
 }
 
 void VideoDecoder::updateTimestamp(AVFrame *frame) {
