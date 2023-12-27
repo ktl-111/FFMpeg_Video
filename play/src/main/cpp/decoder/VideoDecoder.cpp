@@ -1,3 +1,4 @@
+#include <bits/sysconf.h>
 #include "VideoDecoder.h"
 #include "../utils/loghelper.h"
 #include "../utils/CommonUtils.h"
@@ -64,7 +65,7 @@ bool VideoDecoder::prepare(JNIEnv *env) {
             break;
     }
 
-    if (useHwDecoder) {
+    if (false) {
         AVHWDeviceType type = av_hwdevice_find_type_by_name("mediacodec");
         if (type == AV_HWDEVICE_TYPE_NONE) {
             while ((type = av_hwdevice_iterate_types(type)) != AV_HWDEVICE_TYPE_NONE) {
@@ -134,7 +135,6 @@ bool VideoDecoder::prepare(JNIEnv *env) {
     if (mHwDeviceCtx) {
         mCodecContext->get_format = get_hw_format;
         mCodecContext->hw_device_ctx = av_buffer_ref(mHwDeviceCtx);
-
         if (mSurface != nullptr) {
             mMediaCodecContext = av_mediacodec_alloc_context();
             av_mediacodec_default_init(mCodecContext, mMediaCodecContext, mSurface);
@@ -146,6 +146,10 @@ bool VideoDecoder::prepare(JNIEnv *env) {
         ANativeWindow_setBuffersGeometry(nativeWindow, getWidth(), getHeight(),
                                          WINDOW_FORMAT_RGBA_8888);
     }
+    // 根据设备核心数设置线程数
+    long threadCount = sysconf(_SC_NPROCESSORS_ONLN);
+
+    mCodecContext->thread_count = threadCount > 0 ? threadCount : 1;
     // open codec
     int ret = avcodec_open2(mCodecContext, mVideoCodec, nullptr);
     if (ret != 0) {
@@ -157,7 +161,8 @@ bool VideoDecoder::prepare(JNIEnv *env) {
     }
 
     mStartTimeMsForSync = -1;
-    LOGI("[video] prepare name: %s,mFps: %f,%d*%d", mVideoCodec->name, mFps, mWidth, mHeight)
+    LOGI("[video] prepare name: %s,mFps: %f,threadCount:%ld,%d*%d", mVideoCodec->name, mFps,
+         threadCount, mWidth, mHeight)
 
     return true;
 }
@@ -180,8 +185,9 @@ int VideoDecoder::decode(AVPacket *avPacket, AVFrame *frame) {
     mNeedResent = sendRes == AVERROR(EAGAIN) || isEof;
     bool isKeyFrame = avPacket->flags & AV_PKT_FLAG_KEY;
     LOGI(
-            "[video] avcodec_send_packet...pts: %" PRId64 ", dts: %" PRId64 ", isKeyFrame: %d, res: %d, isEof: %d",
-            avPacket->pts, avPacket->dts, isKeyFrame, sendRes, isEof)
+            "[video] avcodec_send_packet...pts: %" PRId64 ", dts: %" PRId64 ", isKeyFrame: %d, res: %d, isEof: %d,extra_hw_frames:%d",
+            avPacket->pts, avPacket->dts, isKeyFrame, sendRes, isEof,
+            mCodecContext->extra_hw_frames)
     // avcodec_receive_frame的-11，表示需要发新帧
     receiveRes = avcodec_receive_frame(mCodecContext, pAvFrame);
 
@@ -262,13 +268,13 @@ int VideoDecoder::decode(AVPacket *avPacket, AVFrame *frame) {
 //        frame->time_base = mOutConfig->getTimeBase();
 //        av_frame_free(&filtered_frame);
 //    } else {
-    int result = av_frame_copy(frame, pAvFrame);
+    int result = av_frame_ref(frame, pAvFrame);
     frame->time_base = mTimeBase;
 //    }
-//    av_frame_free(&pAvFrame);
-    LOGI("[video] decode done result:%d ,pts:%ld(%f) copy:%d %s format:%d", result, frame->pts,
+    av_frame_free(&pAvFrame);
+    LOGI("[video] decode done result:%d ,pts:%ld(%f) copy:%d %s format:%s", result, frame->pts,
          frame->pts * av_q2d(frame->time_base),
-         0, av_err2str(0), frame->format)
+         0, av_err2str(0), av_get_pix_fmt_name((AVPixelFormat) frame->format))
     return receiveRes;
 }
 
@@ -343,7 +349,9 @@ void VideoDecoder::resultCallback(AVFrame *pAvFrame) {
 
         av_frame_free(&dstFrame);
         av_freep(&dstFrame);
-        av_free(shadowedOutbuffer);
+        if (shadowedOutbuffer) {
+            av_free(shadowedOutbuffer);
+        }
         if (needScale) {
             av_frame_free(&srcFrame);
         }
@@ -396,9 +404,10 @@ void VideoDecoder::showFrameToWindow(AVFrame *pFrame) {
 
 int VideoDecoder::swsScale(AVFrame *srcFrame, AVFrame *dstFrame) {
     if (mSwsContext == nullptr) {
-        LOGI("swsScale %d,%d,%d   %d,%d,%d", srcFrame->width, srcFrame->height,
-             AVPixelFormat(srcFrame->format), dstFrame->width, dstFrame->height,
-             AVPixelFormat(dstFrame->format))
+        LOGI("swsScale %d,%d,%s   %d,%d,%s", srcFrame->width, srcFrame->height,
+             av_get_pix_fmt_name(AVPixelFormat(srcFrame->format)), dstFrame->width,
+             dstFrame->height,
+             av_get_pix_fmt_name(AVPixelFormat(dstFrame->format)))
         mSwsContext = sws_getContext(srcFrame->width, srcFrame->height,
                                      AVPixelFormat(srcFrame->format),
                                      dstFrame->width, dstFrame->height,

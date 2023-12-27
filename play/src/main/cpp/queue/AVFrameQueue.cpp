@@ -122,6 +122,18 @@ int64_t AVFrameQueue::getSize() {
     return size;
 }
 
+void AVFrameQueue::checkEmptyWait() {
+    LOGI("[AVFrameQueue] checkEmptyWait start")
+    pthread_mutex_lock(&mMutex);
+    int64_t size = (int64_t) mQueue.size();
+    if (size <= 0) {
+        LOGI("[AVFrameQueue] empty,wait")
+        pthread_cond_wait(&mCond, &mMutex);
+    }
+    pthread_mutex_unlock(&mMutex);
+    LOGI("[AVFrameQueue] checkEmptyWait end")
+}
+
 bool AVFrameQueue::isEmpty() {
     int64_t size;
     pthread_mutex_lock(&mMutex);
@@ -163,8 +175,10 @@ int AVFrameQueue::getFrameByTime(AVFrame *dstFrame, int64_t time, bool isBack) {
             if (pts >= time) {
                 ret = av_frame_ref(dstFrame, srcFrame);
                 if (ret != 0 && srcFrame->data[0] != NULL) {
+                    LOGI("[AVFrameQueue],memcpy ret:%d", ret)
                     memcpy(dstFrame->data, srcFrame->data, sizeof(srcFrame->data));
                 }
+//                av_frame_free(&srcFrame);
                 break;
             } else {
                 mQueue.pop();

@@ -79,8 +79,8 @@ private:
 
     jobject mSurface = nullptr;
     std::shared_ptr<OutConfig> mOutConfig = nullptr;
-    AVFilterContext *mBuffersrcContext;
-    AVFilterContext *mBuffersinkContext;
+    AVFilterContext *mBuffersrcContext = nullptr;
+    AVFilterContext *mBuffersinkContext = nullptr;
     AVBufferRef *mHwDeviceCtx = nullptr;
 
     const AVCodec *mVideoCodec = nullptr;

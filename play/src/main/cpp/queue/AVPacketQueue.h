@@ -24,7 +24,7 @@ public:
 
     void clear();
     bool isFull();
-
+    void checkEmptyWait();
     bool isEmpty();
 
     void wait(unsigned int timeOutMs = -1);

@@ -249,6 +249,7 @@ class FFMpegComposeActivity : AppCompatActivity() {
     private fun stop() {
         Log.i(TAG, "stop: ")
         playManager?.stop()
+        finish()
     }
 
     private fun resume() {
@@ -351,6 +352,7 @@ class FFMpegComposeActivity : AppCompatActivity() {
             val scale = offset / itemWidthPx.toDouble()
             val seek = 1 * scale + index
             Log.i(TAG, "ui seek: ${seek}")
+            updateUi(seek)
             seekFlow.emit(seek)
         }
 

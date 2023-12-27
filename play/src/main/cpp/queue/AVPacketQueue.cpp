@@ -98,11 +98,25 @@ void AVPacketQueue::notify() {
     pthread_mutex_unlock(&mMutex);
 }
 
+void AVPacketQueue::checkEmptyWait() {
+    LOGI("[AVPacketQueue] checkEmptyWait start")
+    pthread_mutex_lock(&mMutex);
+    int64_t size = (int64_t) mQueue.size();
+    if (size <= 0) {
+        LOGI("[AVPacketQueue] empty,wait")
+        pthread_cond_wait(&mCond, &mMutex);
+    }
+    pthread_mutex_unlock(&mMutex);
+    LOGI("[AVPacketQueue] checkEmptyWait end")
+}
+
 bool AVPacketQueue::isEmpty() {
     int64_t size;
+    LOGI("[AVPacketQueue] isEmpty check start")
     pthread_mutex_lock(&mMutex);
     size = (int64_t) mQueue.size();
     pthread_mutex_unlock(&mMutex);
+    LOGI("[AVPacketQueue] isEmpty check end")
     return size <= 0;
 }
 

@@ -87,7 +87,7 @@ private:
     bool mHasAbort = false;
     bool mIsMute = false;
     int64_t preSeekTime = -1;
-    bool isSeek = false;
+    bool mIsSeek = false;
     bool isBackSeek = false;
     int64_t currSeekTime = -1;
 

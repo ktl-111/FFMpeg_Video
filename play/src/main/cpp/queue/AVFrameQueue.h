@@ -26,7 +26,7 @@ public:
     void clear();
 
     bool isFull();
-
+    void checkEmptyWait();
     bool isEmpty();
     int64_t getSize();
 
