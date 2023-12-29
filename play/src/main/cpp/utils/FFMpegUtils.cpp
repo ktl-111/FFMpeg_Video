@@ -232,6 +232,8 @@ Java_com_example_play_utils_FFMpegUtils_nativeCutting(JNIEnv *env, jobject thiz,
     }
 
     //设置对应参数
+    outStream->codecpar->codec_id = AV_CODEC_ID_H264;
+    outStream->codecpar->codec_type = AVMEDIA_TYPE_VIDEO;
     outStream->codecpar->codec_tag = 0;
     outStream->avg_frame_rate = {fps, 1};
     outStream->time_base = outTimeBase;
@@ -242,7 +244,7 @@ Java_com_example_play_utils_FFMpegUtils_nativeCutting(JNIEnv *env, jobject thiz,
     outStream->side_data = inSteram->side_data;
     outStream->nb_side_data = inSteram->nb_side_data;
     //查找解码器
-    const AVCodec *encoder = avcodec_find_encoder(codec_params->codec_id);
+    const AVCodec *encoder = avcodec_find_encoder(outStream->codecpar->codec_id);
     if (!encoder) {
         LOGE("not find encoder")
         return -1;
@@ -277,7 +279,7 @@ Java_com_example_play_utils_FFMpegUtils_nativeCutting(JNIEnv *env, jobject thiz,
         LOGE("cutting avcodec_parameters_from_context fail,%d %s", result, av_err2str(result))
         return -1;
     }
-
+    LOGI("cutting name:%s", avcodec_get_name(outFormatContext->video_codec_id))
     // 打开输出文件
     if (avio_open(&outFormatContext->pb, c_desPath, AVIO_FLAG_WRITE) < 0 ||
         avformat_write_header(outFormatContext, NULL) < 0) {
@@ -356,9 +358,10 @@ Java_com_example_play_utils_FFMpegUtils_nativeCutting(JNIEnv *env, jobject thiz,
                                            {1, 60},
                                            {1, 24},
                                            (AVRounding) (AV_ROUND_NEAR_INF | AV_ROUND_PASS_MINMAX));
-            LOGI("cutting filterframe %ld(%f)  %ld", filtered_frame->pts * TimeBaseDiff,
+            LOGI("cutting filterframe %ld(%f)  %ld format:%s", filtered_frame->pts * TimeBaseDiff,
                  filtered_frame->pts * TimeBaseDiff *
-                 av_q2d(outTimeBase), pts)
+                 av_q2d(outTimeBase), pts,
+                 av_get_pix_fmt_name((AVPixelFormat) filtered_frame->format))
             do {
                 sendResult = -1;
                 receiveResult = -1;
