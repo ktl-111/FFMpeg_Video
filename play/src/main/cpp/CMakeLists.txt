@@ -26,13 +26,13 @@ aux_source_directory(queue QUEUESOURCE)
 aux_source_directory(include INCLUDESOURCE)
 aux_source_directory(config CONFIGESOURCE)
 
-#if(${ANDROID_ABI} MATCHES "armeabi-v7a")
-#    include_directories(include/armeabi-v7a)
-#    message("This is armeabi-v7a")
-#elseif(${ANDROID_ABI} MATCHES "arm64-v8a")
-#    include_directories(include/arm64-v8a)
-#    message("This is arm64-v8a")
-#endif()
+if(${ANDROID_ABI} MATCHES "armeabi-v7a")
+    include_directories(include/armeabi-v7a)
+    message("This is armeabi-v7a")
+elseif(${ANDROID_ABI} MATCHES "arm64-v8a")
+    include_directories(include/arm64-v8a)
+    message("This is arm64-v8a")
+endif()
 
 project("play")
 
@@ -51,13 +51,13 @@ add_library(ffmpegplayer SHARED
 target_link_libraries(
         ffmpegplayer
         log
-        avcodec
-        avfilter
-        avformat
-        avutil
-        swresample
-        swscale
-#        ffmpeg
+#        avcodec
+#        avfilter
+#        avformat
+#        avutil
+#        swresample
+#        swscale
+        ffmpeg
         android
         OpenSLES
         yuv)

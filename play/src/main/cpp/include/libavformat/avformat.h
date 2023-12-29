@@ -307,8 +307,10 @@
  * @}
  */
 
+#include <time.h>
 #include <stdio.h>  /* FILE */
 
+#include "libavcodec/codec.h"
 #include "libavcodec/codec_par.h"
 #include "libavcodec/defs.h"
 #include "libavcodec/packet.h"
@@ -323,13 +325,10 @@
  * to avoid unnecessary rebuilds. When included externally, keep including
  * the full version information. */
 #include "libavformat/version.h"
-
-#include "libavutil/frame.h"
-#include "libavcodec/codec.h"
 #endif
 
 struct AVFormatContext;
-struct AVFrame;
+
 struct AVDeviceInfoList;
 
 /**
@@ -486,9 +485,7 @@ typedef struct AVProbeData {
 #define AVFMT_NOBINSEARCH   0x2000 /**< Format does not allow to fall back on binary search via read_timestamp */
 #define AVFMT_NOGENSEARCH   0x4000 /**< Format does not allow to fall back on generic search */
 #define AVFMT_NO_BYTE_SEEK  0x8000 /**< Format does not allow seeking by bytes */
-#if FF_API_ALLOW_FLUSH
-#define AVFMT_ALLOW_FLUSH  0x10000 /**< @deprecated: Just send a NULL packet if you want to flush a muxer. */
-#endif
+#define AVFMT_ALLOW_FLUSH  0x10000 /**< Format allows flushing. If not set, the muxer will not receive a NULL packet in the write_packet function. */
 #define AVFMT_TS_NONSTRICT 0x20000 /**< Format does not require strictly
                                         increasing timestamps, but they must
                                         still be monotonic */
@@ -524,7 +521,7 @@ typedef struct AVOutputFormat {
     /**
      * can use flags: AVFMT_NOFILE, AVFMT_NEEDNUMBER,
      * AVFMT_GLOBALHEADER, AVFMT_NOTIMESTAMPS, AVFMT_VARIABLE_FPS,
-     * AVFMT_NODIMENSIONS, AVFMT_NOSTREAMS,
+     * AVFMT_NODIMENSIONS, AVFMT_NOSTREAMS, AVFMT_ALLOW_FLUSH,
      * AVFMT_TS_NONSTRICT, AVFMT_TS_NEGATIVE
      */
     int flags;
@@ -940,7 +937,6 @@ typedef struct AVStream {
      */
     AVPacket attached_pic;
 
-#if FF_API_AVSTREAM_SIDE_DATA
     /**
      * An array of side data that applies to the whole stream (i.e. the
      * container does not allow it to change between packets).
@@ -957,20 +953,13 @@ typedef struct AVStream {
      *
      * Freed by libavformat in avformat_free_context().
      *
-     * @deprecated use AVStream's @ref AVCodecParameters.coded_side_data
-     *             "codecpar side data".
+     * @see av_format_inject_global_side_data()
      */
-    attribute_deprecated
     AVPacketSideData *side_data;
     /**
      * The number of elements in the AVStream.side_data array.
-     *
-     * @deprecated use AVStream's @ref AVCodecParameters.nb_coded_side_data
-     *             "codecpar side data".
      */
-    attribute_deprecated
     int            nb_side_data;
-#endif
 
     /**
      * Flags indicating events happening on the stream, a combination of
@@ -1252,9 +1241,7 @@ typedef struct AVFormatContext {
 #define AVFMT_FLAG_BITEXACT         0x0400
 #define AVFMT_FLAG_SORT_DTS    0x10000 ///< try to interleave outputted packets by dts (using this flag can slow demuxing down)
 #define AVFMT_FLAG_FAST_SEEK   0x80000 ///< Enable fast, but inaccurate seeks for some formats
-#if FF_API_LAVF_SHORTEST
 #define AVFMT_FLAG_SHORTEST   0x100000 ///< Stop muxing when the shortest stream stops.
-#endif
 #define AVFMT_FLAG_AUTO_BSF   0x200000 ///< Add bitstream filters as requested by the muxer
 
     /**
@@ -1582,7 +1569,7 @@ typedef struct AVFormatContext {
      * the same codec_id.
      * Demuxing: Set by user
      */
-    const struct AVCodec *video_codec;
+    const AVCodec *video_codec;
 
     /**
      * Forced audio codec.
@@ -1590,7 +1577,7 @@ typedef struct AVFormatContext {
      * the same codec_id.
      * Demuxing: Set by user
      */
-    const struct AVCodec *audio_codec;
+    const AVCodec *audio_codec;
 
     /**
      * Forced subtitle codec.
@@ -1598,7 +1585,7 @@ typedef struct AVFormatContext {
      * the same codec_id.
      * Demuxing: Set by user
      */
-    const struct AVCodec *subtitle_codec;
+    const AVCodec *subtitle_codec;
 
     /**
      * Forced data codec.
@@ -1606,7 +1593,7 @@ typedef struct AVFormatContext {
      * the same codec_id.
      * Demuxing: Set by user
      */
-    const struct AVCodec *data_codec;
+    const AVCodec *data_codec;
 
     /**
      * Number of bytes to be written as padding in a metadata header.
@@ -1731,12 +1718,6 @@ typedef struct AVFormatContext {
 /**
  * This function will cause global side data to be injected in the next packet
  * of each stream as well as after any subsequent seek.
- *
- * @note global side data is always available in every AVStream's
- *       @ref AVCodecParameters.coded_side_data "codecpar side data" array, and
- *       in a @ref AVCodecContext.coded_side_data "decoder's side data" array if
- *       initialized with said stream's codecpar.
- * @see av_packet_side_data_get()
  */
 void av_format_inject_global_side_data(AVFormatContext *s);
 
@@ -1861,9 +1842,8 @@ const AVClass *av_stream_get_class(void);
  *
  * @return newly created stream or NULL on error.
  */
-AVStream *avformat_new_stream(AVFormatContext *s, const struct AVCodec *c);
+AVStream *avformat_new_stream(AVFormatContext *s, const AVCodec *c);
 
-#if FF_API_AVSTREAM_SIDE_DATA
 /**
  * Wrap an existing array as stream side data.
  *
@@ -1876,10 +1856,7 @@ AVStream *avformat_new_stream(AVFormatContext *s, const struct AVCodec *c);
  *
  * @return zero on success, a negative AVERROR code on failure. On failure,
  *         the stream is unchanged and the data remains owned by the caller.
- * @deprecated use av_packet_side_data_add() with the stream's
- *             @ref AVCodecParameters.coded_side_data "codecpar side data"
  */
-attribute_deprecated
 int av_stream_add_side_data(AVStream *st, enum AVPacketSideDataType type,
                             uint8_t *data, size_t size);
 
@@ -1891,10 +1868,7 @@ int av_stream_add_side_data(AVStream *st, enum AVPacketSideDataType type,
  * @param size   side information size
  *
  * @return pointer to fresh allocated data or NULL otherwise
- * @deprecated use av_packet_side_data_new() with the stream's
- *             @ref AVCodecParameters.coded_side_data "codecpar side data"
  */
-attribute_deprecated
 uint8_t *av_stream_new_side_data(AVStream *stream,
                                  enum AVPacketSideDataType type, size_t size);
 /**
@@ -1906,13 +1880,9 @@ uint8_t *av_stream_new_side_data(AVStream *stream,
  *               or to zero if the desired side data is not present.
  *
  * @return pointer to data if present or NULL otherwise
- * @deprecated use av_packet_side_data_get() with the stream's
- *             @ref AVCodecParameters.coded_side_data "codecpar side data"
  */
-attribute_deprecated
 uint8_t *av_stream_get_side_data(const AVStream *stream,
                                  enum AVPacketSideDataType type, size_t *size);
-#endif
 
 AVProgram *av_new_program(AVFormatContext *s, int id);
 
@@ -2106,7 +2076,7 @@ int av_find_best_stream(AVFormatContext *ic,
                         enum AVMediaType type,
                         int wanted_stream_nb,
                         int related_stream,
-                        const struct AVCodec **decoder_ret,
+                        const AVCodec **decoder_ret,
                         int flags);
 
 /**
@@ -2382,7 +2352,7 @@ int av_interleaved_write_frame(AVFormatContext *s, AVPacket *pkt);
  * See av_interleaved_write_uncoded_frame() for details.
  */
 int av_write_uncoded_frame(AVFormatContext *s, int stream_index,
-                           struct AVFrame *frame);
+                           AVFrame *frame);
 
 /**
  * Write an uncoded frame to an output media file.
@@ -2401,7 +2371,7 @@ int av_write_uncoded_frame(AVFormatContext *s, int stream_index,
  * @return  >=0 for success, a negative code on error
  */
 int av_interleaved_write_uncoded_frame(AVFormatContext *s, int stream_index,
-                                       struct AVFrame *frame);
+                                       AVFrame *frame);
 
 /**
  * Test whether a muxer supports uncoded frame.
@@ -2789,8 +2759,7 @@ const struct AVCodecTag *avformat_get_mov_audio_tags(void);
  * @param frame the frame with the aspect ratio to be determined
  * @return the guessed (valid) sample_aspect_ratio, 0/1 if no idea
  */
-AVRational av_guess_sample_aspect_ratio(AVFormatContext *format, AVStream *stream,
-                                        struct AVFrame *frame);
+AVRational av_guess_sample_aspect_ratio(AVFormatContext *format, AVStream *stream, AVFrame *frame);
 
 /**
  * Guess the frame rate, based on both the container and codec information.
@@ -2800,8 +2769,7 @@ AVRational av_guess_sample_aspect_ratio(AVFormatContext *format, AVStream *strea
  * @param frame the frame for which the frame rate should be determined, may be NULL
  * @return the guessed (valid) frame rate, 0/1 if no idea
  */
-AVRational av_guess_frame_rate(AVFormatContext *ctx, AVStream *stream,
-                               struct AVFrame *frame);
+AVRational av_guess_frame_rate(AVFormatContext *ctx, AVStream *stream, AVFrame *frame);
 
 /**
  * Check if the stream st contained in s is matched by the stream specifier

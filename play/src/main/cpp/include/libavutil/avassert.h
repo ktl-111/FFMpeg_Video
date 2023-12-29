@@ -28,9 +28,6 @@
 #define AVUTIL_AVASSERT_H
 
 #include <stdlib.h>
-#ifdef HAVE_AV_CONFIG_H
-#   include "config.h"
-#endif
 #include "log.h"
 #include "macros.h"
 

@@ -3,6 +3,7 @@
 #include <loghelper.h>
 #include "../reader/FFVideoReader.h"
 #include "libyuv/scale.h"
+#include "libyuv/convert.h"
 #include "../globals.h"
 
 extern "C" {
@@ -98,7 +99,7 @@ Java_com_example_play_utils_FFMpegUtils_nativeCutting(JNIEnv *env, jobject thiz,
                                                       jdouble end_time, jint fps) {
     const char *c_srcPath = env->GetStringUTFChars(src_path, nullptr);
     const char *c_desPath = env->GetStringUTFChars(dest_path, nullptr);
-    int scale = 2;
+    int scale = 1;
     AVRational outTimeBase = {1, fps * TimeBaseDiff};
     LOGI("cutting config,start_time:%lf end_time:%lf fps:%d timeBase:{%d,%d}", start_time, end_time,
          fps, outTimeBase.num, outTimeBase.den)
@@ -365,18 +366,44 @@ Java_com_example_play_utils_FFMpegUtils_nativeCutting(JNIEnv *env, jobject thiz,
             do {
                 sendResult = -1;
                 receiveResult = -1;
-                AVPacket *receivePacket = av_packet_alloc();
-                filtered_frame->pict_type = AV_PICTURE_TYPE_NONE;
+
+                AVFrame *srcFrame;
+                bool isRgb = filtered_frame->format == AV_PIX_FMT_BGRA;
+                if (isRgb) {
+                    srcFrame = av_frame_alloc();
+                    srcFrame->width = filtered_frame->width;
+                    srcFrame->height = filtered_frame->height;
+                    srcFrame->format = AV_PIX_FMT_YUV420P;
+                    int ret = av_frame_get_buffer(srcFrame, 0);
+                    LOGI("cutting convert av_frame_get_buffer %d", ret)
+                    //https://www.v2ex.com/t/756129
+                    //bgra顺序,需要反过来调用argb
+                    ret = libyuv::ARGBToI420(filtered_frame->data[0], filtered_frame->linesize[0],
+                                             srcFrame->data[0], srcFrame->linesize[0],
+                                             srcFrame->data[1], srcFrame->linesize[1],
+                                             srcFrame->data[2], srcFrame->linesize[2],
+                                             srcFrame->width, srcFrame->height);
+                    LOGI("cutting convert BGRAToI420 %d,%d*%d %d %d-%d-%d", ret,
+                         srcFrame->width, srcFrame->height,
+                         filtered_frame->linesize[0],
+                         srcFrame->linesize[0],
+                         srcFrame->linesize[1],
+                         srcFrame->linesize[2])
+                } else {
+                    srcFrame = filtered_frame;
+                }
+
+                srcFrame->pict_type = AV_PICTURE_TYPE_NONE;
                 AVFrame *dstFrame = av_frame_alloc();
-                av_frame_ref(dstFrame, filtered_frame);
+                av_frame_ref(dstFrame, srcFrame);
                 int64_t scaleBufferSize = dstWidth * dstHeight * 3 / 2;
                 uint8_t *scaleBuffer = (uint8_t *) malloc(scaleBufferSize);
 
                 int ret = libyuv::I420Scale(
-                        filtered_frame->data[0], filtered_frame->linesize[0],
-                        filtered_frame->data[1], filtered_frame->linesize[1],
-                        filtered_frame->data[2], filtered_frame->linesize[2],
-                        filtered_frame->width, filtered_frame->height,
+                        srcFrame->data[0], srcFrame->linesize[0],
+                        srcFrame->data[1], srcFrame->linesize[1],
+                        srcFrame->data[2], srcFrame->linesize[2],
+                        srcFrame->width, srcFrame->height,
                         scaleBuffer, dstWidth,
                         scaleBuffer + dstWidth * dstHeight, dstWidth / 2,
                         scaleBuffer + dstWidth * dstHeight * 5 / 4, dstWidth / 2,
@@ -390,11 +417,13 @@ Java_com_example_play_utils_FFMpegUtils_nativeCutting(JNIEnv *env, jobject thiz,
                 dstFrame->linesize[2] = dstWidth / 2;
                 dstFrame->width = dstWidth;
                 dstFrame->height = dstHeight;
-                LOGI("cutting I420Scale %d*%d->%d*%d %f", filtered_frame->width,
-                     filtered_frame->height, dstFrame->width, dstFrame->height, dstFrame->pts *
-                                                                                av_q2d(outTimeBase))
+                LOGI("cutting I420Scale %d*%d->%d*%d %f", srcFrame->width,
+                     srcFrame->height, dstFrame->width, dstFrame->height, dstFrame->pts *
+                                                                          av_q2d(outTimeBase))
                 sendResult = avcodec_send_frame(encodeContext, dstFrame);
                 if (sendResult == 0) {
+
+                    AVPacket *receivePacket = av_packet_alloc();
                     receiveResult = avcodec_receive_packet(encodeContext, receivePacket);
                     if (receiveResult == 0) {
                         receivePacket->stream_index = video_stream_index;
@@ -419,11 +448,15 @@ Java_com_example_play_utils_FFMpegUtils_nativeCutting(JNIEnv *env, jobject thiz,
                                  av_err2str(result))
                         }
                     }
+
+                    av_packet_free(&receivePacket);
                 }
                 LOGI("cutting encode sendResult:%d receiveResult:%d", sendResult, receiveResult)
                 free(scaleBuffer);
                 av_frame_free(&dstFrame);
-                av_packet_free(&receivePacket);
+                if (isRgb) {
+                    av_frame_free(&srcFrame);
+                }
             } while (sendResult == AVERROR(EAGAIN) && receiveResult == AVERROR(EAGAIN));
             // 清理资源
             av_frame_free(&frame);
