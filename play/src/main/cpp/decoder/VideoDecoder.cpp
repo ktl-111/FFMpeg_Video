@@ -4,6 +4,7 @@
 #include "../utils/CommonUtils.h"
 #include "../reader/FFVideoReader.h"
 #include "libyuv/scale.h"
+#include "libyuv/rotate.h"
 #include "../globals.h"
 
 static enum AVPixelFormat hw_pix_fmt = AV_PIX_FMT_NONE;
@@ -45,8 +46,13 @@ bool VideoDecoder::prepare(JNIEnv *env) {
     AVStream *stream = mFtx->streams[getStreamIndex()];
 
     AVCodecParameters *params = stream->codecpar;
-    mWidth = params->width;
-    mHeight = params->height;
+    if (getRotate() == 90 || getRotate() == 270) {
+        mWidth = params->height;
+        mHeight = params->width;
+    } else {
+        mWidth = params->width;
+        mHeight = params->height;
+    }
     mFps = av_q2d(stream->avg_frame_rate);
 
     // find decoder
@@ -268,13 +274,44 @@ int VideoDecoder::decode(AVPacket *avPacket, AVFrame *frame) {
 //        frame->time_base = mOutConfig->getTimeBase();
 //        av_frame_free(&filtered_frame);
 //    } else {
-    int result = av_frame_ref(frame, pAvFrame);
+
+    AVFrame *srcFrame = nullptr;
+    int rotate = getRotate();
+    bool isRotate = rotate != 0;
+    if (isRotate) {
+        srcFrame = av_frame_alloc();
+        if (rotate == 90 || rotate == 270) {
+            srcFrame->width = pAvFrame->height;
+            srcFrame->height = pAvFrame->width;
+        } else {
+            srcFrame->width = pAvFrame->width;
+            srcFrame->height = pAvFrame->height;
+        }
+        srcFrame->format = pAvFrame->format;
+        int ret = av_frame_get_buffer(srcFrame, 0);
+        LOGI("[video] decode av_frame_get_buffer %d", ret)
+        ret = libyuv::I420Rotate(pAvFrame->data[0], pAvFrame->linesize[0],
+                                 pAvFrame->data[1], pAvFrame->linesize[1],
+                                 pAvFrame->data[2], pAvFrame->linesize[2],
+                                 srcFrame->data[0], srcFrame->linesize[0],
+                                 srcFrame->data[1], srcFrame->linesize[1],
+                                 srcFrame->data[2], srcFrame->linesize[2],
+                                 pAvFrame->width, pAvFrame->height,
+                                 libyuv::RotationMode(rotate));
+        LOGI("[video] decode I420Rotate %d %d*%d", ret, srcFrame->width, srcFrame->height)
+        av_frame_free(&pAvFrame);
+    } else {
+        srcFrame = pAvFrame;
+    }
+    int result = av_frame_ref(frame, srcFrame);
     frame->time_base = mTimeBase;
 //    }
-    av_frame_free(&pAvFrame);
-    LOGI("[video] decode done result:%d ,pts:%ld(%f) copy:%d %s format:%s", result, frame->pts,
+
+    av_frame_free(&srcFrame);
+    LOGI("[video] decode done result:%d ,pts:%ld(%f) copy:%d %s format:%s rotate:%d", result,
+         frame->pts,
          frame->pts * av_q2d(frame->time_base),
-         0, av_err2str(0), av_get_pix_fmt_name((AVPixelFormat) frame->format))
+         0, av_err2str(0), av_get_pix_fmt_name((AVPixelFormat) frame->format), rotate)
     return receiveRes;
 }
 

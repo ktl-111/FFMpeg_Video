@@ -367,7 +367,7 @@ Java_com_example_play_utils_FFMpegUtils_nativeCutting(JNIEnv *env, jobject thiz,
                 sendResult = -1;
                 receiveResult = -1;
 
-                AVFrame *srcFrame;
+                AVFrame *srcFrame = nullptr;
                 bool isRgb = filtered_frame->format == AV_PIX_FMT_BGRA;
                 if (isRgb) {
                     srcFrame = av_frame_alloc();

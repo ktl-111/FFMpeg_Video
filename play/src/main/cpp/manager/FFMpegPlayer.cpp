@@ -323,13 +323,18 @@ void FFMpegPlayer::VideoDecodeLoop() {
     if (mVideoDecoder == nullptr || mVideoPacketQueue == nullptr) {
         return;
     }
-
+    JNIEnv *env = nullptr;
+    bool needAttach = mJvm->GetEnv((void **) &env, JNI_VERSION_1_4) == JNI_EDETACHED;
+    if (needAttach) {
+        mJvm->AttachCurrentThread(&env, nullptr);
+        LOGE("[video] AttachCurrentThread")
+    }
     mVideoDecoder->setOnFrameArrived([this](AVFrame *frame) {
         JNIEnv *env = nullptr;
         bool needAttach = mJvm->GetEnv((void **) &env, JNI_VERSION_1_4) == JNI_EDETACHED;
         if (needAttach) {
             mJvm->AttachCurrentThread(&env, nullptr);
-            LOGE("[video] AttachCurrentThread")
+            LOGE("[video] OnFrameArrived AttachCurrentThread")
         }
         LOGI("OnFrameArrived start needAttach:%d", needAttach)
         if (!mHasAbort && mVideoDecoder) {
@@ -381,16 +386,26 @@ void FFMpegPlayer::VideoDecodeLoop() {
         if (frame != nullptr) {
             int ret = mVideoFrameQueue->popTo(frame);
             if (ret == 0) {
-                LOGI("[video] VideoDecodeLoop pts:%ld(%lf)", frame->pts,
-                     frame->pts * av_q2d(frame->time_base))
-                mVideoDecoder->resultCallback(frame);
-                av_frame_free(&frame);
+                if (frame->pkt_size == 0) {
+                    onPlayCompleted(env);
+                    LOGI("[video] VideoDecodeLoop AVERROR_EOF")
+                    av_frame_free(&frame);
+                    break;
+                } else {
+                    LOGI("[video] VideoDecodeLoop pts:%ld(%lf)", frame->pts,
+                         frame->pts * av_q2d(frame->time_base))
+                    mVideoDecoder->resultCallback(frame);
+                    av_frame_free(&frame);
+                }
             } else {
                 LOGE("VideoDecodeLoop pop frame failed...")
             }
         }
     }
 
+    mVideoFrameQueue->clear();
+    mVideoFrameQueue = nullptr;
+    mJvm->DetachCurrentThread();
     LOGE("[video] DetachCurrentThread");
 }
 
@@ -504,6 +519,13 @@ void FFMpegPlayer::ReadVideoFrameLoop() {
                         decodeResult = -1;
                         break;
                     }
+                    if (decodeResult == AVERROR_EOF) {
+                        AVFrame *doneFrame = av_frame_alloc();
+                        doneFrame->pkt_size = 0;
+                        pushFrameToQueue(doneFrame, mVideoFrameQueue);
+                        LOGI("ReadVideoFrameLoop AVERROR_EOF")
+                        goto done;
+                    }
                 } while (mVideoDecoder->isNeedResent());
             } else {
                 LOGE("ReadVideoFrameLoop pop packet failed...")
@@ -511,11 +533,10 @@ void FFMpegPlayer::ReadVideoFrameLoop() {
             av_packet_free(&packet);
         } while (decodeResult == AVERROR(EAGAIN));
     }
+    done:
     mVideoPacketQueue->clear();
     mVideoPacketQueue = nullptr;
 
-    mVideoFrameQueue->clear();
-    mVideoFrameQueue = nullptr;
     mJvm->DetachCurrentThread();
     LOGE("[video] DetachCurrentThread")
 }

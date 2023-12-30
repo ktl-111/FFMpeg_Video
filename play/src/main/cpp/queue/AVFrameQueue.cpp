@@ -47,10 +47,16 @@ int AVFrameQueue::popTo(AVFrame *dstFrame) {
     if (frame == nullptr) {
         LOGE("[AVFrameQueue], popTo failed")
     }
-    LOGI("[AVFrameQueue] popTo pts:%ld %d", frame->pts, frame->format)
-    int ref = av_frame_ref(dstFrame, frame);
-    if (ref != 0) {
-        LOGE("[AVFrameQueue], popTo failed, ref: %d", ref);
+    LOGI("[AVFrameQueue] popTo pts:%ld %d %d", frame->pts, frame->format, frame->pkt_size)
+    int ref;
+    if (frame->pkt_size == 0) {
+        dstFrame->pkt_size = 0;
+        ref = 0;
+    } else {
+        ref = av_frame_ref(dstFrame, frame);
+        if (ref != 0) {
+            LOGE("[AVFrameQueue], popTo failed, ref: %d", ref);
+        }
     }
 
     av_frame_free(&frame);

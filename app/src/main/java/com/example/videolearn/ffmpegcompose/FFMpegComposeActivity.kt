@@ -189,15 +189,12 @@ class FFMpegComposeActivity : AppCompatActivity() {
                 playManager = this
                 init(object : IPalyListener {
                     override fun onVideoConfig(
-                        witdh: Int,
-                        height: Int,
-                        duration: Double,
-                        fps: Double
+                        witdh: Int, height: Int, duration: Double, fps: Double
                     ) {
                         val ratio = witdh.toFloat() / height
                         Log.i(
-                            TAG, "onConfig: video width:$witdh,height$height ratio:$ratio\n" +
-                                    "view width:${surfaceView.measuredWidth},height${surfaceView.measuredHeight}"
+                            TAG,
+                            "onConfig: video width:$witdh,height$height ratio:$ratio\n" + "view width:${surfaceView.measuredWidth},height${surfaceView.measuredHeight}"
                         )
                         val videoHeight: Int
                         val videoWidth: Int
@@ -217,21 +214,8 @@ class FFMpegComposeActivity : AppCompatActivity() {
 
                             mFps.value = fps.toInt()
                             mSize.value = Size(witdh.toFloat(), height.toFloat())
-
-                            val size = duration.toInt()
-                            Log.i(TAG, "onStart duration:${duration}")
-                            val ptsArrays = DoubleArray(size)
-                            for (i in 0 until size) {
-                                ptsArrays[i] = i.toDouble()
-                            }
-                            val list = mutableListOf<VideoBean>().apply {
-                                for (time in 0..duration.toLong()) {
-                                    add(VideoBean(time))
-                                }
-                            }
-                            videoList.addAll(list)
                         }
-//                        initGetVideoFrames()
+                        initGetVideoFrames()
                     }
 
                     override fun onPalyProgress(time: Double) {
@@ -239,11 +223,18 @@ class FFMpegComposeActivity : AppCompatActivity() {
                     }
 
                     override fun onPalyComplete() {
+                        Log.i(TAG, "onPalyComplete: ")
+                        MediaScope.launch(Dispatchers.Main) {
+                            Toast.makeText(
+                                this@FFMpegComposeActivity, "onPalyComplete", Toast.LENGTH_SHORT
+                            ).show()
+
+                        }
                     }
 
                 })
-                perpare(path, surface, OutConfig(1080 / 2, 720 / 2, 24.toDouble()))
-//                perpare(path, surface)
+//                perpare(path, surface, OutConfig(1080 / 2, 720 / 2, 24.toDouble()))
+                perpare(path, surface)
             }
         }.start()
     }
@@ -287,18 +278,16 @@ class FFMpegComposeActivity : AppCompatActivity() {
             val intent = Intent()
             intent.type = "video/*"
             intent.action = Intent.ACTION_GET_CONTENT
-            ResultUtils.getInstance(this)
-                .request(
-                    Intent.createChooser(intent, "选择视频"),
-                    100
-                ) { requestCode, resultCode, data ->
-                    if (resultCode == RESULT_OK) {
-                        val uri = data.data
-                        val uriToFileApiQ = uriToFileApiQ(uri, this)
-                        Log.i(TAG, "onActivityResult: ${uriToFileApiQ?.absolutePath}")
-                        path = uriToFileApiQ?.absolutePath
-                    }
+            ResultUtils.getInstance(this).request(
+                Intent.createChooser(intent, "选择视频"), 100
+            ) { requestCode, resultCode, data ->
+                if (resultCode == RESULT_OK) {
+                    val uri = data.data
+                    val uriToFileApiQ = uriToFileApiQ(uri, this)
+                    Log.i(TAG, "onActivityResult: ${uriToFileApiQ?.absolutePath}")
+                    path = uriToFileApiQ?.absolutePath
                 }
+            }
         }
     }
 
@@ -311,9 +300,9 @@ class FFMpegComposeActivity : AppCompatActivity() {
         } else if (uri.scheme == ContentResolver.SCHEME_CONTENT) {
             //把文件复制到沙盒目录
             val contentResolver = context.contentResolver
-            val displayName = (System.currentTimeMillis() + Math.round((Math.random() + 1) * 1000)
-                    ).toString() + "." + MimeTypeMap.getSingleton()
-                .getExtensionFromMimeType(contentResolver.getType(uri))
+            val displayName =
+                (System.currentTimeMillis() + Math.round((Math.random() + 1) * 1000)).toString() + "." + MimeTypeMap.getSingleton()
+                    .getExtensionFromMimeType(contentResolver.getType(uri))
             try {
                 val `is` = contentResolver.openInputStream(uri)
                 val cache = File(context.cacheDir.absolutePath, displayName)
@@ -334,15 +323,12 @@ class FFMpegComposeActivity : AppCompatActivity() {
     val seekFlow = MutableSharedFlow<Double>(1, 0, BufferOverflow.DROP_OLDEST)
     fun initSeekFlow() {
         MediaScope.launch(Dispatchers.IO) {
-            seekFlow
-                .distinctUntilChanged()
-                .onEach { seekTime ->
-                    Log.i(TAG, "flow seek: ${seekTime}")
-                    playManager?.apply {
-                        seekTo((seekTime * 1000).toLong())
-                    }
+            seekFlow.distinctUntilChanged().onEach { seekTime ->
+                Log.i(TAG, "flow seek: ${seekTime}")
+                playManager?.apply {
+                    seekTo((seekTime * 1000).toLong())
                 }
-                .collect()
+            }.collect()
         }
     }
 
@@ -435,8 +421,7 @@ class FFMpegComposeActivity : AppCompatActivity() {
                 DisplayUtil.dp2px(this@FFMpegComposeActivity, itemSize.toFloat()),
                 0,
                 true,
-                object :
-                    FFMpegUtils.VideoFrameArrivedInterface {
+                object : FFMpegUtils.VideoFrameArrivedInterface {
                     override fun onStart(duration: Double): DoubleArray {
                         val size = duration.toInt()
                         Log.i(TAG, "onStart duration:${duration}")
@@ -468,24 +453,15 @@ class FFMpegComposeActivity : AppCompatActivity() {
                                 "onProgress pts:${pts} index:${index} rotate:${rotate} videoBean:${videoBean} ${width}*${height}"
                             )
                             val bitMap = frame.let {
-                                val bitmap =
-                                    Bitmap.createBitmap(
-                                        width,
-                                        height,
-                                        Bitmap.Config.ARGB_8888
-                                    )
+                                val bitmap = Bitmap.createBitmap(
+                                    width, height, Bitmap.Config.ARGB_8888
+                                )
                                 bitmap!!.copyPixelsFromBuffer(it)
                                 if (rotate != 0) {
                                     val matrix = Matrix()
                                     matrix.postRotate(rotate.toFloat())
                                     Bitmap.createBitmap(
-                                        bitmap,
-                                        0,
-                                        0,
-                                        bitmap.width,
-                                        bitmap.height,
-                                        matrix,
-                                        true
+                                        bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true
                                     )
                                 } else {
                                     bitmap
@@ -542,10 +518,7 @@ class FFMpegComposeActivity : AppCompatActivity() {
                                 }
 
                                 override fun surfaceChanged(
-                                    holder: SurfaceHolder,
-                                    format: Int,
-                                    width: Int,
-                                    height: Int
+                                    holder: SurfaceHolder, format: Int, width: Int, height: Int
                                 ) {
                                 }
 
@@ -556,7 +529,8 @@ class FFMpegComposeActivity : AppCompatActivity() {
                             it.layoutParams =
                                 LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT)
                         }
-                    }, modifier = Modifier
+                    },
+                    modifier = Modifier
                         .border(width = 1.dp, color = Color.Red)
                         .align(Alignment.Center)
                 )
@@ -595,25 +569,27 @@ class FFMpegComposeActivity : AppCompatActivity() {
                         lazyListState.scrollToItem(scrollIndex, scrollOffset)
                     }
                 }
-                LazyRow(state = lazyListState, modifier = Modifier
-                    .fillMaxWidth()
-                    .pointerInput(Unit) {
-                        awaitPointerEventScope {
-                            while (true) {
-                                val event = awaitPointerEvent()
-                                Log.i(TAG, "awaitPointerEventScope event type:${event.type}")
-                                if (event.changes.size == 1) {
-                                    if (event.type == PointerEventType.Release) {
-                                        isSeek.value = false
+                LazyRow(
+                    state = lazyListState,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .pointerInput(Unit) {
+                            awaitPointerEventScope {
+                                while (true) {
+                                    val event = awaitPointerEvent()
+                                    Log.i(TAG, "awaitPointerEventScope event type:${event.type}")
+                                    if (event.changes.size == 1) {
+                                        if (event.type == PointerEventType.Release) {
+                                            isSeek.value = false
 //                                        resume()
-                                    } else if (event.type == PointerEventType.Press) {
-                                        isSeek.value = true
+                                        } else if (event.type == PointerEventType.Press) {
+                                            isSeek.value = true
 //                                        pause()
+                                        }
                                     }
                                 }
                             }
-                        }
-                    }) {
+                        }) {
                     items(videoList) { item ->
                         ConstraintLayout(
                             modifier = Modifier
@@ -628,18 +604,16 @@ class FFMpegComposeActivity : AppCompatActivity() {
                                     start.linkTo(ivFrame.start)
                                     bottom.linkTo(ivFrame.top)
                                     end.linkTo(ivFrame.end)
-                                },
-                                text = "${item.duration}s"
+                                }, text = "${item.duration}s"
                             )
                             val bitmap by remember {
                                 item.bitmap
                             }
-                            Image(
-                                painter = bitmap?.let {
-                                    BitmapPainter(it.asImageBitmap())
-                                } ?: kotlin.run {
-                                    ColorPainter(Color.Red)
-                                },
+                            Image(painter = bitmap?.let {
+                                BitmapPainter(it.asImageBitmap())
+                            } ?: kotlin.run {
+                                ColorPainter(Color.Red)
+                            },
                                 contentDescription = "",
                                 modifier = Modifier
                                     .constrainAs(ivFrame) {
@@ -650,10 +624,8 @@ class FFMpegComposeActivity : AppCompatActivity() {
                                     }
                                     .width(itemSizeDP)
                                     .height(itemSizeDP),
-                                contentScale = ContentScale.Crop
-                            )
-                            Image(
-                                painter = ColorPainter(Color.Red),
+                                contentScale = ContentScale.Crop)
+                            Image(painter = ColorPainter(Color.Red),
                                 contentDescription = "",
                                 modifier = Modifier
                                     .constrainAs(line) {
@@ -663,8 +635,7 @@ class FFMpegComposeActivity : AppCompatActivity() {
                                         bottom.linkTo(ivFrame.bottom)
                                         height = Dimension.fillToConstraints
                                     }
-                                    .width(1.dp)
-                            )
+                                    .width(1.dp))
                             createVerticalChain(tvTime, ivFrame, chainStyle = ChainStyle.Packed)
                         }
                     }
