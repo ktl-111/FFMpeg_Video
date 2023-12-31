@@ -245,13 +245,14 @@ void FFMpegPlayer::stop() {
     mHasAbort = true;
     mIsMute = false;
     updatePlayerState(PlayerState::STOP);
-    if (mVideoFrameQueue) {
-        mVideoFrameQueue->notify();
-    }
     if (mVideoPacketQueue) {
         mVideoPacketQueue->notify();
     }
+    if (mVideoFrameQueue) {
+        mVideoFrameQueue->notify();
+    }
     mMutexObj->wakeUp();
+
     if (mReadPacketThread != nullptr) {
         LOGE("join read thread")
         mReadPacketThread->join();
@@ -365,8 +366,8 @@ void FFMpegPlayer::VideoDecodeLoop() {
         }
     });
 
+    LOGI("[video] VideoDecodeLoop start")
     while (true) {
-        LOGI("[video] VideoDecodeLoop start")
         if (!mHasAbort) {
             mVideoFrameQueue->checkEmptyWait();
         }
@@ -406,7 +407,7 @@ void FFMpegPlayer::VideoDecodeLoop() {
     mVideoFrameQueue->clear();
     mVideoFrameQueue = nullptr;
     mJvm->DetachCurrentThread();
-    LOGE("[video] DetachCurrentThread");
+    LOGI("[video] VideoDecodeLoop end")
 }
 
 void FFMpegPlayer::AudioDecodeLoop() {
@@ -477,8 +478,8 @@ void FFMpegPlayer::AudioDecodeLoop() {
 }
 
 void FFMpegPlayer::ReadVideoFrameLoop() {
+    LOGI("ReadVideoFrameLoop start")
     while (true) {
-        LOGI("ReadVideoFrameLoop start")
         if (mHasAbort) {
             mVideoPacketQueue->checkEmptyWait();
         }
@@ -538,7 +539,7 @@ void FFMpegPlayer::ReadVideoFrameLoop() {
     mVideoPacketQueue = nullptr;
 
     mJvm->DetachCurrentThread();
-    LOGE("[video] DetachCurrentThread")
+    LOGI("ReadVideoFrameLoop end")
 }
 
 void FFMpegPlayer::ReadPacketLoop() {
@@ -625,7 +626,7 @@ bool FFMpegPlayer::pushPacketToQueue(AVPacket *packet,
     while (queue->isFull()) {
         LOGI("pushPacketToQueue is full, wait start")
         queue->wait();
-        LOGI("pushPacketToQueue is full, wait start")
+        LOGI("pushPacketToQueue is full, wait end")
         if (mHasAbort) {
             return false;
         }

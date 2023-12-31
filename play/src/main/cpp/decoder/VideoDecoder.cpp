@@ -287,6 +287,10 @@ int VideoDecoder::decode(AVPacket *avPacket, AVFrame *frame) {
             srcFrame->width = pAvFrame->width;
             srcFrame->height = pAvFrame->height;
         }
+        srcFrame->pts = pAvFrame->pts;
+        srcFrame->pkt_dts = pAvFrame->pkt_dts;
+        srcFrame->duration = pAvFrame->duration;
+        srcFrame->pkt_size = pAvFrame->pkt_size;
         srcFrame->format = pAvFrame->format;
         int ret = av_frame_get_buffer(srcFrame, 0);
         LOGI("[video] decode av_frame_get_buffer %d", ret)

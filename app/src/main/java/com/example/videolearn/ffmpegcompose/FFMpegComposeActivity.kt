@@ -154,7 +154,8 @@ class FFMpegComposeActivity : AppCompatActivity() {
 //        path = File(Environment.getExternalStorageDirectory(), "ffmpeg3.mp4").absolutePath
 //        path = File(Environment.getExternalStorageDirectory(), "longvideo.mp4").absolutePath
 //        path = File(Environment.getExternalStorageDirectory(), "douyon.mp4").absolutePath
-        path = File(Environment.getExternalStorageDirectory(), "test.gif").absolutePath
+//        path = File(Environment.getExternalStorageDirectory(), "test.gif").absolutePath
+        path = File(Environment.getExternalStorageDirectory(), "gif_test.gif").absolutePath
 //        path = File(Environment.getExternalStorageDirectory(), "test2.gif").absolutePath
 //        path = File(Environment.getExternalStorageDirectory(), "VID_20230511_004231.mp4").absolutePath
 //        path = File(application.externalCacheDir, "vid_test1.mp4").absolutePath

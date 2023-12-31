@@ -374,6 +374,10 @@ Java_com_example_play_utils_FFMpegUtils_nativeCutting(JNIEnv *env, jobject thiz,
                     srcFrame->width = filtered_frame->width;
                     srcFrame->height = filtered_frame->height;
                     srcFrame->format = AV_PIX_FMT_YUV420P;
+                    srcFrame->pts = filtered_frame->pts;
+                    srcFrame->pkt_dts = filtered_frame->pkt_dts;
+                    srcFrame->duration = filtered_frame->duration;
+                    srcFrame->pkt_size = filtered_frame->pkt_size;
                     int ret = av_frame_get_buffer(srcFrame, 0);
                     LOGI("cutting convert av_frame_get_buffer %d", ret)
                     //https://www.v2ex.com/t/756129
