@@ -100,9 +100,7 @@ Java_com_example_play_utils_FFMpegUtils_nativeCutting(JNIEnv *env, jobject thiz,
     const char *c_srcPath = env->GetStringUTFChars(src_path, nullptr);
     const char *c_desPath = env->GetStringUTFChars(dest_path, nullptr);
     int scale = 1;
-    AVRational outTimeBase = {1, fps * TimeBaseDiff};
-    LOGI("cutting config,start_time:%lf end_time:%lf fps:%d timeBase:{%d,%d}", start_time, end_time,
-         fps, outTimeBase.num, outTimeBase.den)
+
 
     AVFormatContext *inFormatContext = avformat_alloc_context();
     int result = 0;
@@ -137,7 +135,8 @@ Java_com_example_play_utils_FFMpegUtils_nativeCutting(JNIEnv *env, jobject thiz,
     result = avcodec_parameters_to_context(decodecContext, codec_params);
     int dstWidth = decodecContext->width / scale;
     int dstHeight = decodecContext->height / scale;
-    LOGI("decodecContext %d*%d ", decodecContext->width, decodecContext->height)
+    double srcFps = av_q2d(inSteram->avg_frame_rate);
+    LOGI("decodecContext %d*%d srcFps:%f", decodecContext->width, decodecContext->height, srcFps)
     if (result != 0) {
         LOGE("cutting avcodec_parameters_to_context fail,%d %s", result, av_err2str(result))
         return -1;
@@ -149,6 +148,14 @@ Java_com_example_play_utils_FFMpegUtils_nativeCutting(JNIEnv *env, jobject thiz,
         return -1;
     }
 
+    int outFps = fps;
+    if (fps > srcFps) {
+        outFps = srcFps;
+    }
+
+    AVRational outTimeBase = {1, outFps * TimeBaseDiff};
+    LOGI("cutting config,start_time:%lf end_time:%lf fps:%d timeBase:{%d,%d}", start_time, end_time,
+         fps, outTimeBase.num, outTimeBase.den)
 
     //设置filter
     const AVFilter *buffersrc = avfilter_get_by_name("buffer");
@@ -199,8 +206,8 @@ Java_com_example_play_utils_FFMpegUtils_nativeCutting(JNIEnv *env, jobject thiz,
     inputs->pad_idx = 0;
     inputs->next = NULL;
     const char *fpsTag = "fps=";
-    char *fpsFilter = new char[strlen(fpsTag), sizeof(fps)];
-    sprintf(fpsFilter, "%s%d", fpsTag, fps);
+    char *fpsFilter = new char[strlen(fpsTag), sizeof(outFps)];
+    sprintf(fpsFilter, "%s%d", fpsTag, outFps);
     LOGI("cutting fpsfilter:%s", fpsFilter)
     //buffer->输出(outputs)->filter in(av_strdup("in")->fps filter->filter out(av_strdup("out"))->输入(inputs)->buffersink
     result = avfilter_graph_parse_ptr(filter_graph, fpsFilter, &inputs, &outputs, NULL);
@@ -236,7 +243,7 @@ Java_com_example_play_utils_FFMpegUtils_nativeCutting(JNIEnv *env, jobject thiz,
     outStream->codecpar->codec_id = AV_CODEC_ID_H264;
     outStream->codecpar->codec_type = AVMEDIA_TYPE_VIDEO;
     outStream->codecpar->codec_tag = 0;
-    outStream->avg_frame_rate = {fps, 1};
+    outStream->avg_frame_rate = {outFps, 1};
     outStream->time_base = outTimeBase;
     outStream->start_time = 0;
     outStream->codecpar->width = dstWidth;

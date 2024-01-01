@@ -366,11 +366,10 @@ void VideoDecoder::resultCallback(AVFrame *pAvFrame) {
         } else {
             srcFrame = pAvFrame;
         }
-
         AVFrame *dstFrame = av_frame_alloc();
         int size = av_image_get_buffer_size(AV_PIX_FMT_RGBA, dstWidth, dstHeight,
                                             1);
-        shadowedOutbuffer = static_cast<uint8_t *>(av_malloc(size * sizeof(uint8_t)));
+        uint8_t *shadowedOutbuffer = static_cast<uint8_t *>(av_malloc(size * sizeof(uint8_t)));
         av_image_fill_arrays(dstFrame->data, dstFrame->linesize, shadowedOutbuffer,
                              AV_PIX_FMT_RGBA,
                              dstWidth, dstHeight, 1);
@@ -378,6 +377,11 @@ void VideoDecoder::resultCallback(AVFrame *pAvFrame) {
         dstFrame->format = AV_PIX_FMT_RGBA;
         dstFrame->width = dstWidth;
         dstFrame->height = dstHeight;
+        dstFrame->pts = srcFrame->pts;
+        dstFrame->duration = srcFrame->duration;
+        dstFrame->time_base = srcFrame->time_base;
+        av_free(dstFrame->data[3]);
+        dstFrame->data[3] = shadowedOutbuffer;
         if (swsScale(srcFrame, dstFrame) > 0) {
             LOGI("resultCallback swsScale done")
             if (mOnFrameArrivedListener) {
@@ -387,12 +391,8 @@ void VideoDecoder::resultCallback(AVFrame *pAvFrame) {
         } else {
             LOGE("showFrameToWindow swsScale fail")
         }
-
+        LOGI("resultCallback frame:%p", &dstFrame)
         av_frame_free(&dstFrame);
-        av_freep(&dstFrame);
-        if (shadowedOutbuffer) {
-            av_free(shadowedOutbuffer);
-        }
         if (needScale) {
             av_frame_free(&srcFrame);
         }
@@ -431,7 +431,7 @@ void VideoDecoder::showFrameToWindow(AVFrame *pFrame) {
             //从rgbFrame->data中拷贝数据到window中
             //windowBuffer.stride * 4 === 像素*4个字节(rgba)
             memcpy(dstWindow + i * windowBuffer.stride * 4,
-                   shadowedOutbuffer + i * pFrame->linesize[0],
+                   pFrame->data[3] + i * pFrame->linesize[0],
                    pFrame->linesize[0]);
         }
         auto endTime = std::chrono::steady_clock::now();

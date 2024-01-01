@@ -67,7 +67,6 @@ private:
     int mWidth = -1;
     int mHeight = -1;
     double mFps = -1;
-    uint8_t *shadowedOutbuffer;
     ANativeWindow *nativeWindow;
     ANativeWindow_Buffer windowBuffer;
     std::shared_ptr<MutexObj> mSeekMutexObj;
