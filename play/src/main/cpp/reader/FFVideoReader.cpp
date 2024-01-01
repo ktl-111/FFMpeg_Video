@@ -45,7 +45,7 @@ void FFVideoReader::getFrame(int64_t pts, int width, int height, uint8_t *buffer
     int64_t start = getCurrentTimeMs();
     LOGI(
             "[FFVideoReader], getFrame: %" PRId64 ", mLastPts: %" PRId64 ", width: %d, height: %d",
-            pts, mLastPts, width, height);
+            pts, mLastPts, width, height)
     if (mLastPts == -1) {
         LOGI("[FFVideoReader], seek");
         seek(pts);
@@ -91,7 +91,6 @@ void FFVideoReader::getFrame(int64_t pts, int width, int height, uint8_t *buffer
             find = true;
             break;
         }
-
         // 精准抽帧
         if (frame->pts >= target) {
             find = true;

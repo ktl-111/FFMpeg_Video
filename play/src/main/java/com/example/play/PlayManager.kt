@@ -59,4 +59,14 @@ class PlayManager : IPaly {
         }
     }
 
+    override fun surfaceReCreate(surface: Surface) {
+        if (this::mProxy.isInitialized) {
+            mProxy.surfaceReCreate(surface)
+        }
+    }
+    override fun surfaceDestroy() {
+        if (this::mProxy.isInitialized) {
+            mProxy.surfaceDestroy()
+        }
+    }
 }

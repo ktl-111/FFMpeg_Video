@@ -63,12 +63,17 @@ public:
 
     void unlock();
 
+    void surfaceReCreate(JNIEnv *env, jobject surface);
+
+    void surfaceDestroy(JNIEnv *env);
+
 private:
     int mWidth = -1;
     int mHeight = -1;
     double mFps = -1;
     ANativeWindow *nativeWindow;
     ANativeWindow_Buffer windowBuffer;
+    uint8_t *dstWindowBuffer = nullptr;
     std::shared_ptr<MutexObj> mSeekMutexObj;
 
     int RETRY_RECEIVE_COUNT = 7;

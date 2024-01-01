@@ -83,6 +83,10 @@ public:
 
     bool seekTo(int64_t seekTime);
 
+    void surfaceReCreate(JNIEnv *env, jobject surface);
+
+    void surfaceDestroy(JNIEnv *env);
+
 private:
     bool mHasAbort = false;
     bool mIsMute = false;
@@ -90,6 +94,7 @@ private:
     bool mIsSeek = false;
     bool isBackSeek = false;
     int64_t currSeekTime = -1;
+    bool showFirstFrame = true;
 
     JavaVM *mJvm = nullptr;
     PlayerJniContext mPlayerJni{};
@@ -101,8 +106,8 @@ private:
 
     std::thread *mReadPacketThread = nullptr;
     std::thread *mVideoDecodeThread = nullptr;
-
     std::thread *mVideoThread = nullptr;
+
     std::shared_ptr<AVPacketQueue> mVideoPacketQueue = nullptr;
     std::shared_ptr<AVFrameQueue> mVideoFrameQueue = nullptr;
     std::shared_ptr<VideoDecoder> mVideoDecoder = nullptr;
@@ -111,7 +116,6 @@ private:
     std::shared_ptr<AVPacketQueue> mAudioPacketQueue = nullptr;
     std::shared_ptr<AudioDecoder> mAudioDecoder = nullptr;
 
-
     void VideoDecodeLoop();
 
     void AudioDecodeLoop();
@@ -119,10 +123,13 @@ private:
     int readAvPacketToQueue(ReadPackType type);
 
     bool pushPacketToQueue(AVPacket *packet, const std::shared_ptr<AVPacketQueue> &queue) const;
-    bool pushFrameToQueue(AVFrame *frame, const std::shared_ptr<AVFrameQueue> &queue) const;
+
+    bool pushFrameToQueue(AVFrame *frame, const std::shared_ptr<AVFrameQueue> &queue);
 
     void ReadPacketLoop();
+
     void ReadVideoFrameLoop();
+
     void updatePlayerState(PlayerState state);
 
     void onPlayCompleted(JNIEnv *env);

@@ -1,21 +1,13 @@
 package com.example.videolearn.ffmpegcompose
 
-import android.Manifest
-import android.content.ContentResolver
-import android.content.Context
-import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.Matrix
-import android.net.Uri
-import android.os.Build
 import android.os.Bundle
-import android.os.Environment
 import android.util.Log
 import android.view.Surface
 import android.view.SurfaceHolder
 import android.view.SurfaceView
 import android.view.ViewGroup.LayoutParams
-import android.webkit.MimeTypeMap
 import android.widget.Toast
 import androidx.activity.compose.setContent
 import androidx.appcompat.app.AppCompatActivity
@@ -70,38 +62,23 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.constraintlayout.compose.ChainStyle
 import androidx.constraintlayout.compose.ConstraintLayout
 import androidx.constraintlayout.compose.Dimension
-import androidx.core.graphics.drawable.toBitmap
 import com.example.play.IPalyListener
 import com.example.play.PlayManager
-import com.example.play.config.OutConfig
 import com.example.play.utils.FFMpegUtils
 import com.example.videolearn.MediaScope
-import com.example.videolearn.R
 import com.example.videolearn.ffmpegcompose.bean.VideoBean
 import com.example.videolearn.utils.DisplayUtil
-import com.example.videolearn.utils.ResultUtils
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.channels.BufferOverflow
-import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.buffer
-import kotlinx.coroutines.flow.callbackFlow
-import kotlinx.coroutines.flow.channelFlow
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.flow
-import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import java.io.File
-import java.io.FileOutputStream
-import java.io.IOException
 import java.nio.ByteBuffer
 import java.util.concurrent.Executors
-import kotlin.math.abs
 
 
 class FFMpegComposeActivity : AppCompatActivity() {
@@ -109,7 +86,7 @@ class FFMpegComposeActivity : AppCompatActivity() {
     private lateinit var surface: Surface
     private lateinit var surfaceView: SurfaceView
     private var playManager: PlayManager? = null
-    private var path: String? = null
+    private lateinit var path: String
     private val videoList = mutableStateListOf<VideoBean>()
     private var mVideoDuration = 0L
     private val mFps = mutableStateOf(0)
@@ -119,9 +96,6 @@ class FFMpegComposeActivity : AppCompatActivity() {
 
     val itemSize = 40
     private val btnList = mutableStateListOf<BtnBean>().also {
-        it.add(BtnBean("select") {
-            select()
-        })
         it.add(BtnBean("cutting") {
             cutting()
         })
@@ -142,7 +116,6 @@ class FFMpegComposeActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContent { rootView(videoList, mFps, mCurrPlayTime, mSize) }
         //直播地址
 //         path = "http://zhibo.hkstv.tv/livestream/mutfysrq/playlist.m3u8"
 //         path = "http://39.135.138.58:18890/PLTV/88888888/224/3221225630/index.m3u8"
@@ -156,35 +129,19 @@ class FFMpegComposeActivity : AppCompatActivity() {
 //        path = File(Environment.getExternalStorageDirectory(), "douyon.mp4").absolutePath
 //        path = File(Environment.getExternalStorageDirectory(), "test.gif").absolutePath
 //        path = File(Environment.getExternalStorageDirectory(), "gif_test.gif").absolutePath
-        path = File(Environment.getExternalStorageDirectory(), "gif_test_2.gif").absolutePath
+//        path = File(Environment.getExternalStorageDirectory(), "gif_test_2.gif").absolutePath
 //        path = File(Environment.getExternalStorageDirectory(), "test2.gif").absolutePath
 //        path = File(Environment.getExternalStorageDirectory(), "VID_20230511_004231.mp4").absolutePath
 //        path = File(application.externalCacheDir, "vid_test1.mp4").absolutePath
+        path = intent.getStringExtra("filepath") ?: ""
+        setContent { rootView(videoList, mFps, mCurrPlayTime, mSize) }
         initSeekFlow()
     }
 
-    private fun playtest() {
-        val list = mutableListOf<VideoBean>().apply {
-            for (time in 0..30L) {
-                add(VideoBean(time))
-            }
-        }
-        videoList.addAll(list)
-        MediaScope.launch(Dispatchers.Main) {
-            delay(5000)
-            val videoBean = videoList.get(5)
-            videoBean.bitmap.value = getDrawable(R.drawable.ic_test)?.toBitmap()
-            Log.i(TAG, "bitmap udpate :${videoBean}")
-        }
-    }
-
-    private fun start() {
-        val path = path!!
-        if (!path.startsWith("http")) {
-            if (!File(path).exists()) {
-                Toast.makeText(this, "文件不存在", Toast.LENGTH_SHORT).show()
-                return
-            }
+    private fun prepare(path: String?, surface: Surface) {
+        if (path == null || !File(path).exists()) {
+            Toast.makeText(this, "文件不存在", Toast.LENGTH_SHORT).show()
+            return
         }
         playManager ?: let {
             PlayManager().apply {
@@ -238,12 +195,26 @@ class FFMpegComposeActivity : AppCompatActivity() {
 //                perpare(path, surface, OutConfig(1080 / 2, 720 / 2, 24.toDouble()))
                 perpare(path, surface)
             }
-        }.start()
+        }
+    }
+
+    private fun surfaceReCreate(surface: Surface) {
+        playManager?.surfaceReCreate(surface)
+    }
+
+    private fun surfaceDestroy() {
+        playManager?.surfaceDestroy()
+    }
+
+    private fun start() {
+        Log.i(TAG, "start: ")
+        playManager?.start()
     }
 
     private fun stop() {
         Log.i(TAG, "stop: ")
         playManager?.stop()
+        playManager = null
         finish()
     }
 
@@ -262,62 +233,6 @@ class FFMpegComposeActivity : AppCompatActivity() {
             mCurrPlayTime.value = time
             Log.i(TAG, "updateUi: ${time}")
         }
-    }
-
-    private fun select() {
-        val permission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            Manifest.permission.READ_MEDIA_VIDEO
-        } else {
-            Manifest.permission.READ_EXTERNAL_STORAGE
-        }
-        ResultUtils.getInstance(this).singlePermissions(
-            permission
-        ) { result ->
-            Log.i(TAG, "select: $result")
-            if (!result) {
-                return@singlePermissions
-            }
-            val intent = Intent()
-            intent.type = "video/*"
-            intent.action = Intent.ACTION_GET_CONTENT
-            ResultUtils.getInstance(this).request(
-                Intent.createChooser(intent, "选择视频"), 100
-            ) { requestCode, resultCode, data ->
-                if (resultCode == RESULT_OK) {
-                    val uri = data.data
-                    val uriToFileApiQ = uriToFileApiQ(uri, this)
-                    Log.i(TAG, "onActivityResult: ${uriToFileApiQ?.absolutePath}")
-                    path = uriToFileApiQ?.absolutePath
-                }
-            }
-        }
-    }
-
-    fun uriToFileApiQ(uri: Uri?, context: Context): File? {
-        var file: File? = null
-        if (uri == null) return file
-        //android10以上转换
-        if (uri.scheme == ContentResolver.SCHEME_FILE) {
-            file = File(uri.path)
-        } else if (uri.scheme == ContentResolver.SCHEME_CONTENT) {
-            //把文件复制到沙盒目录
-            val contentResolver = context.contentResolver
-            val displayName =
-                (System.currentTimeMillis() + Math.round((Math.random() + 1) * 1000)).toString() + "." + MimeTypeMap.getSingleton()
-                    .getExtensionFromMimeType(contentResolver.getType(uri))
-            try {
-                val `is` = contentResolver.openInputStream(uri)
-                val cache = File(context.cacheDir.absolutePath, displayName)
-                val fos = FileOutputStream(cache)
-                `is`!!.copyTo(fos)
-                file = cache
-                fos.close()
-                `is`.close()
-            } catch (e: IOException) {
-                e.printStackTrace()
-            }
-        }
-        return file
     }
 
     val singleCoroutine = Executors.newSingleThreadExecutor().asCoroutineDispatcher()
@@ -396,19 +311,6 @@ class FFMpegComposeActivity : AppCompatActivity() {
         }
     }
 
-    private fun testSeek() {
-        MediaScope.launch {
-            var seek = 0f
-            val diff = 1f / mFps.value
-            while (seek < mVideoDuration) {
-//                ffMpegPlay?.seekTo(seek)
-                delay(50)
-                seek += diff
-            }
-        }
-
-    }
-
     override fun onDestroy() {
         super.onDestroy()
         playManager?.also {
@@ -425,8 +327,8 @@ class FFMpegComposeActivity : AppCompatActivity() {
                 true,
                 object : FFMpegUtils.VideoFrameArrivedInterface {
                     override fun onStart(duration: Double): DoubleArray {
-                        val size = duration.toInt()
-                        Log.i(TAG, "onStart duration:${duration}")
+                        val size = duration.toInt() + 1
+                        Log.i(TAG, "onStart duration:${duration} size:$size")
                         val ptsArrays = DoubleArray(size)
                         for (i in 0 until size) {
                             ptsArrays[i] = i.toDouble()
@@ -436,6 +338,7 @@ class FFMpegComposeActivity : AppCompatActivity() {
                                 add(VideoBean(time))
                             }
                         }
+                        videoList.clear()
                         videoList.addAll(list)
                         return ptsArrays
                     }
@@ -448,6 +351,7 @@ class FFMpegComposeActivity : AppCompatActivity() {
                         rotate: Int,
                         index: Int
                     ): Boolean {
+                        Log.i(TAG, "onProgress pts:${pts}")
                         MediaScope.launch {
                             val videoBean = videoList[index]
                             Log.i(
@@ -473,7 +377,7 @@ class FFMpegComposeActivity : AppCompatActivity() {
                                 it.bitmap.value = bitMap
                             }
                         }
-                        return false
+                        return playManager == null
                     }
 
                     override fun onEnd() {
@@ -516,7 +420,15 @@ class FFMpegComposeActivity : AppCompatActivity() {
                             surfaceView = it
                             it.holder.addCallback(object : SurfaceHolder.Callback {
                                 override fun surfaceCreated(holder: SurfaceHolder) {
+                                    Log.i(TAG, "surfaceCreated: ")
                                     surface = holder.surface
+                                    MediaScope.launch {
+                                        if (playManager == null) {
+                                            prepare(path, surface)
+                                        } else {
+                                            surfaceReCreate(surface)
+                                        }
+                                    }
                                 }
 
                                 override fun surfaceChanged(
@@ -525,6 +437,8 @@ class FFMpegComposeActivity : AppCompatActivity() {
                                 }
 
                                 override fun surfaceDestroyed(holder: SurfaceHolder) {
+                                    Log.i(TAG, "surfaceDestroyed: ")
+                                    surfaceDestroy()
                                 }
 
                             })
@@ -644,7 +558,7 @@ class FFMpegComposeActivity : AppCompatActivity() {
                 }
             }
 
-            LazyVerticalGrid(columns = GridCells.Fixed(4)) {
+            LazyVerticalGrid(columns = GridCells.Fixed(3)) {
                 items(btnList) {
                     commonButton(it.str, modifier = Modifier.weight(1f), it.onclick)
                 }

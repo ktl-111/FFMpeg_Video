@@ -173,6 +173,47 @@ bool VideoDecoder::prepare(JNIEnv *env) {
     return true;
 }
 
+void VideoDecoder::surfaceReCreate(JNIEnv *env, jobject surface) {
+    LOGI("[video] surfaceReCreate")
+    mSurface = surface;
+    if (mHwDeviceCtx) {
+        if (mSurface != nullptr) {
+            mMediaCodecContext = av_mediacodec_alloc_context();
+            av_mediacodec_default_init(mCodecContext, mMediaCodecContext, mSurface);
+        }
+    } else {
+        //创建nativewindow
+        nativeWindow = ANativeWindow_fromSurface(env, mSurface);
+        //修改缓冲区格式和大小,对应视频格式和大小
+        ANativeWindow_setBuffersGeometry(nativeWindow, getWidth(), getHeight(),
+                                         WINDOW_FORMAT_RGBA_8888);
+        if (dstWindowBuffer) {
+            //windowBuffer 入参出参,
+            int result = ANativeWindow_lock(nativeWindow, &windowBuffer, nullptr);
+            LOGI("surfaceReCreate ANativeWindow_lock %d %s stride:%d %d*%d", result,
+                 av_err2str(result),
+                 windowBuffer.stride, windowBuffer.width, windowBuffer.height)
+            memcpy(windowBuffer.bits, dstWindowBuffer,
+                   windowBuffer.stride * windowBuffer.height * 4);
+
+            result = ANativeWindow_unlockAndPost(nativeWindow);
+            LOGI("surfaceReCreate ANativeWindow_unlockAndPost %d %s", result, av_err2str(result))
+        }
+    }
+}
+
+void VideoDecoder::surfaceDestroy(JNIEnv *env) {
+    LOGI("[video] surfaceDestroy")
+    mSurface = nullptr;
+    if (mHwDeviceCtx) {
+        av_mediacodec_default_free(mCodecContext);
+        mMediaCodecContext = nullptr;
+    } else {
+        ANativeWindow_release(nativeWindow);
+        nativeWindow = nullptr;
+    }
+}
+
 bool VideoDecoder::isHwDecoder(AVFrame *frame) {
     return frame->format == hw_pix_fmt;
 }
@@ -419,18 +460,23 @@ void VideoDecoder::showFrameToWindow(AVFrame *pFrame) {
         //将yuv数据转成rgb
 
         //windowBuffer 入参出参,
-
         int result = ANativeWindow_lock(nativeWindow, &windowBuffer, nullptr);
-        LOGI("showFrameToWindow ANativeWindow_lock %d %s", result, av_err2str(result))
-
+        LOGI("showFrameToWindow ANativeWindow_lock %d %s stride:%d %d*%d", result,
+             av_err2str(result),
+             windowBuffer.stride, windowBuffer.width, windowBuffer.height)
+        free(dstWindowBuffer);
+        dstWindowBuffer = static_cast<uint8_t *>(malloc(
+                windowBuffer.stride * windowBuffer.height * 4));
         //转成数组
-        auto *dstWindow = static_cast<uint8_t *>(windowBuffer.bits);
-
+        uint8_t *buffer = static_cast<uint8_t *>(windowBuffer.bits);
         startTime = std::chrono::steady_clock::now();
         for (int i = 0; i < getHeight(); ++i) {
             //从rgbFrame->data中拷贝数据到window中
             //windowBuffer.stride * 4 === 像素*4个字节(rgba)
-            memcpy(dstWindow + i * windowBuffer.stride * 4,
+            memcpy(buffer + i * windowBuffer.stride * 4,
+                   pFrame->data[3] + i * pFrame->linesize[0],
+                   pFrame->linesize[0]);
+            memcpy(dstWindowBuffer + i * windowBuffer.stride * 4,
                    pFrame->data[3] + i * pFrame->linesize[0],
                    pFrame->linesize[0]);
         }
@@ -630,7 +676,11 @@ void VideoDecoder::release() {
         mSwsContext = nullptr;
         LOGI("sws context...release")
     }
-
+    if (nativeWindow) {
+        ANativeWindow_release(nativeWindow);
+        nativeWindow = nullptr;
+        mSurface = nullptr;
+    }
     if (mMediaCodecContext != nullptr) {
         av_mediacodec_default_free(mCodecContext);
         mMediaCodecContext = nullptr;
@@ -657,7 +707,6 @@ void VideoDecoder::release() {
         avfilter_free(mBuffersinkContext);
         mBuffersinkContext = nullptr;
     }
-
 }
 
 int VideoDecoder::getRotate() {

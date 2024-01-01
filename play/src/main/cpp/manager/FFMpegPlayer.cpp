@@ -87,11 +87,6 @@ bool FFMpegPlayer::prepare(JNIEnv *env, std::string &path, jobject surface, jobj
 //                frameSize = outConfig->getFps() * 5;
             }
 
-            mVideoPacketQueue = std::make_shared<AVPacketQueue>(50);
-            mVideoFrameQueue = std::make_shared<AVFrameQueue>(50);
-            mVideoThread = new std::thread(&FFMpegPlayer::VideoDecodeLoop, this);
-            mVideoDecodeThread = new std::thread(&FFMpegPlayer::ReadVideoFrameLoop, this);
-
             mVideoDecoder->setSurface(surface);
             videoPrepared = mVideoDecoder->prepare(env);
             if (surface != nullptr && !videoPrepared) {
@@ -131,20 +126,17 @@ bool FFMpegPlayer::prepare(JNIEnv *env, std::string &path, jobject surface, jobj
     if (prepared) {
         updatePlayerState(PlayerState::PREPARE);
     }
+    mVideoPacketQueue = std::make_shared<AVPacketQueue>(50);
+    mVideoFrameQueue = std::make_shared<AVFrameQueue>(50);
+    mVideoThread = new std::thread(&FFMpegPlayer::VideoDecodeLoop, this);
+    mReadPacketThread = new std::thread(&FFMpegPlayer::ReadPacketLoop, this);
+    mVideoDecodeThread = new std::thread(&FFMpegPlayer::ReadVideoFrameLoop, this);
     return prepared;
-
 }
 
 void FFMpegPlayer::start() {
     LOGI("FFMpegPlayer::start, state: %d", mPlayerState)
-    if (mPlayerState != PlayerState::PREPARE) {  // prepared failed
-        return;
-    }
-    updatePlayerState(PlayerState::START);
-    if (mReadPacketThread == nullptr) {
-        mReadPacketThread = new std::thread(&FFMpegPlayer::ReadPacketLoop, this);
-    }
-
+    resume();
 }
 
 bool FFMpegPlayer::seekTo(int64_t seekTime) {
@@ -319,7 +311,6 @@ void FFMpegPlayer::pause() {
     updatePlayerState(PlayerState::PAUSE);
 }
 
-
 void FFMpegPlayer::VideoDecodeLoop() {
     if (mVideoDecoder == nullptr || mVideoPacketQueue == nullptr) {
         return;
@@ -372,7 +363,7 @@ void FFMpegPlayer::VideoDecodeLoop() {
             mVideoFrameQueue->checkEmptyWait();
         }
 
-        if (mPlayerState == PlayerState::PAUSE) {
+        if (mPlayerState == PlayerState::PAUSE || mPlayerState == PlayerState::PREPARE) {
             LOGI("[video] VideoDecodeLoop decode pause wait")
             mMutexObj->wait();
             LOGI("[video] VideoDecodeLoop decode pause wakup state:%d", mPlayerState);
@@ -480,7 +471,7 @@ void FFMpegPlayer::AudioDecodeLoop() {
 void FFMpegPlayer::ReadVideoFrameLoop() {
     LOGI("ReadVideoFrameLoop start")
     while (true) {
-        if (mHasAbort) {
+        if (!mHasAbort) {
             mVideoPacketQueue->checkEmptyWait();
         }
 
@@ -505,9 +496,6 @@ void FFMpegPlayer::ReadVideoFrameLoop() {
 
                     LOGI("[video] ReadVideoFrameLoop decode %d", decodeResult)
                     if (decodeResult == 0) {
-                        if (mVideoFrameQueue->isEmpty()) {
-                            mVideoDecoder->updateTimestamp(pFrame);
-                        }
                         if (!pushFrameToQueue(pFrame, mVideoFrameQueue)) {
                             av_frame_free(&pFrame);
                         } else {
@@ -638,7 +626,7 @@ bool FFMpegPlayer::pushPacketToQueue(AVPacket *packet,
 }
 
 bool FFMpegPlayer::pushFrameToQueue(AVFrame *frame,
-                                    const std::shared_ptr<AVFrameQueue> &queue) const {
+                                    const std::shared_ptr<AVFrameQueue> &queue) {
     if (queue == nullptr) {
         return false;
     }
@@ -667,6 +655,10 @@ bool FFMpegPlayer::pushFrameToQueue(AVFrame *frame,
         }
     } else {
         queue->push(frame);
+        if (showFirstFrame) {
+            mVideoDecoder->resultCallback(frame);
+            showFirstFrame = false;
+        }
     }
     suc = true;
     return suc;
@@ -684,3 +676,12 @@ void FFMpegPlayer::onPlayCompleted(JNIEnv *env) {
         env->CallVoidMethod(mPlayerJni.instance, mPlayerJni.onPlayCompleted);
     }
 }
+
+void FFMpegPlayer::surfaceReCreate(JNIEnv *env, jobject surface) {
+    mVideoDecoder->surfaceReCreate(env, surface);
+}
+
+void FFMpegPlayer::surfaceDestroy(JNIEnv *env) {
+    mVideoDecoder->surfaceDestroy(env);
+}
+

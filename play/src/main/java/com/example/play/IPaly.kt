@@ -12,4 +12,6 @@ interface IPaly {
     fun pause()
     fun release()
     fun seekTo(seek: Long)
+    fun surfaceReCreate(surface: Surface)
+    fun surfaceDestroy()
 }

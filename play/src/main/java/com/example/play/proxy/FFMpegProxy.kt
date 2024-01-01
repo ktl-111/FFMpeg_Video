@@ -47,12 +47,20 @@ class FFMpegProxy : IPaly {
 
     override fun release() {
         nativeRelease(nativeManager)
+        palyListener = null
     }
 
     override fun seekTo(seekTime: Long) {
         nativeSeekTo(nativeManager, seekTime)
     }
 
+    override fun surfaceReCreate(surface: Surface) {
+        nativeSurfaceReCreate(nativeManager,surface)
+    }
+
+    override fun surfaceDestroy() {
+        nativeSurfaceDestroy(nativeManager)
+    }
     private external fun nativeInit(): Long
     private external fun nativePrepare(
         nativeManager: Long, path: String, surface: Surface, outConfig: OutConfig?
@@ -64,6 +72,8 @@ class FFMpegProxy : IPaly {
     private external fun nativePause(nativeManager: Long)
     private external fun nativeRelease(nativeManager: Long)
     private external fun nativeSeekTo(nativeManager: Long, seekTime: Long): Boolean
+    private external fun nativeSurfaceReCreate(nativeManager: Long, surface: Surface)
+    private external fun nativeSurfaceDestroy(nativeManager: Long)
     private fun onNativeVideoConfig(width: Int, height: Int, duration: Double, fps: Double) {
         Log.i(
             TAG,
