@@ -99,7 +99,8 @@ Java_com_example_play_proxy_FFMpegProxy_nativeSeekTo(JNIEnv *env, jobject thiz,
 extern "C"
 JNIEXPORT void JNICALL
 Java_com_example_play_proxy_FFMpegProxy_nativeSurfaceReCreate(JNIEnv *env, jobject thiz,
-                                                              jlong native_manager, jobject surface) {
+                                                              jlong native_manager,
+                                                              jobject surface) {
     FFMpegPlayer *pPlayer = reinterpret_cast<FFMpegPlayer *>(native_manager);
     if (pPlayer != nullptr) {
         pPlayer->surfaceReCreate(env, surface);
@@ -113,4 +114,24 @@ Java_com_example_play_proxy_FFMpegProxy_nativeSurfaceDestroy(JNIEnv *env, jobjec
     if (pPlayer != nullptr) {
         pPlayer->surfaceDestroy(env);
     }
+}
+extern "C"
+JNIEXPORT jlong JNICALL
+Java_com_example_play_proxy_FFMpegProxy_getCurrTimestamp(JNIEnv *env, jobject thiz,
+                                                         jlong native_manager) {
+    FFMpegPlayer *pPlayer = reinterpret_cast<FFMpegPlayer *>(native_manager);
+    if (pPlayer != nullptr) {
+        return pPlayer->getCurrTimestamp();
+    }
+    return 0;
+}
+extern "C"
+JNIEXPORT jint JNICALL
+Java_com_example_play_proxy_FFMpegProxy_getPlayerState(JNIEnv *env, jobject thiz,
+                                                       jlong native_manager) {
+    FFMpegPlayer *pPlayer = reinterpret_cast<FFMpegPlayer *>(native_manager);
+    if (pPlayer != nullptr) {
+        return pPlayer->getPlayerState();
+    }
+    return 0;
 }

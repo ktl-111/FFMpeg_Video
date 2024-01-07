@@ -1,11 +1,12 @@
 #include "OutConfig.h"
 #include "../globals.h"
 
-OutConfig::OutConfig(int width, int height, double fps) {
+OutConfig::OutConfig(int width, int height, int cropWidth, int cropHeight, double fps) {
     mWidth = width;
     mHeight = height;
+    mCropWidth = cropWidth;
+    mCropHeight = cropHeight;
     mFps = fps;
-    double d = mFps * TimeBaseDiff;
 
     mTimeBase = {1, ((int) mFps) * TimeBaseDiff};
 }
@@ -20,6 +21,14 @@ int OutConfig::getWidth() {
 
 int OutConfig::getHeight() {
     return mHeight;
+}
+
+int OutConfig::getCropWidth() {
+    return mCropWidth;
+}
+
+int OutConfig::getCropHeight() {
+    return mCropHeight;
 }
 
 double OutConfig::getFps() {

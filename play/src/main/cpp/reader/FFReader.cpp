@@ -1,3 +1,4 @@
+#include <bits/sysconf.h>
 #include "FFReader.h"
 #include "../utils/loghelper.h"
 
@@ -125,6 +126,10 @@ AVDISCARD_ALL	丢弃所有帧
         mMediaInfo.audio_time_base = mFtx->streams[mCurStreamIndex]->time_base;
     }
 
+    // 根据设备核心数设置线程数
+    long threadCount = sysconf(_SC_NPROCESSORS_ONLN);
+
+    codecContext->thread_count = threadCount > 0 ? threadCount : 1;
     int ret = avcodec_open2(codecContext, mCodecArr[type], nullptr);
     if (ret != 0) {
         LOGE( "[FFReader], open codec failed, name: %s, ret: %d", mCodecArr[type]->name, ret)

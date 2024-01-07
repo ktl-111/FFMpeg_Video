@@ -64,6 +64,7 @@ import androidx.constraintlayout.compose.ConstraintLayout
 import androidx.constraintlayout.compose.Dimension
 import com.example.play.IPalyListener
 import com.example.play.PlayManager
+import com.example.play.config.OutConfig
 import com.example.play.utils.FFMpegUtils
 import com.example.videolearn.MediaScope
 import com.example.videolearn.ffmpegcompose.bean.VideoBean
@@ -88,8 +89,8 @@ class FFMpegComposeActivity : AppCompatActivity() {
     private var playManager: PlayManager? = null
     private lateinit var path: String
     private val videoList = mutableStateListOf<VideoBean>()
-    private var mVideoDuration = 0L
     private val mFps = mutableStateOf(0)
+    private val mVideoDuration = mutableStateOf(0.toDouble())
     private val mSize = mutableStateOf(Size(0f, 0f))
     private val mCurrPlayTime = mutableStateOf(0.toDouble())
     private var isSeek = mutableStateOf(false)
@@ -111,6 +112,20 @@ class FFMpegComposeActivity : AppCompatActivity() {
         it.add(BtnBean("pause") {
             pause()
         })
+        it.add(BtnBean("currPlayer") {
+            Toast.makeText(
+                this@FFMpegComposeActivity,
+                "player state:${playManager?.getPlayerState()}",
+                Toast.LENGTH_SHORT
+            ).show()
+        })
+        it.add(BtnBean("currTime") {
+            Toast.makeText(
+                this@FFMpegComposeActivity,
+                "player state:${playManager?.getCurrTimestamp()}",
+                Toast.LENGTH_SHORT
+            ).show()
+        })
     }
 
 
@@ -127,14 +142,14 @@ class FFMpegComposeActivity : AppCompatActivity() {
 //        path = File(Environment.getExternalStorageDirectory(), "ffmpeg3.mp4").absolutePath
 //        path = File(Environment.getExternalStorageDirectory(), "longvideo.mp4").absolutePath
 //        path = File(Environment.getExternalStorageDirectory(), "douyon.mp4").absolutePath
-//        path = File(Environment.getExternalStorageDirectory(), "test.gif").absolutePath
-//        path = File(Environment.getExternalStorageDirectory(), "gif_test.gif").absolutePath
+//        path = File(Environment.getExternalStorageDirectory(), "gif_test_2.gif").absolutePath
 //        path = File(Environment.getExternalStorageDirectory(), "gif_test_2.gif").absolutePath
 //        path = File(Environment.getExternalStorageDirectory(), "test2.gif").absolutePath
 //        path = File(Environment.getExternalStorageDirectory(), "VID_20230511_004231.mp4").absolutePath
 //        path = File(application.externalCacheDir, "vid_test1.mp4").absolutePath
         path = intent.getStringExtra("filepath") ?: ""
-        setContent { rootView(videoList, mFps, mCurrPlayTime, mSize) }
+//        path = File(application.externalCacheDir, "404.gif").absolutePath
+        setContent { rootView(videoList, mFps, mCurrPlayTime, mSize, mVideoDuration) }
         initSeekFlow()
     }
 
@@ -173,6 +188,7 @@ class FFMpegComposeActivity : AppCompatActivity() {
 
                             mFps.value = fps.toInt()
                             mSize.value = Size(witdh.toFloat(), height.toFloat())
+                            mVideoDuration.value = duration
                         }
                         initGetVideoFrames()
                     }
@@ -192,11 +208,13 @@ class FFMpegComposeActivity : AppCompatActivity() {
                     }
 
                 })
-//                perpare(path, surface, OutConfig(1080 / 2, 720 / 2, 24.toDouble()))
-                perpare(path, surface)
+//                prepare(path, surface, outConfig)
+                prepare(path, surface)
             }
         }
     }
+
+    private val outConfig = OutConfig(0, 0, 0, 0, fps = 24.toDouble())
 
     private fun surfaceReCreate(surface: Surface) {
         playManager?.surfaceReCreate(surface)
@@ -282,12 +300,14 @@ class FFMpegComposeActivity : AppCompatActivity() {
 //            }
     }
 
-    private fun seekto(seekTime: Double) {
+    private fun uiSeekTo(seekTime: Double) {
         MediaScope.launch(singleCoroutine) {
             Log.i(TAG, "seekto: ${seekTime}")
             playManager?.apply {
-                mCurrPlayTime.value -= 1.0f / mFps.value
-                seekTo((mCurrPlayTime.value * 1000).toLong())
+                mCurrPlayTime.value = seekTime
+                seekTo((seekTime * 1000).toLong())
+//                mCurrPlayTime.value -= 1.0f / mFps.value
+//                seekTo((mCurrPlayTime.value * 1000).toLong())
             }
         }
     }
@@ -305,7 +325,11 @@ class FFMpegComposeActivity : AppCompatActivity() {
                     }
                     Log.i(TAG, "cutting file:${outFile.absolutePath}")
                     val destPath = outFile.absolutePath
-                    FFMpegUtils.cutting(path!!, destPath, 0.toDouble(), 5.toDouble(), 24)
+                    val startTime = 0.0
+                    val allTime = 20.0
+                    FFMpegUtils.cutting(
+                        path, destPath, startTime, startTime + allTime, outConfig
+                    )
                 }
             }
         }
@@ -327,16 +351,19 @@ class FFMpegComposeActivity : AppCompatActivity() {
                 true,
                 object : FFMpegUtils.VideoFrameArrivedInterface {
                     override fun onStart(duration: Double): DoubleArray {
-                        val size = duration.toInt() + 1
+                        val size = duration.toInt()
                         Log.i(TAG, "onStart duration:${duration} size:$size")
                         val ptsArrays = DoubleArray(size)
                         for (i in 0 until size) {
                             ptsArrays[i] = i.toDouble()
                         }
                         val list = mutableListOf<VideoBean>().apply {
-                            for (time in 0..duration.toLong()) {
+                            for (time in 1..duration.toLong()) {
                                 add(VideoBean(time))
                             }
+                        }
+                        for (i in 0..15) {
+                            list.add(VideoBean(-1))
                         }
                         videoList.clear()
                         videoList.addAll(list)
@@ -393,7 +420,7 @@ class FFMpegComposeActivity : AppCompatActivity() {
         rootView(videoList.apply {
             add(VideoBean(1))
             add(VideoBean(2))
-        }, mFps, mCurrPlayTime, mSize)
+        }, mFps, mCurrPlayTime, mSize, mVideoDuration)
     }
 
     @Composable
@@ -401,7 +428,8 @@ class FFMpegComposeActivity : AppCompatActivity() {
         videoList: SnapshotStateList<VideoBean>,
         fps: MutableState<Int>,
         currPlayTime: MutableState<Double>,
-        size: MutableState<Size>
+        size: MutableState<Size>,
+        videoDuration: MutableState<Double>
     ) {
         Column(
             modifier = Modifier
@@ -451,7 +479,12 @@ class FFMpegComposeActivity : AppCompatActivity() {
                         .align(Alignment.Center)
                 )
                 Text(
-                    text = "fps:${fps.value}    ${size.value.width}*${size.value.height}    currTime:${currPlayTime.value}",
+                    text = "fps:${fps.value},size:${size.value.width.toInt()}*${size.value.height.toInt()},duration:${videoDuration.value.toInt()},currTime:${
+                        String.format(
+                            "%.2f",
+                            currPlayTime.value
+                        )
+                    }",
                     color = Color.Red
                 )
             }
@@ -485,8 +518,7 @@ class FFMpegComposeActivity : AppCompatActivity() {
                         lazyListState.scrollToItem(scrollIndex, scrollOffset)
                     }
                 }
-                LazyRow(
-                    state = lazyListState,
+                LazyRow(state = lazyListState,
                     modifier = Modifier
                         .fillMaxWidth()
                         .pointerInput(Unit) {
@@ -568,7 +600,7 @@ class FFMpegComposeActivity : AppCompatActivity() {
                     mutableStateOf("")
                 }
                 commonButton(text = "seek to", modifier = Modifier.weight(1.0f)) {
-                    seekto(text.let {
+                    uiSeekTo(text.let {
                         if (it.isEmpty()) {
                             0.toDouble()
                         } else {
@@ -602,5 +634,4 @@ class FFMpegComposeActivity : AppCompatActivity() {
             Text(text = text)
         }
     }
-
 }

@@ -87,14 +87,17 @@ public:
 
     void surfaceDestroy(JNIEnv *env);
 
+    int getPlayerState();
+
+    int64_t getCurrTimestamp();
+
 private:
     bool mHasAbort = false;
     bool mIsMute = false;
-    int64_t preSeekTime = -1;
     bool mIsSeek = false;
-    bool isBackSeek = false;
-    int64_t currSeekTime = -1;
-    bool showFirstFrame = true;
+    bool mIsBackSeek = false;
+    int64_t mCurrSeekTime = -1;
+    bool mShowFirstFrame = true;
 
     JavaVM *mJvm = nullptr;
     PlayerJniContext mPlayerJni{};
@@ -120,7 +123,7 @@ private:
 
     void AudioDecodeLoop();
 
-    int readAvPacketToQueue(ReadPackType type);
+    bool readAvPacketToQueue(ReadPackType type);
 
     bool pushPacketToQueue(AVPacket *packet, const std::shared_ptr<AVPacketQueue> &queue) const;
 

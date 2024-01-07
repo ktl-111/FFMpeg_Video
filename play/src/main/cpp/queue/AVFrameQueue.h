@@ -20,21 +20,27 @@ public:
 
     AVFrame *pop();
 
+    bool checkLastIsEofFrame();
+
     int popTo(AVFrame *dstFrame);
+
     int front(AVFrame *packet);
 
     void clear();
 
     bool isFull();
+
     void checkEmptyWait();
+
     bool isEmpty();
+
     int64_t getSize();
 
     void wait(unsigned int timeOutMs = -1);
 
     void notify();
 
-    int getFrameByTime(AVFrame *dstFrame, int64_t time, bool  isBack);
+    int getFrameByTime(AVFrame *dstFrame, int64_t time, bool isBack);
 
     int64_t mMaxSize = 60;
 private:

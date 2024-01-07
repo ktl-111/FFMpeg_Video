@@ -23,7 +23,7 @@ bool BaseDecoder::prepare(JNIEnv *env) {
     return false;
 }
 
-int BaseDecoder::decode(AVPacket *packet,AVFrame *frame) {
+int BaseDecoder::decode(AVPacket *packet, AVFrame *frame) {
     return 0;
 }
 
@@ -54,6 +54,10 @@ void BaseDecoder::flush() {
     if (mCodecContext != nullptr) {
         avcodec_flush_buffers(mCodecContext);
     }
+}
+
+void BaseDecoder::updateNotResent() {
+    mNeedResent = false;
 }
 
 bool BaseDecoder::isNeedResent() const {

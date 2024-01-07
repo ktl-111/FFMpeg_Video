@@ -2,6 +2,7 @@ package com.example.play
 
 import android.util.Log
 import android.view.Surface
+import com.example.play.PlayerState
 import com.example.play.config.OutConfig
 import com.example.play.proxy.FFMpegProxy
 
@@ -13,14 +14,14 @@ class PlayManager : IPaly {
         this.iPalyListener = iPalyListener
     }
 
-    override fun perpare(path: String, surface: Surface, outConfig: OutConfig?) {
+    override fun prepare(path: String, surface: Surface, outConfig: OutConfig?) {
         if (path.isEmpty()) {
-            Log.i(TAG, "perpare path is empty")
+            Log.i(TAG, "prepare path is empty")
             return
         }
         mProxy = FFMpegProxy()
         mProxy.init(iPalyListener)
-        mProxy.perpare(path, surface, outConfig)
+        mProxy.prepare(path, surface, outConfig)
     }
 
     override fun start() {
@@ -64,9 +65,26 @@ class PlayManager : IPaly {
             mProxy.surfaceReCreate(surface)
         }
     }
+
     override fun surfaceDestroy() {
         if (this::mProxy.isInitialized) {
             mProxy.surfaceDestroy()
+        }
+    }
+
+    override fun getPlayerState(): PlayerState {
+        return if (this::mProxy.isInitialized) {
+            mProxy.getPlayerState()
+        } else {
+            PlayerState.Unknown
+        }
+    }
+
+    override fun getCurrTimestamp(): Long {
+        return if (this::mProxy.isInitialized) {
+            mProxy.getCurrTimestamp()
+        } else {
+            0
         }
     }
 }

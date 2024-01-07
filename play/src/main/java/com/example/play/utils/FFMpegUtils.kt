@@ -1,5 +1,6 @@
 package com.example.play.utils
 
+import com.example.play.config.OutConfig
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
@@ -40,11 +41,22 @@ object FFMpegUtils {
         path: String, width: Int, height: Int, precise: Boolean, cb: VideoFrameArrivedInterface
     )
 
-    fun cutting(srcPath: String, destPath: String,startTime:Double,endTime:Double,fps:Int): Boolean {
-        return nativeCutting(srcPath, destPath, startTime, endTime, fps)
+    /**
+     * 内容时长裁剪
+     */
+    fun cutting(
+        srcPath: String,
+        destPath: String,
+        startTime: Double,
+        endTime: Double,
+        outConfig: OutConfig? = null
+    ): Boolean {
+        return nativeCutting(srcPath, destPath, startTime, endTime, outConfig)
     }
 
-    private external fun nativeCutting(srcPath: String, destPath: String,startTime:Double,endTime:Double,fps:Int): Boolean
+    private external fun nativeCutting(
+        srcPath: String, destPath: String, startTime: Double, endTime: Double, outConfig: OutConfig?
+    ): Boolean
 
     private fun allocateFrame(width: Int, height: Int): ByteBuffer {
         return ByteBuffer.allocateDirect(width * height * 4).order(ByteOrder.LITTLE_ENDIAN)

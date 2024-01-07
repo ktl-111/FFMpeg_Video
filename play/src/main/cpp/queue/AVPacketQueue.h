@@ -18,14 +18,20 @@ public:
 
     void push(AVPacket *packet);
 
-    AVPacket* pop();
+    AVPacket *pop();
+
+    bool checkLastIsEofPack();
 
     int popTo(AVPacket *packet);
 
     void clear();
+
     bool isFull();
+
     void checkEmptyWait();
+
     bool isEmpty();
+
 
     void wait(unsigned int timeOutMs = -1);
 

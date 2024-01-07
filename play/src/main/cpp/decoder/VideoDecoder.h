@@ -31,6 +31,10 @@ public:
 
     int getHeight() const;
 
+    int getCropWidth();
+
+    int getCropHeight();
+
     double getFps() const;
 
     void setSurface(jobject surface);
@@ -51,8 +55,6 @@ public:
 
     int64_t getTimestamp() const;
 
-    int getRotate();
-
     virtual void showFrameToWindow(AVFrame *frame);
 
     virtual void resultCallback(AVFrame *pFrame);
@@ -71,15 +73,14 @@ private:
     int mWidth = -1;
     int mHeight = -1;
     double mFps = -1;
+    int mRotate;
     ANativeWindow *nativeWindow;
     ANativeWindow_Buffer windowBuffer;
     uint8_t *dstWindowBuffer = nullptr;
     std::shared_ptr<MutexObj> mSeekMutexObj;
 
-    int RETRY_RECEIVE_COUNT = 7;
-
     int64_t mStartTimeMsForSync = -1;
-    int64_t mCurTimeStampMs = 0;
+    int64_t mCurTimeMs = 0;
 
     jobject mSurface = nullptr;
     std::shared_ptr<OutConfig> mOutConfig = nullptr;

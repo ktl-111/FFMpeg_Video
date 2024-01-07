@@ -35,18 +35,7 @@ AVFrame *AVFrameQueue::pop() {
     notify();
     return packet;
 }
-// 检查帧的引用计数是否为零
-int is_frame_unrefed(const AVFrame *frame) {
-    // 获取帧的缓冲区
-    AVBufferRef *buf = frame->buf[0];
 
-    // 如果没有缓冲区或者缓冲区引用计数为零，则认为帧已经被释放
-    if (buf) {
-        int count = av_buffer_get_ref_count(buf);
-        LOGI("queue is_frame_unrefed %d", count)
-    }
-    return !buf || av_buffer_get_ref_count(buf) == 0;
-}
 int AVFrameQueue::popTo(AVFrame *dstFrame) {
     pthread_mutex_lock(&mMutex);
     bool isEmpty = mQueue.empty() && mQueue.size() <= 0;
@@ -69,6 +58,7 @@ int AVFrameQueue::popTo(AVFrame *dstFrame) {
             LOGE("[AVFrameQueue], popTo failed, ref: %d", ref);
         }
     }
+
     av_frame_free(&frame);
     mQueue.pop();
     pthread_mutex_unlock(&mMutex);
@@ -148,6 +138,20 @@ void AVFrameQueue::checkEmptyWait() {
     }
     pthread_mutex_unlock(&mMutex);
     LOGI("[AVFrameQueue] checkEmptyWait end")
+}
+
+bool AVFrameQueue::checkLastIsEofFrame() {
+    pthread_mutex_lock(&mMutex);
+    if (mQueue.empty()) {
+        LOGE("[AVFrameQueue],checkLastIsEofPack isEmpty")
+        pthread_mutex_unlock(&mMutex);
+        return false;
+    }
+    AVFrame *pFrame = mQueue.back();
+    bool isEof = pFrame->pkt_size == 0;
+    LOGI("[AVFrameQueue],checkLastIsEofPack isEof:%d", isEof)
+    pthread_mutex_unlock(&mMutex);
+    return isEof;
 }
 
 bool AVFrameQueue::isEmpty() {

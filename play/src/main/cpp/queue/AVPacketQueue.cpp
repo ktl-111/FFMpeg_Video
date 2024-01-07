@@ -35,7 +35,7 @@ int AVPacketQueue::popTo(AVPacket *packet) {
     pthread_mutex_lock(&mMutex);
     bool isEmpty = mQueue.empty() && mQueue.size() <= 0;
     if (isEmpty) {
-        LOGE("[AVPacketQueue],isEmpty")
+        LOGE("[AVPacketQueue],popTo isEmpty")
         pthread_mutex_unlock(&mMutex);
         return -1;
     }
@@ -108,6 +108,20 @@ void AVPacketQueue::checkEmptyWait() {
     }
     pthread_mutex_unlock(&mMutex);
     LOGI("[AVPacketQueue] checkEmptyWait end")
+}
+
+bool AVPacketQueue::checkLastIsEofPack() {
+    pthread_mutex_lock(&mMutex);
+    if (mQueue.empty()) {
+        LOGE("[AVPacketQueue],checkLastIsEofPack isEmpty")
+        pthread_mutex_unlock(&mMutex);
+        return false;
+    }
+    AVPacket *pPacket = mQueue.back();
+    bool isEof = pPacket->size == 0 && pPacket->data == nullptr;
+    LOGI("[AVPacketQueue],checkLastIsEofPack isEof:%d", isEof)
+    pthread_mutex_unlock(&mMutex);
+    return isEof;
 }
 
 bool AVPacketQueue::isEmpty() {

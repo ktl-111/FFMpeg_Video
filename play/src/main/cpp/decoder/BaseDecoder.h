@@ -19,13 +19,14 @@ class BaseDecoder {
 
 public:
     BaseDecoder(int index, AVFormatContext *ftx);
+
     virtual ~BaseDecoder();
 
     virtual double getDuration();
 
     virtual bool prepare(JNIEnv *env);
 
-    virtual int decode(AVPacket *packet,AVFrame *frame);
+    virtual int decode(AVPacket *packet, AVFrame *frame);
 
     virtual void avSync(AVFrame *frame);
 
@@ -40,6 +41,8 @@ public:
     AVRational getTimeBase();
 
     bool isNeedResent() const;
+
+    void updateNotResent();
 
     int getStreamIndex() const;
 

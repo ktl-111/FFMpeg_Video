@@ -4,9 +4,10 @@ import android.util.Log
 import android.view.Surface
 import com.example.play.IPaly
 import com.example.play.IPalyListener
+import com.example.play.PlayerState
 import com.example.play.config.OutConfig
 
-class FFMpegProxy : IPaly {
+internal class FFMpegProxy : IPaly {
     init {
         System.loadLibrary("ffmpegplayer")
     }
@@ -20,9 +21,9 @@ class FFMpegProxy : IPaly {
         nativeManager = nativeInit()
     }
 
-    override fun perpare(path: String, surface: Surface, outConfig: OutConfig?) {
+    override fun prepare(path: String, surface: Surface, outConfig: OutConfig?) {
         if (path.isEmpty()) {
-            Log.e(TAG, "perpare path is empty")
+            Log.e(TAG, "prepare path is empty")
             return
         }
         this.outConfig = outConfig;
@@ -55,12 +56,22 @@ class FFMpegProxy : IPaly {
     }
 
     override fun surfaceReCreate(surface: Surface) {
-        nativeSurfaceReCreate(nativeManager,surface)
+        nativeSurfaceReCreate(nativeManager, surface)
     }
 
     override fun surfaceDestroy() {
         nativeSurfaceDestroy(nativeManager)
     }
+
+    override fun getPlayerState(): PlayerState {
+        return PlayerState.fromState(getPlayerState(nativeManager))
+    }
+
+    override fun getCurrTimestamp(): Long {
+        return getCurrTimestamp(nativeManager)
+    }
+
+
     private external fun nativeInit(): Long
     private external fun nativePrepare(
         nativeManager: Long, path: String, surface: Surface, outConfig: OutConfig?
@@ -74,6 +85,8 @@ class FFMpegProxy : IPaly {
     private external fun nativeSeekTo(nativeManager: Long, seekTime: Long): Boolean
     private external fun nativeSurfaceReCreate(nativeManager: Long, surface: Surface)
     private external fun nativeSurfaceDestroy(nativeManager: Long)
+    private external fun getCurrTimestamp(nativeManager: Long): Long
+    private external fun getPlayerState(nativeManager: Long): Int
     private fun onNativeVideoConfig(width: Int, height: Int, duration: Double, fps: Double) {
         Log.i(
             TAG,
