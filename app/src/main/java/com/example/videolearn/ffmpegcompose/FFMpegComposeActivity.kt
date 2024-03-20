@@ -14,6 +14,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.gestures.forEachGesture
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -35,6 +36,7 @@ import androidx.compose.material.Button
 import androidx.compose.material.Text
 import androidx.compose.material.TextField
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.derivedStateOf
@@ -66,16 +68,11 @@ import com.example.play.IPalyListener
 import com.example.play.PlayManager
 import com.example.play.config.OutConfig
 import com.example.play.utils.FFMpegUtils
-import com.example.videolearn.MediaScope
+import com.example.play.utils.MediaScope
 import com.example.videolearn.ffmpegcompose.bean.VideoBean
 import com.example.videolearn.utils.DisplayUtil
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.asCoroutineDispatcher
-import kotlinx.coroutines.channels.BufferOverflow
-import kotlinx.coroutines.flow.MutableSharedFlow
-import kotlinx.coroutines.flow.collect
-import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import java.io.File
 import java.nio.ByteBuffer
@@ -93,6 +90,7 @@ class FFMpegComposeActivity : AppCompatActivity() {
     private val mVideoDuration = mutableStateOf(0.toDouble())
     private val mSize = mutableStateOf(Size(0f, 0f))
     private val mCurrPlayTime = mutableStateOf(0.toDouble())
+    private val mCuttingProgress = mutableStateOf(0.toDouble())
     private var isSeek = mutableStateOf(false)
 
     val itemSize = 40
@@ -149,8 +147,11 @@ class FFMpegComposeActivity : AppCompatActivity() {
 //        path = File(application.externalCacheDir, "vid_test1.mp4").absolutePath
         path = intent.getStringExtra("filepath") ?: ""
 //        path = File(application.externalCacheDir, "404.gif").absolutePath
-        setContent { rootView(videoList, mFps, mCurrPlayTime, mSize, mVideoDuration) }
-        initSeekFlow()
+        setContent {
+            rootView(
+                videoList, mFps, mCurrPlayTime, mSize, mVideoDuration, mCuttingProgress
+            )
+        }
     }
 
     private fun prepare(path: String?, surface: Surface) {
@@ -168,7 +169,7 @@ class FFMpegComposeActivity : AppCompatActivity() {
                         val ratio = witdh.toFloat() / height
                         Log.i(
                             TAG,
-                            "onConfig: video width:$witdh,height$height ratio:$ratio\n" + "view width:${surfaceView.measuredWidth},height${surfaceView.measuredHeight}"
+                            "onConfig: video width:$witdh,height$height ratio:$ratio duration:${duration}\n view width:${surfaceView.measuredWidth},height${surfaceView.measuredHeight}"
                         )
                         val videoHeight: Int
                         val videoWidth: Int
@@ -198,23 +199,22 @@ class FFMpegComposeActivity : AppCompatActivity() {
                     }
 
                     override fun onPalyComplete() {
-                        Log.i(TAG, "onPalyComplete: ")
+                        Log.i(TAG, "onPalyComplete: ${playManager?.getPlayerState()}")
                         MediaScope.launch(Dispatchers.Main) {
                             Toast.makeText(
                                 this@FFMpegComposeActivity, "onPalyComplete", Toast.LENGTH_SHORT
                             ).show()
-
                         }
                     }
 
                 })
-//                prepare(path, surface, outConfig)
-                prepare(path, surface)
+                prepare(path, surface, outConfig)
+//                prepare(path, surface)
             }
         }
     }
 
-    private val outConfig = OutConfig(0, 0, 0, 0, fps = 24.toDouble())
+    private val outConfig = OutConfig(1080, 720, 0, 0, fps = 24.toDouble())
 
     private fun surfaceReCreate(surface: Surface) {
         playManager?.surfaceReCreate(surface)
@@ -254,30 +254,16 @@ class FFMpegComposeActivity : AppCompatActivity() {
     }
 
     val singleCoroutine = Executors.newSingleThreadExecutor().asCoroutineDispatcher()
-    var preTime = 0.toDouble()
-    val seekFlow = MutableSharedFlow<Double>(1, 0, BufferOverflow.DROP_OLDEST)
-    fun initSeekFlow() {
-        MediaScope.launch(Dispatchers.IO) {
-            seekFlow.distinctUntilChanged().onEach { seekTime ->
-                Log.i(TAG, "flow seek: ${seekTime}")
-                playManager?.apply {
-                    seekTo((seekTime * 1000).toLong())
-                }
-            }.collect()
-        }
-    }
 
     private fun seek(index: Int, offset: Int, itemWidthPx: Float) {
         if (!isSeek.value) {
             return
         }
-        MediaScope.launch(Dispatchers.IO) {
-            val scale = offset / itemWidthPx.toDouble()
-            val seek = 1 * scale + index
-            Log.i(TAG, "ui seek: ${seek}")
-            updateUi(seek)
-            seekFlow.emit(seek)
-        }
+        val scale = offset / itemWidthPx.toDouble()
+        val seek = 1 * scale + index
+        Log.i(TAG, "ui seek: ${seek}")
+        updateUi(seek)
+        playManager?.seekTo((seek * 1000).toLong())
 
 //            if (seek == preTime) {
 //                Log.i(TAG, "itemChange seek == preTime")
@@ -325,11 +311,34 @@ class FFMpegComposeActivity : AppCompatActivity() {
                     }
                     Log.i(TAG, "cutting file:${outFile.absolutePath}")
                     val destPath = outFile.absolutePath
-                    val startTime = 0.0
-                    val allTime = 20.0
-                    FFMpegUtils.cutting(
-                        path, destPath, startTime, startTime + allTime, outConfig
-                    )
+                    val startTime = 1.3 * 1000
+                    val allTime = 5.0 * 1000
+                    FFMpegUtils.cutting(path,
+                        destPath,
+                        startTime.toLong(),
+                        (startTime + allTime).toLong(),
+                        outConfig,
+                        object : FFMpegUtils.VideoCuttingInterface {
+                            override fun onStart() {
+                                Log.i(TAG, "onStart: ")
+                            }
+
+                            override fun onProgress(progress: Double) {
+                                Log.i(TAG, "onProgress: $progress")
+                                MediaScope.launch(Dispatchers.Main) {
+                                    mCuttingProgress.value = progress;
+                                }
+                            }
+
+                            override fun onFail(resultCode: Int) {
+                                Log.i(TAG, "onFail: $resultCode")
+                            }
+
+                            override fun onDone() {
+                                Log.i(TAG, "onDone: ")
+                            }
+
+                        })
                 }
             }
         }
@@ -344,21 +353,21 @@ class FFMpegComposeActivity : AppCompatActivity() {
     }
 
     private fun initGetVideoFrames() {
-        MediaScope.launch(Dispatchers.IO) {
+        MediaScope.launch(Dispatchers.Default) {
             FFMpegUtils.getVideoFrames(path,
                 DisplayUtil.dp2px(this@FFMpegComposeActivity, itemSize.toFloat()),
                 0,
                 true,
                 object : FFMpegUtils.VideoFrameArrivedInterface {
                     override fun onStart(duration: Double): DoubleArray {
-                        val size = duration.toInt()
+                        val size = Math.ceil(duration).toInt()
                         Log.i(TAG, "onStart duration:${duration} size:$size")
                         val ptsArrays = DoubleArray(size)
                         for (i in 0 until size) {
                             ptsArrays[i] = i.toDouble()
                         }
                         val list = mutableListOf<VideoBean>().apply {
-                            for (time in 1..duration.toLong()) {
+                            for (time in 1..size.toLong()) {
                                 add(VideoBean(time))
                             }
                         }
@@ -420,7 +429,7 @@ class FFMpegComposeActivity : AppCompatActivity() {
         rootView(videoList.apply {
             add(VideoBean(1))
             add(VideoBean(2))
-        }, mFps, mCurrPlayTime, mSize, mVideoDuration)
+        }, mFps, mCurrPlayTime, mSize, mVideoDuration, mCuttingProgress)
     }
 
     @Composable
@@ -429,7 +438,8 @@ class FFMpegComposeActivity : AppCompatActivity() {
         fps: MutableState<Int>,
         currPlayTime: MutableState<Double>,
         size: MutableState<Size>,
-        videoDuration: MutableState<Double>
+        videoDuration: MutableState<Double>,
+        cuttingProgress: MutableState<Double>,
     ) {
         Column(
             modifier = Modifier
@@ -479,13 +489,15 @@ class FFMpegComposeActivity : AppCompatActivity() {
                         .align(Alignment.Center)
                 )
                 Text(
-                    text = "fps:${fps.value},size:${size.value.width.toInt()}*${size.value.height.toInt()},duration:${videoDuration.value.toInt()},currTime:${
+                    text = "fps:${fps.value},size:${size.value.width.toInt()}*${size.value.height.toInt()},duration:${
                         String.format(
-                            "%.2f",
-                            currPlayTime.value
+                            "%.2f", videoDuration.value
                         )
-                    }",
-                    color = Color.Red
+                    },currTime:${
+                        String.format(
+                            "%.2f", currPlayTime.value
+                        )
+                    }", color = Color.Red
                 )
             }
             Column(
@@ -507,37 +519,55 @@ class FFMpegComposeActivity : AppCompatActivity() {
                     val offset =
                         remember { derivedStateOf { lazyListState.firstVisibleItemScrollOffset } }
                     seek(index.value, offset.value, itemWidthPx)
-                } else {
-                    LaunchedEffect(key1 = derivedStateOf { currPlayTime }) {
-                        val scrollIndex = (currPlayTime.value / 1).toInt()
-                        val scrollOffset = (currPlayTime.value % 1 * itemWidthPx).toInt()
-                        Log.i(
-                            TAG,
-                            "LaunchedEffect: scrollIndex:$scrollIndex scrollOffset:$scrollOffset"
-                        )
-                        lazyListState.scrollToItem(scrollIndex, scrollOffset)
+                }
+                if (lazyListState.isScrollInProgress) {
+                    DisposableEffect(key1 = Unit) {
+                        Log.i(TAG, "DisposableEffect: onStart")
+
+                        onDispose {
+                            isSeek.value = false
+                            Log.i(TAG, "DisposableEffect: onDispose")
+                        }
                     }
+
+                }
+                val time by remember {
+                    currPlayTime
+                }
+                LaunchedEffect(key1 = time) {
+                    if (lazyListState.isScrollInProgress || isSeek.value) {
+                        Log.i(TAG, "LaunchedEffect isScrollInProgress or isSeek")
+                        return@LaunchedEffect
+                    }
+                    val scrollIndex = (currPlayTime.value / 1).toInt()
+                    val scrollOffset = (currPlayTime.value % 1 * itemWidthPx).toInt()
+                    Log.i(
+                        TAG,
+                        "LaunchedEffect: scrollIndex:$scrollIndex scrollOffset:$scrollOffset"
+                    )
+                    lazyListState.scrollToItem(scrollIndex, scrollOffset)
                 }
                 LazyRow(state = lazyListState,
                     modifier = Modifier
                         .fillMaxWidth()
                         .pointerInput(Unit) {
-                            awaitPointerEventScope {
-                                while (true) {
+                            forEachGesture {
+                                awaitPointerEventScope {
                                     val event = awaitPointerEvent()
-                                    Log.i(TAG, "awaitPointerEventScope event type:${event.type}")
+                                    Log.i(
+                                        TAG,
+                                        "awaitPointerEventScope event type:${event.type} ${event.changes.size}"
+                                    )
                                     if (event.changes.size == 1) {
-                                        if (event.type == PointerEventType.Release) {
-                                            isSeek.value = false
-//                                        resume()
-                                        } else if (event.type == PointerEventType.Press) {
+                                        if (event.type == PointerEventType.Press) {
                                             isSeek.value = true
-//                                        pause()
+//                                            pause()
                                         }
                                     }
                                 }
                             }
-                        }) {
+                        }
+                ) {
                     items(videoList) { item ->
                         ConstraintLayout(
                             modifier = Modifier
@@ -549,7 +579,6 @@ class FFMpegComposeActivity : AppCompatActivity() {
                             Text(
                                 modifier = Modifier.constrainAs(tvTime) {
                                     top.linkTo(parent.top)
-                                    start.linkTo(ivFrame.start)
                                     bottom.linkTo(ivFrame.top)
                                     end.linkTo(ivFrame.end)
                                 }, text = "${item.duration}s"
@@ -592,7 +621,12 @@ class FFMpegComposeActivity : AppCompatActivity() {
 
             LazyVerticalGrid(columns = GridCells.Fixed(3)) {
                 items(btnList) {
-                    commonButton(it.str, modifier = Modifier.weight(1f), it.onclick)
+                    val str = if (it.str.contains("cutting")) {
+                        "${it.str}-${String.format("%.2f", cuttingProgress.value)}"
+                    } else {
+                        it.str
+                    }
+                    commonButton(str, modifier = Modifier.weight(1f), it.onclick)
                 }
             }
             Row {

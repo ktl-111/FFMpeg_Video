@@ -76,7 +76,7 @@ bool AVPacketQueue::isFull() {
 
 void AVPacketQueue::wait(unsigned int timeOutMs) {
     pthread_mutex_lock(&mMutex);
-    LOGI("[AVPacketQueue], packet queue wait %d", timeOutMs)
+    LOGI("[AVPacketQueue], packet queue wait start,timeoutms:%d", timeOutMs)
     if (timeOutMs > 0) {
         struct timespec abs_time{};
         struct timeval now_time{};
@@ -88,13 +88,13 @@ void AVPacketQueue::wait(unsigned int timeOutMs) {
     } else {
         pthread_cond_wait(&mCond, &mMutex);
     }
-
+    LOGI("[AVPacketQueue], packet queue wait end")
     pthread_mutex_unlock(&mMutex);
 }
 
 void AVPacketQueue::notify() {
     pthread_mutex_lock(&mMutex);
-    pthread_cond_signal(&mCond);
+    pthread_cond_broadcast(&mCond);
     pthread_mutex_unlock(&mMutex);
 }
 

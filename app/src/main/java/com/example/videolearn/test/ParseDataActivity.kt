@@ -11,7 +11,7 @@ import android.view.View
 import android.widget.EditText
 import androidx.appcompat.app.AppCompatActivity
 import com.example.videolearn.R
-import com.example.videolearn.MediaScope
+import com.example.play.utils.MediaScope
 import com.example.videolearn.utils.H264Codec
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch

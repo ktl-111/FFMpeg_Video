@@ -1,4 +1,4 @@
-package com.example.videolearn
+package com.example.play.utils
 
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers

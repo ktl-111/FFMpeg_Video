@@ -1,7 +1,6 @@
 package com.example.play
 
 import android.view.Surface
-import com.example.play.PlayerState
 import com.example.play.config.OutConfig
 
 interface IPaly {
@@ -15,9 +14,9 @@ interface IPaly {
 
     /**
      *
-     * @param seek Long ms
+     * @param seekTime Long ms
      */
-    fun seekTo(seek: Long)
+    fun seekTo(seekTime: Long)
     fun surfaceReCreate(surface: Surface)
     fun surfaceDestroy()
     fun getPlayerState(): PlayerState

@@ -61,9 +61,9 @@ public:
 
     void updateTimestamp(AVFrame *frame);
 
-    void lock();
+    void seekLock();
 
-    void unlock();
+    void seekUnlock();
 
     void surfaceReCreate(JNIEnv *env, jobject surface);
 

@@ -3,7 +3,7 @@ package com.example.videolearn.videoplay
 import android.media.*
 import android.util.Log
 import android.view.Surface
-import com.example.videolearn.MediaScope
+import com.example.play.utils.MediaScope
 import com.example.videolearn.utils.FileUtils
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch

@@ -2,7 +2,7 @@ package com.example.videolearn.live
 
 import android.util.Log
 //import com.example.nativelib.NativeLib
-import com.example.videolearn.MediaScope
+import com.example.play.utils.MediaScope
 import kotlinx.coroutines.launch
 import java.util.concurrent.LinkedBlockingQueue
 

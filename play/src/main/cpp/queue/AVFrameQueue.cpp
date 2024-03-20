@@ -47,23 +47,24 @@ int AVFrameQueue::popTo(AVFrame *dstFrame) {
     if (frame == nullptr) {
         LOGE("[AVFrameQueue], popTo failed")
     }
-    LOGI("[AVFrameQueue] popTo pts:%ld %d %d", frame->pts, frame->format, frame->pkt_size)
-    int ref;
+    int ret;
     if (frame->pkt_size == 0) {
         dstFrame->pkt_size = 0;
-        ref = 0;
+        ret = 0;
     } else {
-        ref = av_frame_ref(dstFrame, frame);
-        if (ref != 0) {
-            LOGE("[AVFrameQueue], popTo failed, ref: %d", ref);
+        ret = av_frame_ref(dstFrame, frame);
+        if (ret != 0) {
+            LOGE("[AVFrameQueue], popTo failed, ref: %d", ret);
         }
     }
+    LOGI("[AVFrameQueue] popTo pts:%ld %d %d,ret:%d", dstFrame->pts, dstFrame->format,
+         dstFrame->pkt_size, ret)
 
     av_frame_free(&frame);
     mQueue.pop();
     pthread_mutex_unlock(&mMutex);
     notify();
-    return ref;
+    return ret;
 }
 
 int AVFrameQueue::front(AVFrame *dstFrame) {
@@ -116,7 +117,7 @@ void AVFrameQueue::wait(unsigned int timeOutMs) {
 
 void AVFrameQueue::notify() {
     pthread_mutex_lock(&mMutex);
-    pthread_cond_signal(&mCond);
+    pthread_cond_broadcast(&mCond);
     pthread_mutex_unlock(&mMutex);
 }
 

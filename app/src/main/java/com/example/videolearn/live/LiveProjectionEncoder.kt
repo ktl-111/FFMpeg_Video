@@ -9,7 +9,7 @@ import android.media.projection.MediaProjection
 import android.media.projection.MediaProjectionManager
 import android.os.Bundle
 import androidx.appcompat.app.AppCompatActivity
-import com.example.videolearn.MediaScope
+import com.example.play.utils.MediaScope
 import com.example.videolearn.utils.FileUtils
 import com.example.videolearn.utils.ResultUtils
 import com.example.videolearn.utils.ScreenUtils

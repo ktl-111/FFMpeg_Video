@@ -32,7 +32,6 @@ public:
 
     bool isEmpty();
 
-
     void wait(unsigned int timeOutMs = -1);
 
     void notify();

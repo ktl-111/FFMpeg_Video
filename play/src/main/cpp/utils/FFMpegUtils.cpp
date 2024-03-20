@@ -18,9 +18,11 @@ extern "C" {
 
 extern "C"
 JNIEXPORT void JNICALL
-Java_com_example_play_utils_FFMpegUtils_getVideoFramesCore(JNIEnv *env, jobject thiz, jstring path,
-                                                           jint width, jint height,
-                                                           jboolean precise, jobject callback) {
+Java_com_example_play_utils_FFMpegUtils_getVideoFramesCore(JNIEnv *env, jobject thiz,
+                                                                     jstring path,
+                                                                     jint width, jint height,
+                                                                     jboolean precise,
+                                                                     jobject callback) {
     // path
     const char *c_path = env->GetStringUTFChars(path, nullptr);
     std::string s_path = c_path;
@@ -97,12 +99,23 @@ Java_com_example_play_utils_FFMpegUtils_getVideoFramesCore(JNIEnv *env, jobject 
 }
 
 extern "C"
-JNIEXPORT jboolean JNICALL
+JNIEXPORT void JNICALL
 Java_com_example_play_utils_FFMpegUtils_nativeCutting(JNIEnv *env, jobject thiz,
                                                                 jstring src_path, jstring dest_path,
-                                                                jdouble start_time,
-                                                                jdouble end_time,
-                                                                jobject out_config) {
+                                                                jlong starttime,
+                                                                jlong endtime,
+                                                                jobject out_config,
+                                                                jobject callback) {
+    double start_time = starttime / 1000;
+    double end_time = endtime / 1000;
+    double progress = 0;
+    // callback
+    jclass jcalss = env->GetObjectClass(callback);
+    jmethodID onStart = env->GetMethodID(jcalss, "onStart", "()V");
+    jmethodID onProgress = env->GetMethodID(jcalss, "onProgress", "(D)V");
+    jmethodID onFail = env->GetMethodID(jcalss, "onFail", "(I)V");
+    jmethodID onDone = env->GetMethodID(jcalss, "onDone", "()V");
+    env->CallVoidMethod(callback, onStart);
     const char *c_srcPath = env->GetStringUTFChars(src_path, nullptr);
     const char *c_desPath = env->GetStringUTFChars(dest_path, nullptr);
 
@@ -111,19 +124,22 @@ Java_com_example_play_utils_FFMpegUtils_nativeCutting(JNIEnv *env, jobject thiz,
     result = avformat_open_input(&inFormatContext, c_srcPath, NULL, NULL);
     if (result != 0) {
         LOGE("cutting not open input file,%d %s", result, av_err2str(result));
-        return -1;
+        env->CallVoidMethod(callback, onFail, ERRORCODE_OPENINPUT);
+        return;
     }
 
     if (avformat_find_stream_info(inFormatContext, NULL) < 0) {
         LOGE("cutting avformat_find_stream_info fail");
-        return -1;
+        env->CallVoidMethod(callback, onFail, ERRORCODE_FIND_STERAM);
+        return;
     }
 
     int video_stream_index = av_find_best_stream(inFormatContext, AVMEDIA_TYPE_VIDEO, -1, -1,
                                                  nullptr, 0);
     if (video_stream_index == AVERROR_STREAM_NOT_FOUND) {
         LOGI("cutting not find video index,%d %s", result, av_err2str(result))
-        return -1;
+        env->CallVoidMethod(callback, onFail, ERRORCODE_NOT_FIND_VIDEO_STERAM);
+        return;
     }
 
     AVStream *inSteram = inFormatContext->streams[video_stream_index];
@@ -132,7 +148,8 @@ Java_com_example_play_utils_FFMpegUtils_nativeCutting(JNIEnv *env, jobject thiz,
     const AVCodec *decoder = avcodec_find_decoder(codec_params->codec_id);
     if (!decoder) {
         LOGE("cutting not find decoder,%d %s", result, av_err2str(result))
-        return -1;
+        env->CallVoidMethod(callback, onFail, ERRORCODE_NOT_FIND_DECODER);
+        return;
     }
 
     AVCodecContext *decodecContext = avcodec_alloc_context3(decoder);
@@ -141,7 +158,8 @@ Java_com_example_play_utils_FFMpegUtils_nativeCutting(JNIEnv *env, jobject thiz,
     LOGI("decodecContext %d*%d srcFps:%d", decodecContext->width, decodecContext->height, srcFps)
     if (result != 0) {
         LOGE("cutting avcodec_parameters_to_context fail,%d %s", result, av_err2str(result))
-        return -1;
+        env->CallVoidMethod(callback, onFail, ERRORCODE_PARAMETERS_TO_CONTEXT);
+        return;
     }
     // 根据设备核心数设置线程数
     long threadCount = sysconf(_SC_NPROCESSORS_ONLN);
@@ -150,7 +168,8 @@ Java_com_example_play_utils_FFMpegUtils_nativeCutting(JNIEnv *env, jobject thiz,
     result = avcodec_open2(decodecContext, decoder, NULL);
     if (result != 0) {
         LOGE("cutting avcodec_open2 fail,%d %s", result, av_err2str(result))
-        return -1;
+        env->CallVoidMethod(callback, onFail, ERRORCODE_AVCODEC_OPEN2);
+        return;
     }
 
     int outWidth = 0;
@@ -236,7 +255,8 @@ Java_com_example_play_utils_FFMpegUtils_nativeCutting(JNIEnv *env, jobject thiz,
 
     if (!buffersrc || !buffersink || !filter_graph) {
         LOGE("cutting buffersrc  buffersink avfilter_graph_alloc fail")
-        return -1;
+        env->CallVoidMethod(callback, onFail, ERRORCODE_GET_AVFILTER);
+        return;
     }
     AVFilterContext *buffersinkContext;
     AVFilterContext *buffersrcContext;
@@ -254,14 +274,16 @@ Java_com_example_play_utils_FFMpegUtils_nativeCutting(JNIEnv *env, jobject thiz,
 
     if (result != 0) {
         LOGE("cutting buffersrc fail,%d %s", result, av_err2str(result))
-        return -1;
+        env->CallVoidMethod(callback, onFail, ERRORCODE_CREATE_FILTER);
+        return;
     }
 
     result = avfilter_graph_create_filter(&buffersinkContext, buffersink, "out",
                                           NULL, NULL, filter_graph);
     if (result != 0) {
         LOGE("cutting buffersink fail,%d %s", result, av_err2str(result))
-        return -1;
+        env->CallVoidMethod(callback, onFail, ERRORCODE_CREATE_FILTER);
+        return;
     }
     AVFilterInOut *outputs = avfilter_inout_alloc();
     AVFilterInOut *inputs = avfilter_inout_alloc();
@@ -285,12 +307,14 @@ Java_com_example_play_utils_FFMpegUtils_nativeCutting(JNIEnv *env, jobject thiz,
     result = avfilter_graph_parse_ptr(filter_graph, fpsFilter, &inputs, &outputs, NULL);
     if (result != 0) {
         LOGE("cutting avfilter_graph_parse_ptr fail,%d %s", result, av_err2str(result))
-        return -1;
+        env->CallVoidMethod(callback, onFail, ERRORCODE_FILTER_ERROR);
+        return;
     }
     result = avfilter_graph_config(filter_graph, NULL);
     if (result != 0) {
         LOGE("cutting avfilter_graph_config fail,%d %s", result, av_err2str(result))
-        return -1;
+        env->CallVoidMethod(callback, onFail, ERRORCODE_FILTER_ERROR);
+        return;
     }
 
 
@@ -298,17 +322,20 @@ Java_com_example_play_utils_FFMpegUtils_nativeCutting(JNIEnv *env, jobject thiz,
     result = avformat_alloc_output_context2(&outFormatContext, NULL, NULL, c_desPath);
     if (result != 0) {
         LOGE("cutting avformat_alloc_output_context2 fail,%d %s", result, av_err2str(result))
-        return -1;
+        env->CallVoidMethod(callback, onFail, ERRORCODE_ALLOC_OUTPUT_CONTEXT);
+        return;
     }
 
     AVStream *outStream = avformat_new_stream(outFormatContext, NULL);
     if (!outStream) {
         LOGE("cutting avformat_new_stream fail,%d %s", result, av_err2str(result))
-        return -1;
+        env->CallVoidMethod(callback, onFail, ERRORCODE_COMMON);
+        return;
     }
     if (avcodec_parameters_copy(outStream->codecpar, codec_params) < 0) {
         LOGE("cutting avcodec_parameters_copy fail,%d %s", result, av_err2str(result))
-        return -1;
+        env->CallVoidMethod(callback, onFail, ERRORCODE_COMMON);
+        return;
     }
 
     //设置对应参数
@@ -327,7 +354,8 @@ Java_com_example_play_utils_FFMpegUtils_nativeCutting(JNIEnv *env, jobject thiz,
     const AVCodec *encoder = avcodec_find_encoder(outStream->codecpar->codec_id);
     if (!encoder) {
         LOGE("not find encoder")
-        return -1;
+        env->CallVoidMethod(callback, onFail, ERRORCODE_NOT_FIND_ENCODE);
+        return;
     }
     LOGI("find encoder %s", encoder->name)
     AVCodecContext *encodeContext = avcodec_alloc_context3(encoder);
@@ -351,20 +379,23 @@ Java_com_example_play_utils_FFMpegUtils_nativeCutting(JNIEnv *env, jobject thiz,
     result = avcodec_open2(encodeContext, encoder, NULL);
     if (result != 0) {
         LOGI("cutting avcodec_open2 fail,%d %s", result, av_err2str(result))
-        return -1;
+        env->CallVoidMethod(callback, onFail, ERRORCODE_AVCODEC_OPEN2);
+        return;
     }
 
     result = avcodec_parameters_from_context(outStream->codecpar, encodeContext);
     if (result < 0) {
         LOGE("cutting avcodec_parameters_from_context fail,%d %s", result, av_err2str(result))
-        return -1;
+        env->CallVoidMethod(callback, onFail, ERRORCODE_PARAMETERS_TO_CONTEXT);
+        return;
     }
     LOGI("cutting name:%s", avcodec_get_name(outFormatContext->video_codec_id))
     // 打开输出文件
     if (avio_open(&outFormatContext->pb, c_desPath, AVIO_FLAG_WRITE) < 0 ||
         avformat_write_header(outFormatContext, NULL) < 0) {
         LOGE("cutting not open des");
-        return -1;
+        env->CallVoidMethod(callback, onFail, ERRORCODE_OPEN_FILE);
+        return;
     }
 
     LOGI("cutting seek %f", start_time / av_q2d(inTimeBase))
@@ -372,6 +403,10 @@ Java_com_example_play_utils_FFMpegUtils_nativeCutting(JNIEnv *env, jobject thiz,
         avformat_seek_file(inFormatContext, video_stream_index, INT64_MIN,
                            start_time / av_q2d(inTimeBase), INT64_MAX, 0);
     }
+
+    jdouble frameCount = outFps * (end_time - start_time);
+    progress += 1;
+    env->CallVoidMethod(callback, onProgress, progress);
 
     int writeFramsCount = 0;
     while (1) {
@@ -432,7 +467,8 @@ Java_com_example_play_utils_FFMpegUtils_nativeCutting(JNIEnv *env, jobject thiz,
                     av_packet_free(&packet);
                     continue;
                 }
-                return -1;
+                env->CallVoidMethod(callback, onFail, ERRORCODE_FILTER_WRITE_ERROR);
+                return;
             }
             LOGI("cutting filterframe %ld(%f)  format:%s",
                  filtered_frame->pts * TimeBaseDiff,
@@ -576,6 +612,13 @@ Java_com_example_play_utils_FFMpegUtils_nativeCutting(JNIEnv *env, jobject thiz,
                                                 receivePacket);
                         if (result == 0) {
                             writeFramsCount += TimeBaseDiff;
+                            LOGI("cutting progress:%f %d %f",
+                                 writeFramsCount / TimeBaseDiff / frameCount,
+                                 writeFramsCount / TimeBaseDiff, frameCount)
+                            progress = std::min(
+                                    writeFramsCount / TimeBaseDiff / frameCount * 100 + 1,
+                                    99.0);
+                            env->CallVoidMethod(callback, onProgress, progress);
                         } else {
                             LOGI("cutting av_interleaved_write_frame fail result %d %s", result,
                                  av_err2str(result))
@@ -627,6 +670,13 @@ Java_com_example_play_utils_FFMpegUtils_nativeCutting(JNIEnv *env, jobject thiz,
                                             receivePacket);
                 if (result == 0) {
                     writeFramsCount += TimeBaseDiff;
+                    LOGI("cutting progress:%f %d %f",
+                         writeFramsCount / TimeBaseDiff / frameCount,
+                         writeFramsCount / TimeBaseDiff, frameCount)
+                    progress = std::min(
+                            writeFramsCount / TimeBaseDiff / frameCount * 100 - 1,
+                            99.0);
+                    env->CallVoidMethod(callback, onProgress, progress);
                 } else {
                     LOGI("cutting av_interleaved_write_frame fail flush result %d %s", result,
                          av_err2str(result))
@@ -648,7 +698,8 @@ Java_com_example_play_utils_FFMpegUtils_nativeCutting(JNIEnv *env, jobject thiz,
     avfilter_inout_free(&outputs);
     env->ReleaseStringUTFChars(src_path, c_srcPath);
     env->ReleaseStringUTFChars(dest_path, c_desPath);
-
-    LOGI("cutting done!!!");
-    return true;
+    LOGI("cutting done!!!")
+    progress = 100;
+    env->CallVoidMethod(callback, onProgress, progress);
+    env->CallVoidMethod(callback, onDone);
 }

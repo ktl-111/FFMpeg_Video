@@ -4,9 +4,8 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.media.*
 import android.media.MediaCodec.BufferInfo
-import com.example.videolearn.MediaScope
+import com.example.play.utils.MediaScope
 import kotlinx.coroutines.launch
-import java.nio.ByteBuffer
 
 @SuppressLint("MissingPermission")
 class LiveAudioEncoder(context: Context) {

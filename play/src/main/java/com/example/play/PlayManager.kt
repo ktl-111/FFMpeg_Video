@@ -5,11 +5,31 @@ import android.view.Surface
 import com.example.play.PlayerState
 import com.example.play.config.OutConfig
 import com.example.play.proxy.FFMpegProxy
+import com.example.play.utils.MediaScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.launch
 
 class PlayManager : IPaly {
     private val TAG = "PlayManager"
     private lateinit var mProxy: IPaly
     private var iPalyListener: IPalyListener? = null
+    private val seekFlow by lazy {
+        MutableSharedFlow<Long>(1, 0, BufferOverflow.DROP_OLDEST)
+            .also { flow ->
+                MediaScope.launch(Dispatchers.Default) {
+                    flow.distinctUntilChanged().onEach { seekTime ->
+                        Log.i(TAG, "flow seek: ${seekTime}")
+                        mProxy.seekTo(seekTime)
+                    }.collect()
+                }
+            }
+    }
+
     override fun init(iPalyListener: IPalyListener?) {
         this.iPalyListener = iPalyListener
     }
@@ -56,7 +76,9 @@ class PlayManager : IPaly {
 
     override fun seekTo(seekTime: Long) {
         if (this::mProxy.isInitialized) {
-            mProxy.seekTo(seekTime)
+            MediaScope.launch(Dispatchers.IO) {
+                seekFlow.emit(seekTime)
+            }
         }
     }
 

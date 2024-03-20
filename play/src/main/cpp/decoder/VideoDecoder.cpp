@@ -614,11 +614,11 @@ bool VideoDecoder::initFilter() {
     return true;
 }
 
-void VideoDecoder::lock() {
+void VideoDecoder::seekLock() {
     mSeekMutexObj->lock();
 }
 
-void VideoDecoder::unlock() {
+void VideoDecoder::seekUnlock() {
     mSeekMutexObj->unlock();
 }
 
