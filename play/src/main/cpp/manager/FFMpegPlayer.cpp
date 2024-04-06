@@ -62,91 +62,18 @@ bool FFMpegPlayer::prepare(JNIEnv *env, std::string &path, jobject surface, jobj
             //视频流
             LOGI("video stream,index:%d result:%d", i, mPlayerJni.isValid())
             mVideoDecoder = std::make_shared<VideoDecoder>(i, mAvFormatContext);
-            std::shared_ptr<OutConfig> outConfig;
-            if (out_config) {
-                jclass outConfigClass = env->GetObjectClass(out_config);
-                jfieldID outWidthId = env->GetFieldID(outConfigClass, "width", "I");
-                jint outWidth = env->GetIntField(out_config, outWidthId);
-
-                jfieldID outHeightId = env->GetFieldID(outConfigClass, "height", "I");
-                jint outHeight = env->GetIntField(out_config, outHeightId);
-
-                jfieldID cropWidthId = env->GetFieldID(outConfigClass, "cropWidth", "I");
-                jint cropWidth = env->GetIntField(out_config, cropWidthId);
-
-                jfieldID cropHeightId = env->GetFieldID(outConfigClass, "cropHeight", "I");
-                jint cropHeight = env->GetIntField(out_config, cropHeightId);
-
-                jfieldID outFpsId = env->GetFieldID(outConfigClass, "fps", "D");
-                jdouble outFps = env->GetDoubleField(out_config, outFpsId);
-
-                int videoWidth = mVideoDecoder->getWidth();
-                int videoHeight = mVideoDecoder->getHeight();
-                if (videoHeight > videoWidth) {
-                    //竖屏
-                    int temp = outWidth;
-                    outWidth = outHeight;
-                    outHeight = temp;
-
-                    temp = cropWidth;
-                    cropWidth = cropHeight;
-                    cropHeight = temp;
-                }
-                if (cropHeight != 0 && cropWidth != 0) {
-                    if (videoWidth < cropWidth) {
-                        outWidth = cropWidth;
-                        outHeight = 0;
-                    }
-                    if (videoHeight < cropHeight) {
-                        outHeight = cropHeight;
-                        outWidth = 0;
-                    }
-                }
-
-                if (outWidth <= 0 && outHeight <= 0) {
-                    outWidth = videoWidth;
-                    outHeight = videoHeight;
-                } else if (outWidth > 0) { // scale base width
-                    outWidth += outWidth % 2;
-                    outHeight = (jint) (1.0 * outWidth * videoHeight / videoWidth);
-                    outHeight += outHeight % 2;
-                } else { // scale base height
-                    outHeight += outHeight % 2;
-                    outWidth = (jint) (1.0 * outHeight * videoWidth / videoHeight);
-                    outWidth += outWidth % 2;
-                }
-                outConfig = std::make_shared<OutConfig>(outWidth, outHeight, cropWidth, cropHeight,
-                                                        outFps);
-
-                LOGI("set out config,video:%d*%d,out:%d*%d,crop:%d*%d,fps:%f",
-                     videoWidth, videoHeight,
-                     outWidth, outHeight, cropWidth, cropHeight, outFps)
-            } else {
-                LOGE("not out config")
-            }
-
-            int frameSize = 50;
-            if (outConfig) {
-                mVideoDecoder->setOutConfig(outConfig);
-//                frameSize = outConfig->getFps() * 5;
-            }
+            mVideoDecoder->initConfig(env, out_config);
 
             mVideoDecoder->setSurface(surface);
             videoPrepared = mVideoDecoder->prepare(env);
-            if (surface != nullptr && !videoPrepared) {
-                mVideoDecoder->release();
-                LOGE("[video] hw decoder prepare failed, fallback to software decoder")
-                mVideoDecoder->setSurface(nullptr);
-                videoPrepared = mVideoDecoder->prepare(env);
-            }
 
             if (mPlayerJni.isValid()) {
                 int surfaceWidth = mVideoDecoder->getWidth();
                 int surfaceHeight = mVideoDecoder->getHeight();
-                if (outConfig && outConfig->getCropWidth() != 0 &&
-                    outConfig->getCropHeight() != 0) {
-                    surfaceWidth = outConfig->getCropWidth();
-                    surfaceHeight = outConfig->getCropHeight();
+                if (mVideoDecoder->getCropWidth() != 0 &&
+                    mVideoDecoder->getCropHeight() != 0) {
+                    surfaceWidth = mVideoDecoder->getCropWidth();
+                    surfaceHeight = mVideoDecoder->getCropHeight();
                 }
                 env->CallVoidMethod(mPlayerJni.instance, mPlayerJni.onVideoConfig,
                                     surfaceWidth, surfaceHeight,

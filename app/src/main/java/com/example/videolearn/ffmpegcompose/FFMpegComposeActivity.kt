@@ -214,7 +214,7 @@ class FFMpegComposeActivity : AppCompatActivity() {
         }
     }
 
-    private val outConfig = OutConfig(1080, 720, 0, 0, fps = 24.toDouble())
+    private val outConfig = OutConfig(1280, 720, 378, 496, fps = 24.toDouble())
 
     private fun surfaceReCreate(surface: Surface) {
         playManager?.surfaceReCreate(surface)
@@ -311,7 +311,7 @@ class FFMpegComposeActivity : AppCompatActivity() {
                     }
                     Log.i(TAG, "cutting file:${outFile.absolutePath}")
                     val destPath = outFile.absolutePath
-                    val startTime = 1.3 * 1000
+                    val startTime = 0 * 1000
                     val allTime = 5.0 * 1000
                     FFMpegUtils.cutting(path,
                         destPath,
@@ -353,11 +353,11 @@ class FFMpegComposeActivity : AppCompatActivity() {
     }
 
     private fun initGetVideoFrames() {
-        MediaScope.launch(Dispatchers.Default) {
+        MediaScope.launch(Dispatchers.IO) {
             FFMpegUtils.getVideoFrames(path,
                 DisplayUtil.dp2px(this@FFMpegComposeActivity, itemSize.toFloat()),
                 0,
-                true,
+                false,
                 object : FFMpegUtils.VideoFrameArrivedInterface {
                     override fun onStart(duration: Double): DoubleArray {
                         val size = Math.ceil(duration).toInt()
@@ -417,7 +417,7 @@ class FFMpegComposeActivity : AppCompatActivity() {
                     }
 
                     override fun onEnd() {
-                        Log.i(TAG, "onEnd: ")
+                        Log.i(TAG, "getVideoFrames onEnd: ")
                     }
                 })
         }

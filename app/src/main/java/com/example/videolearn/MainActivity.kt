@@ -27,11 +27,6 @@ import com.example.videolearn.test.TestActivity
 import com.example.videolearn.utils.ResultUtils
 import com.example.videolearn.videocall.VideoCallActivity
 import com.example.videolearn.videoplay.VideoPlayActiivty
-import kotlinx.coroutines.CoroutineExceptionHandler
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
@@ -100,16 +95,17 @@ class MainActivity : AppCompatActivity() {
             if (!result) {
                 return@singlePermissions
             }
-            val intent = Intent()
-            intent.type = "video/*"
-            intent.action = Intent.ACTION_GET_CONTENT
+            val intent = Intent(Intent.ACTION_GET_CONTENT)
+            intent.type = "*/*"
+            intent.putExtra(Intent.EXTRA_MIME_TYPES, arrayOf("image/gif", "video/*"))
+            intent.addCategory(Intent.CATEGORY_OPENABLE)
             ResultUtils.getInstance(this).request(
                 Intent.createChooser(intent, "选择视频"), 100
             ) { requestCode, resultCode, data ->
                 if (resultCode == RESULT_OK) {
                     val uri = data.data
                     val uriToFileApiQ = uriToFileApiQ(uri, this)
-                    Log.i(TAG, "onActivityResult: ${uriToFileApiQ?.absolutePath}")
+                    Log.i(TAG, "onActivityResult: ${uriToFileApiQ?.absolutePath} ${uri?.path} ${uri?.toString()}")
                     startActivity(Intent(this, FFMpegComposeActivity::class.java)
                         .also { it.putExtra("filepath", uriToFileApiQ?.absolutePath) })
                 }

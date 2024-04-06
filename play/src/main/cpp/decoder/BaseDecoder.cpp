@@ -4,8 +4,9 @@
 BaseDecoder::BaseDecoder(int index, AVFormatContext *ftx) {
     mStreamIndex = index;
     mFtx = ftx;
-    mTimeBase = mFtx->streams[index]->time_base;
-    mDuration = mFtx->streams[index]->duration * av_q2d(mTimeBase);
+    mStream = mFtx->streams[index];
+    mTimeBase = mStream->time_base;
+    mDuration = mStream->duration * av_q2d(mTimeBase);
     LOGE("[BaseDecoder], index: %d, duration: %f, time base: {num: %d, den: %d}",
          index, mDuration, mTimeBase.num, mTimeBase.den);
     if (mDuration < 0.0) {
@@ -74,4 +75,8 @@ AVCodecContext *BaseDecoder::getCodecContext() {
 
 AVRational BaseDecoder::getTimeBase() {
     return mTimeBase;
+}
+
+AVStream *BaseDecoder::getStream() {
+    return mStream;
 }

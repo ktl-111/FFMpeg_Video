@@ -38,6 +38,8 @@ public:
 
     AVCodecContext *getCodecContext();
 
+    AVStream *getStream();
+
     AVRational getTimeBase();
 
     bool isNeedResent() const;
@@ -54,6 +56,8 @@ public:
 
 protected:
     AVFormatContext *mFtx = nullptr;
+
+    AVStream *mStream = nullptr;
 
     AVCodecContext *mCodecContext = nullptr;
 

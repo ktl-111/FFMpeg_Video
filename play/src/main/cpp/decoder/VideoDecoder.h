@@ -23,9 +23,12 @@ extern "C" {
 class VideoDecoder : public BaseDecoder {
 
 public:
+
     VideoDecoder(int index, AVFormatContext *ftx);
 
     ~VideoDecoder();
+
+    void initConfig(JNIEnv *env, jobject out_config);
 
     int getWidth() const;
 
@@ -37,6 +40,8 @@ public:
 
     double getFps() const;
 
+    double getOutFps() const;
+
     void setSurface(jobject surface);
 
     void setOutConfig(const std::shared_ptr<OutConfig> outConfig);
@@ -46,6 +51,8 @@ public:
     virtual bool prepare(JNIEnv *env) override;
 
     virtual int decode(AVPacket *packet, AVFrame *frame) override;
+
+    void converFrame(AVFrame *converSrcFrame, AVFrame *dstFrame);
 
     virtual void avSync(AVFrame *frame) override;
 
@@ -74,31 +81,23 @@ private:
     int mHeight = -1;
     double mFps = -1;
     int mRotate;
-    ANativeWindow *nativeWindow;
+    ANativeWindow *nativeWindow = nullptr;
     ANativeWindow_Buffer windowBuffer;
     uint8_t *dstWindowBuffer = nullptr;
-    std::shared_ptr<MutexObj> mSeekMutexObj;
-
+    std::shared_ptr<MutexObj> mSeekMutexObj = nullptr;
+    SwsContext *mTransformContext = nullptr;
     int64_t mStartTimeMsForSync = -1;
     int64_t mCurTimeMs = 0;
 
     jobject mSurface = nullptr;
     std::shared_ptr<OutConfig> mOutConfig = nullptr;
-    AVFilterContext *mBuffersrcContext = nullptr;
-    AVFilterContext *mBuffersinkContext = nullptr;
-    AVBufferRef *mHwDeviceCtx = nullptr;
 
     const AVCodec *mVideoCodec = nullptr;
 
-    AVMediaCodecContext *mMediaCodecContext = nullptr;
-
     SwsContext *mSwsContext = nullptr;
 
-    int swsScale(AVFrame *srcFrame, AVFrame *dstFrame);
-
-    bool isHwDecoder(AVFrame *frame);
-
-    bool initFilter();
+    int converToSurface(AVFrame *srcFrame, AVFrame *dstFrame);
+    int converFrameTo420Frame(AVFrame *srcFrame, AVFrame *dstFrame);
 };
 
 

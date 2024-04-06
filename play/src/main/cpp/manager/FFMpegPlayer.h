@@ -105,7 +105,7 @@ private:
 
     volatile PlayerState mPlayerState = UNKNOWN;
 
-    AVFormatContext *mAvFormatContext;
+    AVFormatContext *mAvFormatContext = nullptr;
 
     std::thread *mReadPacketThread = nullptr;
     std::thread *mVideoDecodeThread = nullptr;

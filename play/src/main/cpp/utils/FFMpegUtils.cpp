@@ -7,6 +7,7 @@
 #include "libyuv/convert.h"
 #include "../globals.h"
 #include "libyuv/video_common.h"
+#include "VideoDecoder.h"
 
 extern "C" {
 #include "libavfilter/avfilter.h"
@@ -19,10 +20,10 @@ extern "C" {
 extern "C"
 JNIEXPORT void JNICALL
 Java_com_example_play_utils_FFMpegUtils_getVideoFramesCore(JNIEnv *env, jobject thiz,
-                                                                     jstring path,
-                                                                     jint width, jint height,
-                                                                     jboolean precise,
-                                                                     jobject callback) {
+                                                           jstring path,
+                                                           jint width, jint height,
+                                                           jboolean precise,
+                                                           jobject callback) {
     // path
     const char *c_path = env->GetStringUTFChars(path, nullptr);
     std::string s_path = c_path;
@@ -101,11 +102,11 @@ Java_com_example_play_utils_FFMpegUtils_getVideoFramesCore(JNIEnv *env, jobject 
 extern "C"
 JNIEXPORT void JNICALL
 Java_com_example_play_utils_FFMpegUtils_nativeCutting(JNIEnv *env, jobject thiz,
-                                                                jstring src_path, jstring dest_path,
-                                                                jlong starttime,
-                                                                jlong endtime,
-                                                                jobject out_config,
-                                                                jobject callback) {
+                                                      jstring src_path, jstring dest_path,
+                                                      jlong starttime,
+                                                      jlong endtime,
+                                                      jobject out_config,
+                                                      jobject callback) {
     double start_time = starttime / 1000;
     double end_time = endtime / 1000;
     double progress = 0;
@@ -134,115 +135,31 @@ Java_com_example_play_utils_FFMpegUtils_nativeCutting(JNIEnv *env, jobject thiz,
         return;
     }
 
-    int video_stream_index = av_find_best_stream(inFormatContext, AVMEDIA_TYPE_VIDEO, -1, -1,
-                                                 nullptr, 0);
-    if (video_stream_index == AVERROR_STREAM_NOT_FOUND) {
+    int inStreamIndex = av_find_best_stream(inFormatContext, AVMEDIA_TYPE_VIDEO, -1, -1,
+                                            nullptr, 0);
+    if (inStreamIndex == AVERROR_STREAM_NOT_FOUND) {
         LOGI("cutting not find video index,%d %s", result, av_err2str(result))
         env->CallVoidMethod(callback, onFail, ERRORCODE_NOT_FIND_VIDEO_STERAM);
         return;
     }
 
-    AVStream *inSteram = inFormatContext->streams[video_stream_index];
+    std::shared_ptr<VideoDecoder> videoDecoder = std::make_shared<VideoDecoder>(inStreamIndex,
+                                                                                inFormatContext);
+    videoDecoder->initConfig(env, out_config);
+
+    int outWidth = videoDecoder->getWidth();
+    int outHeight = videoDecoder->getHeight();
+    int cropWidth = videoDecoder->getCropWidth();
+    int cropHeight = videoDecoder->getCropHeight();
+    int outFps = (int) videoDecoder->getOutFps();
+    bool prepareResult = videoDecoder->prepare(env);
+    if (!prepareResult) {
+        env->CallVoidMethod(callback, onFail, ERRORCODE_PREPARE_FILE);
+        return;
+    }
+    AVStream *inSteram = videoDecoder->getStream();
     AVRational &inTimeBase = inSteram->time_base;
     AVCodecParameters *codec_params = inSteram->codecpar;
-    const AVCodec *decoder = avcodec_find_decoder(codec_params->codec_id);
-    if (!decoder) {
-        LOGE("cutting not find decoder,%d %s", result, av_err2str(result))
-        env->CallVoidMethod(callback, onFail, ERRORCODE_NOT_FIND_DECODER);
-        return;
-    }
-
-    AVCodecContext *decodecContext = avcodec_alloc_context3(decoder);
-    result = avcodec_parameters_to_context(decodecContext, codec_params);
-    int srcFps = av_q2d(inSteram->avg_frame_rate);
-    LOGI("decodecContext %d*%d srcFps:%d", decodecContext->width, decodecContext->height, srcFps)
-    if (result != 0) {
-        LOGE("cutting avcodec_parameters_to_context fail,%d %s", result, av_err2str(result))
-        env->CallVoidMethod(callback, onFail, ERRORCODE_PARAMETERS_TO_CONTEXT);
-        return;
-    }
-    // 根据设备核心数设置线程数
-    long threadCount = sysconf(_SC_NPROCESSORS_ONLN);
-
-    decodecContext->thread_count = threadCount > 0 ? threadCount : 1;
-    result = avcodec_open2(decodecContext, decoder, NULL);
-    if (result != 0) {
-        LOGE("cutting avcodec_open2 fail,%d %s", result, av_err2str(result))
-        env->CallVoidMethod(callback, onFail, ERRORCODE_AVCODEC_OPEN2);
-        return;
-    }
-
-    int outWidth = 0;
-    int outHeight = 0;
-    int cropWidth = 0;
-    int cropHeight = 0;
-    int outFps = (int) srcFps;
-
-    if (!out_config) {
-        outWidth = decodecContext->width;
-        outHeight = decodecContext->height;
-    } else {
-        jclass outConfigClass = env->GetObjectClass(out_config);
-        jfieldID outWidthId = env->GetFieldID(outConfigClass, "width", "I");
-        outWidth = env->GetIntField(out_config, outWidthId);
-
-        jfieldID outHeightId = env->GetFieldID(outConfigClass, "height", "I");
-        outHeight = env->GetIntField(out_config, outHeightId);
-
-        jfieldID cropWidthId = env->GetFieldID(outConfigClass, "cropWidth", "I");
-        cropWidth = env->GetIntField(out_config, cropWidthId);
-
-        jfieldID cropHeightId = env->GetFieldID(outConfigClass, "cropHeight", "I");
-        cropHeight = env->GetIntField(out_config, cropHeightId);
-
-        jfieldID outFpsId = env->GetFieldID(outConfigClass, "fps", "D");
-        outFps = (int) env->GetDoubleField(out_config, outFpsId);
-
-        int videoWidth = decodecContext->width;
-        int videoHeight = decodecContext->height;
-        bool isVerticalScreen = false;
-        isVerticalScreen = videoHeight > videoWidth;
-        if (isVerticalScreen) {
-            //竖屏
-            int temp = outWidth;
-            outWidth = outHeight;
-            outHeight = temp;
-
-            temp = cropWidth;
-            cropWidth = cropHeight;
-            cropHeight = temp;
-        }
-        if (cropHeight != 0 && cropWidth != 0) {
-            if (videoWidth < cropWidth) {
-                outWidth = cropWidth;
-                outHeight = 0;
-            }
-            if (videoHeight < cropHeight) {
-                outHeight = cropHeight;
-                outWidth = 0;
-            }
-        }
-
-        if (outWidth <= 0 && outHeight <= 0) {
-            outWidth = videoWidth;
-            outHeight = videoHeight;
-        } else if (outWidth > 0) { // scale base width
-            outWidth += outWidth % 2;
-            outHeight = (jint) (1.0 * outWidth * videoHeight / videoWidth);
-            outHeight += outHeight % 2;
-        } else { // scale base height
-            outHeight += outHeight % 2;
-            outWidth = (jint) (1.0 * outHeight * videoWidth / videoHeight);
-            outWidth += outWidth % 2;
-        }
-
-        if (outFps > srcFps) {
-            outFps = srcFps;
-        }
-        LOGI("set out config,video:%d*%d,out:%d*%d,crop:%d*%d,fps:%d,isVerticalScreen:%d",
-             videoWidth, videoHeight,
-             outWidth, outHeight, cropWidth, cropHeight, outFps, isVerticalScreen)
-    }
 
     AVRational outTimeBase = {1, outFps * TimeBaseDiff};
     LOGI("cutting config,start_time:%lf end_time:%lf fps:%d timeBase:{%d,%d}", start_time, end_time,
@@ -262,11 +179,11 @@ Java_com_example_play_utils_FFMpegUtils_nativeCutting(JNIEnv *env, jobject thiz,
     AVFilterContext *buffersrcContext;
     char args[512];
     /* buffer video source: the decoded frames from the decoder will be inserted here. */
+    AVCodecContext *decodecContext = videoDecoder->getCodecContext();
     snprintf(args, sizeof(args),
              "video_size=%dx%d:pix_fmt=%d:time_base=%d/%d:pixel_aspect=%d/%d",
              decodecContext->width, decodecContext->height, decodecContext->pix_fmt,
-             inTimeBase.num,
-             inTimeBase.den,
+             inTimeBase.num, inTimeBase.den,
              decodecContext->sample_aspect_ratio.num, decodecContext->sample_aspect_ratio.den);
     LOGI("cutting args %s", args)
     result = avfilter_graph_create_filter(&buffersrcContext, buffersrc, "in",
@@ -337,7 +254,6 @@ Java_com_example_play_utils_FFMpegUtils_nativeCutting(JNIEnv *env, jobject thiz,
         env->CallVoidMethod(callback, onFail, ERRORCODE_COMMON);
         return;
     }
-
     //设置对应参数
     outStream->codecpar->codec_id = AV_CODEC_ID_H264;
     outStream->codecpar->codec_type = AVMEDIA_TYPE_VIDEO;
@@ -347,9 +263,9 @@ Java_com_example_play_utils_FFMpegUtils_nativeCutting(JNIEnv *env, jobject thiz,
     outStream->start_time = 0;
     outStream->codecpar->width = cropWidth != 0 ? cropWidth : outWidth;
     outStream->codecpar->height = cropHeight != 0 ? cropHeight : outHeight;
-    av_dict_copy(&outStream->metadata, inSteram->metadata, 0);
-    outStream->side_data = inSteram->side_data;
-    outStream->nb_side_data = inSteram->nb_side_data;
+//    av_dict_copy(&outStream->metadata, inSteram->metadata, 0);
+//    outStream->side_data = inSteram->side_data;
+//    outStream->nb_side_data = inSteram->nb_side_data;
     //查找解码器
     const AVCodec *encoder = avcodec_find_encoder(outStream->codecpar->codec_id);
     if (!encoder) {
@@ -374,8 +290,6 @@ Java_com_example_play_utils_FFMpegUtils_nativeCutting(JNIEnv *env, jobject thiz,
     encodeContext->max_b_frames = 0;//不需要B帧
     encodeContext->gop_size = outStream->avg_frame_rate.num;//多少帧一个I帧
 
-    LOGI("cutting config sample_aspect_ratio:{%d,%d}", encodeContext->sample_aspect_ratio.num,
-         encodeContext->sample_aspect_ratio.den)
     result = avcodec_open2(encodeContext, encoder, NULL);
     if (result != 0) {
         LOGI("cutting avcodec_open2 fail,%d %s", result, av_err2str(result))
@@ -400,7 +314,7 @@ Java_com_example_play_utils_FFMpegUtils_nativeCutting(JNIEnv *env, jobject thiz,
 
     LOGI("cutting seek %f", start_time / av_q2d(inTimeBase))
     if (start_time > 0) {
-        avformat_seek_file(inFormatContext, video_stream_index, INT64_MIN,
+        avformat_seek_file(inFormatContext, inStreamIndex, INT64_MIN,
                            start_time / av_q2d(inTimeBase), INT64_MAX, 0);
     }
 
@@ -416,7 +330,7 @@ Java_com_example_play_utils_FFMpegUtils_nativeCutting(JNIEnv *env, jobject thiz,
             LOGE("cutting av_read_frame fail %d %s", result, av_err2str(result))
             break;
         }
-        if (packet->stream_index == video_stream_index) {
+        if (packet->stream_index == inStreamIndex) {
             // 初始化filter图的帧
             AVFrame *frame = av_frame_alloc();
             int sendResult = -1;
@@ -482,120 +396,19 @@ Java_com_example_play_utils_FFMpegUtils_nativeCutting(JNIEnv *env, jobject thiz,
                 av_packet_free(&packet);
                 break;
             }
-            AVFrame *srcFrame = filtered_frame;
+            AVFrame *dstFrame = av_frame_alloc();
+            videoDecoder->converFrame(filtered_frame, dstFrame);
 
-            if (srcFrame->format == AV_PIX_FMT_BGRA) {
-                AVFrame *rgbFrame = av_frame_alloc();
-                rgbFrame->width = srcFrame->width;
-                rgbFrame->height = srcFrame->height;
-                rgbFrame->format = AV_PIX_FMT_YUV420P;
-                rgbFrame->pts = srcFrame->pts;
-                rgbFrame->pkt_dts = srcFrame->pkt_dts;
-                rgbFrame->duration = srcFrame->duration;
-                rgbFrame->pkt_size = srcFrame->pkt_size;
-                int ret = av_frame_get_buffer(rgbFrame, 0);
-                LOGI("cutting convert av_frame_get_buffer %d", ret)
-                //https://www.v2ex.com/t/756129
-                //bgra顺序,需要反过来调用argb
-                ret = libyuv::ARGBToI420(srcFrame->data[0], srcFrame->linesize[0],
-                                         rgbFrame->data[0], rgbFrame->linesize[0],
-                                         rgbFrame->data[1], rgbFrame->linesize[1],
-                                         rgbFrame->data[2], rgbFrame->linesize[2],
-                                         rgbFrame->width, rgbFrame->height);
-                av_frame_free(&srcFrame);
-                srcFrame = nullptr;
-                srcFrame = rgbFrame;
-            }
-
-            if (outWidth != srcFrame->width || outHeight != srcFrame->height) {
-                AVFrame *scaleFrame = av_frame_alloc();
-                scaleFrame->width = outWidth;
-                scaleFrame->height = outHeight;
-                scaleFrame->format = srcFrame->format;
-
-                scaleFrame->pts = srcFrame->pts;
-                scaleFrame->pkt_dts = srcFrame->pkt_dts;
-                scaleFrame->duration = srcFrame->duration;
-                scaleFrame->pkt_size = srcFrame->pkt_size;
-                av_frame_get_buffer(scaleFrame, 0);
-
-                libyuv::I420Scale(srcFrame->data[0], srcFrame->linesize[0],
-                                  srcFrame->data[1], srcFrame->linesize[1],
-                                  srcFrame->data[2], srcFrame->linesize[2],
-                                  srcFrame->width, srcFrame->height,
-                                  scaleFrame->data[0], scaleFrame->linesize[0],
-                                  scaleFrame->data[1], scaleFrame->linesize[1],
-                                  scaleFrame->data[2], scaleFrame->linesize[2],
-                                  outWidth, outHeight, libyuv::kFilterNone);
-                av_frame_free(&srcFrame);
-                srcFrame = nullptr;
-                srcFrame = scaleFrame;
-            }
-
-            bool needCrop = false;
-            if (cropWidth != 0 && cropHeight != 0 &&
-                (cropWidth < srcFrame->width || cropHeight < srcFrame->height)) {
-                needCrop = true;
-            }
-            if (needCrop) {
-                int srcWidth = srcFrame->width;
-                int srcHeight = srcFrame->height;
-                AVFrame *cropFrame = av_frame_alloc();
-                cropFrame->width = cropWidth;
-                cropFrame->height = cropHeight;
-                cropFrame->format = srcFrame->format;
-
-                cropFrame->pts = srcFrame->pts;
-                cropFrame->pkt_dts = srcFrame->pkt_dts;
-                cropFrame->duration = srcFrame->duration;
-                int ret = av_frame_get_buffer(cropFrame, 0);
-
-                int diffWidth = srcWidth - cropWidth;
-                int dx = diffWidth / 2 + diffWidth % 2;
-
-                int diffHeight = srcHeight - cropHeight;
-                int dy = diffHeight / 2 + diffHeight % 2;
-                LOGI("[video] decode av_frame_get_buffer:%d src:%d*%d d:%d-%d crop:%d*%d", ret,
-                     srcWidth,
-                     srcHeight, dx, dy,
-                     cropWidth, cropHeight)
-
-                int size = av_image_get_buffer_size((AVPixelFormat) srcFrame->format,
-                                                    srcFrame->width, srcFrame->height, 1);
-                auto *buffer = static_cast<uint8_t *>(av_malloc(size * sizeof(uint8_t)));
-
-                ret = av_image_copy_to_buffer(buffer, size, srcFrame->data, srcFrame->linesize,
-                                              (AVPixelFormat) srcFrame->format,
-                                              srcFrame->width, srcFrame->height, 1);
-
-                LOGI("[video] decode av_image_copy_to_buffer %d %d", ret, size)
-
-                ret = libyuv::ConvertToI420(buffer, size,
-                                            cropFrame->data[0], cropFrame->linesize[0],
-                                            cropFrame->data[1], cropFrame->linesize[1],
-                                            cropFrame->data[2], cropFrame->linesize[2],
-                                            dx, dy,
-                                            srcWidth, srcHeight,
-                                            cropWidth, cropHeight,
-                                            libyuv::kRotate0, libyuv::FOURCC_I420
-                );
-                LOGI("[video] decode ConvertToI420:%d", ret)
-                av_free(buffer);
-                av_frame_free(&srcFrame);
-                srcFrame = nullptr;
-                srcFrame = cropFrame;
-            }
-
-            srcFrame->pict_type = AV_PICTURE_TYPE_NONE;
+            dstFrame->pict_type = AV_PICTURE_TYPE_NONE;
             do {
                 sendResult = -1;
                 receiveResult = -1;
-                sendResult = avcodec_send_frame(encodeContext, srcFrame);
+                sendResult = avcodec_send_frame(encodeContext, dstFrame);
                 if (sendResult == 0) {
                     AVPacket *receivePacket = av_packet_alloc();
                     receiveResult = avcodec_receive_packet(encodeContext, receivePacket);
                     if (receiveResult == 0) {
-                        receivePacket->stream_index = video_stream_index;
+                        receivePacket->stream_index = outStream->index;
                         receivePacket->pts = writeFramsCount;
                         receivePacket->dts = receivePacket->pts - TimeBaseDiff;
                         receivePacket->duration = TimeBaseDiff;
@@ -631,7 +444,7 @@ Java_com_example_play_utils_FFMpegUtils_nativeCutting(JNIEnv *env, jobject thiz,
             } while (sendResult == AVERROR(EAGAIN) && receiveResult == AVERROR(EAGAIN));
             // 清理资源
             av_frame_free(&frame);
-            av_frame_free(&srcFrame);
+            av_frame_free(&dstFrame);
             av_packet_free(&packet);
             if (receiveResult == AVERROR(EAGAIN)) {
                 continue;
@@ -645,6 +458,7 @@ Java_com_example_play_utils_FFMpegUtils_nativeCutting(JNIEnv *env, jobject thiz,
 
     int sendResult = -1;
     int receiveResult = -1;
+
     do {
         sendResult = -1;
         receiveResult = -1;
@@ -653,7 +467,7 @@ Java_com_example_play_utils_FFMpegUtils_nativeCutting(JNIEnv *env, jobject thiz,
         if (sendResult == 0 || sendResult == AVERROR_EOF) {
             receiveResult = avcodec_receive_packet(encodeContext, receivePacket);
             if (receiveResult == 0) {
-                receivePacket->stream_index = video_stream_index;
+                receivePacket->stream_index = outStream->index;
                 receivePacket->pts = writeFramsCount;
                 receivePacket->dts = receivePacket->pts;
                 receivePacket->duration = TimeBaseDiff;
@@ -666,8 +480,8 @@ Java_com_example_play_utils_FFMpegUtils_nativeCutting(JNIEnv *env, jobject thiz,
                      receivePacket->duration,
                      receivePacket->duration * av_q2d(encodeContext->time_base))
 
-                int result = av_write_frame(outFormatContext,
-                                            receivePacket);
+                result = av_write_frame(outFormatContext,
+                                        receivePacket);
                 if (result == 0) {
                     writeFramsCount += TimeBaseDiff;
                     LOGI("cutting progress:%f %d %f",
@@ -686,11 +500,10 @@ Java_com_example_play_utils_FFMpegUtils_nativeCutting(JNIEnv *env, jobject thiz,
         LOGI("cutting encode flush sendResult:%d %s receiveResult:%d ",
              sendResult, av_err2str(sendResult), receiveResult)
         av_packet_unref(receivePacket);
-    } while (receiveResult >= 0);
+    } while (sendResult >= 0 || receiveResult >= 0);
     av_write_trailer(outFormatContext);
     // 关闭输出文件
     avio_close(outFormatContext->pb);
-
     avcodec_free_context(&decodecContext);
     avformat_close_input(&inFormatContext);
     avfilter_graph_free(&filter_graph);
@@ -698,6 +511,7 @@ Java_com_example_play_utils_FFMpegUtils_nativeCutting(JNIEnv *env, jobject thiz,
     avfilter_inout_free(&outputs);
     env->ReleaseStringUTFChars(src_path, c_srcPath);
     env->ReleaseStringUTFChars(dest_path, c_desPath);
+    videoDecoder->release();
     LOGI("cutting done!!!")
     progress = 100;
     env->CallVoidMethod(callback, onProgress, progress);

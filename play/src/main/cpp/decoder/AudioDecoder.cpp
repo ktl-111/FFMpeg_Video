@@ -14,7 +14,7 @@ AudioDecoder::~AudioDecoder() {
 int sampleConvertOpensles(int sample_rate);
 
 bool AudioDecoder::prepare(JNIEnv *env) {
-    AVCodecParameters *params = mFtx->streams[getStreamIndex()]->codecpar;
+    AVCodecParameters *params = getStream()->codecpar;
 
     mAudioCodec = avcodec_find_decoder(params->codec_id);
     if (mAudioCodec == nullptr) {
@@ -180,7 +180,7 @@ bool AudioDecoder::prepare(JNIEnv *env) {
 int AudioDecoder::decode(AVPacket *avPacket,AVFrame *frame) {
     int64_t start = getCurrentTimeMs();
     int sendRes = avcodec_send_packet(mCodecContext, avPacket);
-    int index = av_index_search_timestamp(mFtx->streams[getStreamIndex()], avPacket->pts,
+    int index = av_index_search_timestamp(getStream(), avPacket->pts,
                                           AVSEEK_FLAG_BACKWARD);
     int64_t sendPoint = getCurrentTimeMs() - start;
     LOGI("[audio] avcodec_send_packet...pts: %" PRId64 ", res: %d, index: %d", avPacket->pts,
@@ -202,7 +202,7 @@ int AudioDecoder::decode(AVPacket *avPacket,AVFrame *frame) {
         }
 
         int64_t receivePoint = getCurrentTimeMs() - start;
-        auto ptsMs = mAvFrame->pts * av_q2d(mFtx->streams[getStreamIndex()]->time_base) * 1000;
+        auto ptsMs = mAvFrame->pts * av_q2d(getStream()->time_base) * 1000;
         LOGI("[audio] avcodec_receive_frame...pts: %" PRId64 ", time: %f, need retry: %d",
              mAvFrame->pts, ptsMs, mNeedResent)
 
