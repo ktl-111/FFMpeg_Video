@@ -656,7 +656,12 @@ void VideoDecoder::release() {
     if (mSwsContext) {
         sws_freeContext(mSwsContext);
         mSwsContext = nullptr;
-        LOGI("sws context...release")
+        LOGI("mSwsContext context...release")
+    }
+    if (mTransformContext) {
+        sws_freeContext(mTransformContext);
+        mTransformContext = nullptr;
+        LOGI("mTransformContext context...release")
     }
     if (nativeWindow) {
         ANativeWindow_release(nativeWindow);

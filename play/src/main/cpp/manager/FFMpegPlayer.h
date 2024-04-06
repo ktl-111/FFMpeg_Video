@@ -101,7 +101,7 @@ private:
 
     JavaVM *mJvm = nullptr;
     PlayerJniContext mPlayerJni{};
-    std::shared_ptr<MutexObj> mMutexObj;
+    std::shared_ptr<MutexObj> mMutexObj = nullptr;
 
     volatile PlayerState mPlayerState = UNKNOWN;
 

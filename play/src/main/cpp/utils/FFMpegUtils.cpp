@@ -504,14 +504,21 @@ Java_com_example_play_utils_FFMpegUtils_nativeCutting(JNIEnv *env, jobject thiz,
     av_write_trailer(outFormatContext);
     // 关闭输出文件
     avio_close(outFormatContext->pb);
-    avcodec_free_context(&decodecContext);
-    avformat_close_input(&inFormatContext);
+    avformat_free_context(outFormatContext);
+    outFormatContext = nullptr;
+
+    avcodec_close(encodeContext);
+    avcodec_free_context(&encodeContext);
     avfilter_graph_free(&filter_graph);
     avfilter_inout_free(&inputs);
     avfilter_inout_free(&outputs);
+    avformat_close_input(&inFormatContext);
+    avformat_free_context(inFormatContext);
+    inFormatContext = nullptr;
+    videoDecoder->release();
+    videoDecoder = nullptr;
     env->ReleaseStringUTFChars(src_path, c_srcPath);
     env->ReleaseStringUTFChars(dest_path, c_desPath);
-    videoDecoder->release();
     LOGI("cutting done!!!")
     progress = 100;
     env->CallVoidMethod(callback, onProgress, progress);

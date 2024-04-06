@@ -86,6 +86,7 @@ private:
     uint8_t *dstWindowBuffer = nullptr;
     std::shared_ptr<MutexObj> mSeekMutexObj = nullptr;
     SwsContext *mTransformContext = nullptr;
+    SwsContext *mSwsContext = nullptr;
     int64_t mStartTimeMsForSync = -1;
     int64_t mCurTimeMs = 0;
 
@@ -94,7 +95,6 @@ private:
 
     const AVCodec *mVideoCodec = nullptr;
 
-    SwsContext *mSwsContext = nullptr;
 
     int converToSurface(AVFrame *srcFrame, AVFrame *dstFrame);
     int converFrameTo420Frame(AVFrame *srcFrame, AVFrame *dstFrame);

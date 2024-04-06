@@ -312,7 +312,7 @@ class FFMpegComposeActivity : AppCompatActivity() {
                     Log.i(TAG, "cutting file:${outFile.absolutePath}")
                     val destPath = outFile.absolutePath
                     val startTime = 0 * 1000
-                    val allTime = 5.0 * 1000
+                    val allTime = 2.0 * 1000
                     FFMpegUtils.cutting(path,
                         destPath,
                         startTime.toLong(),

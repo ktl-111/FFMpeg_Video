@@ -10,6 +10,7 @@ FFMpegPlayer::FFMpegPlayer() {
 
 FFMpegPlayer::~FFMpegPlayer() {
     mPlayerJni.reset();
+    mMutexObj = nullptr;
     LOGI("~FFMpegPlayer")
 }
 
@@ -31,15 +32,18 @@ bool resultIsFail(int result) {
 }
 
 bool FFMpegPlayer::prepare(JNIEnv *env, std::string &path, jobject surface, jobject out_config) {
+    LOGI("prepare path:%s", path.c_str())
     if (mJvm == nullptr) {
         env->GetJavaVM(&mJvm);
     }
     // 设置JavaVM，否则无法进行硬解码
     av_jni_set_java_vm(mJvm, nullptr);
     //分配 mAvFormatContext
+    LOGI("avformat_alloc_context")
     mAvFormatContext = avformat_alloc_context();
 
     //打开文件输入流
+    LOGI("avformat_open_input")
     int result = avformat_open_input(&mAvFormatContext, path.c_str(), nullptr, nullptr);
     if (resultIsFail(result)) {
         LOGE("avformat_open_input fail,result:%d", result)
@@ -609,6 +613,9 @@ bool FFMpegPlayer::pushPacketToQueue(AVPacket *packet,
 
     bool suc = false;
     while (queue->isFull()) {
+        if (mHasAbort) {
+            return false;
+        }
         LOGI("pushPacketToQueue is full, wait start")
         queue->wait();
         LOGI("pushPacketToQueue is full, wait end")
@@ -640,6 +647,9 @@ bool FFMpegPlayer::pushFrameToQueue(AVFrame *frame,
 
     bool suc = false;
     while (queue->isFull()) {
+        if (mHasAbort) {
+            return false;
+        }
         LOGD("pushFrameToQueue is full, wait start")
         queue->wait();
         LOGD("pushFrameToQueue is full, wait end")
