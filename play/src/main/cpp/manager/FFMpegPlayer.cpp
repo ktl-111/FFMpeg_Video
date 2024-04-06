@@ -124,6 +124,9 @@ void FFMpegPlayer::start() {
 bool FFMpegPlayer::seekTo(int64_t seekTime) {
     pause();
     LOGI("seek start:%ld", seekTime)
+    if (mHasAbort) {
+        return false;
+    }
     int64_t d = (int64_t) mVideoDecoder->getDuration() * 1000;
     if (seekTime > d) {
         LOGI("seek seekTime(%ld)>dration(%ld)", seekTime, d)

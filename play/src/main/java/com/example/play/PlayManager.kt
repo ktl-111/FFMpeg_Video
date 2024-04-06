@@ -2,13 +2,13 @@ package com.example.play
 
 import android.util.Log
 import android.view.Surface
-import com.example.play.PlayerState
 import com.example.play.config.OutConfig
 import com.example.play.proxy.FFMpegProxy
 import com.example.play.utils.MediaScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.onEach
@@ -18,13 +18,23 @@ class PlayManager : IPaly {
     private val TAG = "PlayManager"
     private lateinit var mProxy: IPaly
     private var iPalyListener: IPalyListener? = null
+    private val seekDoneFlow by lazy {
+        MutableStateFlow(true)
+    }
+    private var callStop = false
     private val seekFlow by lazy {
         MutableSharedFlow<Long>(1, 0, BufferOverflow.DROP_OLDEST)
             .also { flow ->
                 MediaScope.launch(Dispatchers.Default) {
                     flow.distinctUntilChanged().onEach { seekTime ->
-                        Log.i(TAG, "flow seek: ${seekTime}")
+                        Log.i(TAG, "flow seek start: ${seekTime},callStop:$callStop")
+                        if (callStop) {
+                            return@onEach;
+                        }
+                        seekDoneFlow.value = false
                         mProxy.seekTo(seekTime)
+                        seekDoneFlow.value = true
+                        Log.i(TAG, "flow seek end: ${seekTime}")
                     }.collect()
                 }
             }
@@ -52,7 +62,22 @@ class PlayManager : IPaly {
 
     override fun stop() {
         if (this::mProxy.isInitialized) {
-            mProxy.stop()
+            MediaScope.launch(Dispatchers.IO) {
+                callStop = true
+                val seekResult = seekDoneFlow.value
+                Log.i(TAG, "stop,curr seekDoneFlow:$seekResult")
+                if (!seekResult) {
+                    seekDoneFlow.onEach { result ->
+                        Log.i(TAG, "stop seekDoneFlow result:$result")
+                        if (result) {
+                            mProxy.stop()
+                        }
+                    }
+                        .collect()
+                } else {
+                    mProxy.stop()
+                }
+            }
         }
     }
 
