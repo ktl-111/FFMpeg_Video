@@ -447,6 +447,7 @@ void VideoDecoder::converFrame(AVFrame *srcFrame, AVFrame *dstFrame) {
          av_get_pix_fmt_name((AVPixelFormat) dstFrame->format),
          dstFrame->width, dstFrame->height)
     av_frame_free(&srcFrame);
+    srcFrame = nullptr;
 }
 
 void VideoDecoder::resultCallback(AVFrame *srcFrame) {
@@ -479,7 +480,10 @@ void VideoDecoder::resultCallback(AVFrame *srcFrame) {
 }
 
 void VideoDecoder::showFrameToWindow(AVFrame *pFrame) {
-    //硬解,并且配置直接关联surface,format为mediacoder
+    if (!nativeWindow) {
+        LOGE("showFrameToWindow nativeWindow is null")
+        return;
+    }
     LOGI("showFrameToWindow pts:%ld(%lf) format:%s data:%p %d %d*%d", pFrame->pts,
          pFrame->pts * av_q2d(pFrame->time_base),
          av_get_pix_fmt_name((AVPixelFormat) pFrame->format), &pFrame->data[3], pFrame->linesize[0],

@@ -9,6 +9,7 @@ import android.os.Build
 import android.os.Bundle
 import android.util.Log
 import android.webkit.MimeTypeMap
+import android.widget.Toast
 import androidx.activity.compose.setContent
 import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.foundation.layout.Column
@@ -19,6 +20,7 @@ import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.example.play.utils.MediaScope
 import com.example.videolearn.ffmpegcompose.FFMpegComposeActivity
 import com.example.videolearn.live.LiveActivity
 import com.example.videolearn.shotscreen.ShotScreenActivity
@@ -27,6 +29,9 @@ import com.example.videolearn.test.TestActivity
 import com.example.videolearn.utils.ResultUtils
 import com.example.videolearn.videocall.VideoCallActivity
 import com.example.videolearn.videoplay.VideoPlayActiivty
+import com.luck.picture.lib.utils.ToastUtils
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
@@ -103,11 +108,21 @@ class MainActivity : AppCompatActivity() {
                 Intent.createChooser(intent, "选择视频"), 100
             ) { requestCode, resultCode, data ->
                 if (resultCode == RESULT_OK) {
-                    val uri = data.data
-                    val uriToFileApiQ = uriToFileApiQ(uri, this)
-                    Log.i(TAG, "onActivityResult: ${uriToFileApiQ?.absolutePath} ${uri?.path} ${uri?.toString()}")
-                    startActivity(Intent(this, FFMpegComposeActivity::class.java)
-                        .also { it.putExtra("filepath", uriToFileApiQ?.absolutePath) })
+                    Toast.makeText(this, "等待中", Toast.LENGTH_SHORT).show()
+                    MediaScope.launch(Dispatchers.IO) {
+                        val uri = data.data
+                        val uriToFileApiQ = uriToFileApiQ(uri, this@MainActivity)
+                        Log.i(
+                            TAG,
+                            "onActivityResult: ${uriToFileApiQ?.absolutePath} ${uri?.path} ${uri?.toString()}"
+                        )
+                        launch(Dispatchers.Main) {
+                            startActivity(Intent(
+                                this@MainActivity,
+                                FFMpegComposeActivity::class.java
+                            ).also { it.putExtra("filepath", uriToFileApiQ?.absolutePath) })
+                        }
+                    }
                 }
             }
         }

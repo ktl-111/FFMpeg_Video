@@ -678,11 +678,7 @@ bool FFMpegPlayer::pushFrameToQueue(AVFrame *frame,
             if (queue->isEmpty()) {
                 int64_t diffFps = 1000.0f / mVideoDecoder->getFps();
                 LOGI("pushFrameToQueue check back seek diff:%ld diffFps:%ld", diff, diffFps)
-                if (diff >= 0) {
-                    push = diff <= diffFps * 2;
-                } else {
-                    push = false;
-                }
+                push = abs(diff) <= diffFps * 2;
             } else {
                 push = true;
             }

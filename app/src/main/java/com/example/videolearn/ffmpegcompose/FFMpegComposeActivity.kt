@@ -214,7 +214,7 @@ class FFMpegComposeActivity : AppCompatActivity() {
         }
     }
 
-    private val outConfig = OutConfig(1280, 720, 378, 496, fps = 24.toDouble())
+    private val outConfig = OutConfig(1080, 720, 378, 496, fps = 24.toDouble())
 
     private fun surfaceReCreate(surface: Surface) {
         playManager?.surfaceReCreate(surface)
@@ -231,8 +231,6 @@ class FFMpegComposeActivity : AppCompatActivity() {
 
     private fun stop() {
         Log.i(TAG, "stop: ")
-        playManager?.stop()
-        playManager = null
         finish()
     }
 
@@ -348,8 +346,8 @@ class FFMpegComposeActivity : AppCompatActivity() {
         super.onDestroy()
         playManager?.also {
             it.stop()
-            it.release()
         }
+        playManager = null
     }
 
     private fun initGetVideoFrames() {
@@ -452,42 +450,50 @@ class FFMpegComposeActivity : AppCompatActivity() {
                     .weight(1f)
                     .background(Color.Black)
             ) {
-                AndroidView(
-                    factory = { context ->
-                        return@AndroidView SurfaceView(context).also {
-                            surfaceView = it
-                            it.holder.addCallback(object : SurfaceHolder.Callback {
-                                override fun surfaceCreated(holder: SurfaceHolder) {
-                                    Log.i(TAG, "surfaceCreated: ")
-                                    surface = holder.surface
-                                    MediaScope.launch {
-                                        if (playManager == null) {
-                                            prepare(path, surface)
-                                        } else {
-                                            surfaceReCreate(surface)
-                                        }
-                                    }
-                                }
-
-                                override fun surfaceChanged(
-                                    holder: SurfaceHolder, format: Int, width: Int, height: Int
-                                ) {
-                                }
-
-                                override fun surfaceDestroyed(holder: SurfaceHolder) {
-                                    Log.i(TAG, "surfaceDestroyed: ")
-                                    surfaceDestroy()
-                                }
-
-                            })
-                            it.layoutParams =
-                                LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT)
-                        }
-                    },
+                Box(
                     modifier = Modifier
                         .border(width = 1.dp, color = Color.Red)
+                        .padding(1.dp)
                         .align(Alignment.Center)
-                )
+                ) {
+                    AndroidView(
+                        factory = { context ->
+                            return@AndroidView SurfaceView(context).also {
+                                surfaceView = it
+                                it.holder.addCallback(object : SurfaceHolder.Callback {
+                                    override fun surfaceCreated(holder: SurfaceHolder) {
+                                        Log.i(TAG, "surfaceCreated: ")
+                                        surface = holder.surface
+                                        MediaScope.launch {
+                                            if (playManager == null) {
+                                                prepare(path, surface)
+                                            } else {
+                                                surfaceReCreate(surface)
+                                            }
+                                        }
+                                    }
+
+                                    override fun surfaceChanged(
+                                        holder: SurfaceHolder, format: Int, width: Int, height: Int
+                                    ) {
+                                    }
+
+                                    override fun surfaceDestroyed(holder: SurfaceHolder) {
+                                        Log.i(TAG, "surfaceDestroyed: ")
+                                        surfaceDestroy()
+                                    }
+
+                                })
+                                it.layoutParams =
+                                    LayoutParams(
+                                        LayoutParams.WRAP_CONTENT,
+                                        LayoutParams.WRAP_CONTENT
+                                    )
+                            }
+                        }
+                    )
+                }
+
                 Text(
                     text = "fps:${fps.value},size:${size.value.width.toInt()}*${size.value.height.toInt()},duration:${
                         String.format(

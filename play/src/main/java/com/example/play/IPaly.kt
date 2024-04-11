@@ -10,7 +10,6 @@ interface IPaly {
     fun stop()
     fun resume()
     fun pause()
-    fun release()
 
     /**
      *

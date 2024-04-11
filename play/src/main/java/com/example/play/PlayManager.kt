@@ -93,12 +93,6 @@ class PlayManager : IPaly {
         }
     }
 
-    override fun release() {
-        if (this::mProxy.isInitialized) {
-            mProxy.release()
-        }
-    }
-
     override fun seekTo(seekTime: Long) {
         if (this::mProxy.isInitialized) {
             MediaScope.launch(Dispatchers.IO) {

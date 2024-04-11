@@ -36,6 +36,8 @@ internal class FFMpegProxy : IPaly {
 
     override fun stop() {
         nativeStop(nativeManager)
+        nativeRelease(nativeManager)
+        palyListener = null
     }
 
     override fun resume() {
@@ -44,11 +46,6 @@ internal class FFMpegProxy : IPaly {
 
     override fun pause() {
         nativePause(nativeManager)
-    }
-
-    override fun release() {
-        nativeRelease(nativeManager)
-        palyListener = null
     }
 
     override fun seekTo(seekTime: Long) {
