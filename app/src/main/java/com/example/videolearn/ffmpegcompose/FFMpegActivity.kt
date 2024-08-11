@@ -68,6 +68,7 @@ import com.example.play.IPalyListener
 import com.example.play.PlayManager
 import com.example.play.config.OutConfig
 import com.example.play.utils.FFMpegUtils
+import com.example.play.utils.LogProxy
 import com.example.play.utils.MediaScope
 import com.example.videolearn.ffmpegcompose.bean.VideoBean
 import com.example.videolearn.utils.DisplayUtil
@@ -77,9 +78,10 @@ import kotlinx.coroutines.launch
 import java.io.File
 import java.nio.ByteBuffer
 import java.util.concurrent.Executors
+import kotlin.math.roundToInt
 
 
-class FFMpegComposeActivity : AppCompatActivity() {
+class FFMpegActivity : AppCompatActivity(), LogProxy {
     val TAG = "FFMPEGActivity"
     private lateinit var surface: Surface
     private lateinit var surfaceView: SurfaceView
@@ -112,41 +114,42 @@ class FFMpegComposeActivity : AppCompatActivity() {
         })
         it.add(BtnBean("currPlayer") {
             Toast.makeText(
-                this@FFMpegComposeActivity,
+                this@FFMpegActivity,
                 "player state:${playManager?.getPlayerState()}",
                 Toast.LENGTH_SHORT
             ).show()
         })
         it.add(BtnBean("currTime") {
             Toast.makeText(
-                this@FFMpegComposeActivity,
+                this@FFMpegActivity,
                 "player state:${playManager?.getCurrTimestamp()}",
                 Toast.LENGTH_SHORT
             ).show()
         })
     }
 
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        FFMpegUtils.addLogProxy(this)
+        FFMpegUtils.setNativeLogLevel(Log.DEBUG)
         //直播地址
-//         path = "http://zhibo.hkstv.tv/livestream/mutfysrq/playlist.m3u8"
-//         path = "http://39.135.138.58:18890/PLTV/88888888/224/3221225630/index.m3u8"
-//        path = File(application.externalCacheDir, "testout_no_first_i.mp4").absolutePath
-//        path = File(Environment.getExternalStorageDirectory(), "douyin.mp4").absolutePath
-//        path = File(Environment.getExternalStorageDirectory(), "video.mp4").absolutePath
-//        path = File(application.externalCacheDir, "ffmpeg3.mp4").absolutePath
-//        path = File(Environment.getExternalStorageDirectory(), "ffmpeg.mp4").absolutePath
-//        path = File(Environment.getExternalStorageDirectory(), "ffmpeg3.mp4").absolutePath
-//        path = File(Environment.getExternalStorageDirectory(), "longvideo.mp4").absolutePath
-//        path = File(Environment.getExternalStorageDirectory(), "douyon.mp4").absolutePath
-//        path = File(Environment.getExternalStorageDirectory(), "gif_test_2.gif").absolutePath
-//        path = File(Environment.getExternalStorageDirectory(), "gif_test_2.gif").absolutePath
-//        path = File(Environment.getExternalStorageDirectory(), "test2.gif").absolutePath
-//        path = File(Environment.getExternalStorageDirectory(), "VID_20230511_004231.mp4").absolutePath
-//        path = File(application.externalCacheDir, "vid_test1.mp4").absolutePath
+        //         path = "http://zhibo.hkstv.tv/livestream/mutfysrq/playlist.m3u8"
+        //         path = "http://39.135.138.58:18890/PLTV/88888888/224/3221225630/index.m3u8"
+        //        path = File(application.externalCacheDir, "testout_no_first_i.mp4").absolutePath
+        //        path = File(Environment.getExternalStorageDirectory(), "douyin.mp4").absolutePath
+        //        path = File(Environment.getExternalStorageDirectory(), "video.mp4").absolutePath
+        //        path = File(application.externalCacheDir, "ffmpeg3.mp4").absolutePath
+        //        path = File(Environment.getExternalStorageDirectory(), "ffmpeg.mp4").absolutePath
+        //        path = File(Environment.getExternalStorageDirectory(), "ffmpeg3.mp4").absolutePath
+        //        path = File(Environment.getExternalStorageDirectory(), "longvideo.mp4").absolutePath
+        //        path = File(Environment.getExternalStorageDirectory(), "douyon.mp4").absolutePath
+        //        path = File(Environment.getExternalStorageDirectory(), "gif_test_2.gif").absolutePath
+        //        path = File(Environment.getExternalStorageDirectory(), "gif_test_2.gif").absolutePath
+        //        path = File(Environment.getExternalStorageDirectory(), "test2.gif").absolutePath
+        //        path = File(Environment.getExternalStorageDirectory(), "VID_20230511_004231.mp4").absolutePath
+        //        path = File(application.externalCacheDir, "vid_test1.mp4").absolutePath
         path = intent.getStringExtra("filepath") ?: ""
-//        path = File(application.externalCacheDir, "404.gif").absolutePath
+        //        path = File(application.externalCacheDir, "404.gif").absolutePath
         setContent {
             rootView(
                 videoList, mFps, mCurrPlayTime, mSize, mVideoDuration, mCuttingProgress
@@ -169,17 +172,23 @@ class FFMpegComposeActivity : AppCompatActivity() {
                         val ratio = witdh.toFloat() / height
                         Log.i(
                             TAG,
-                            "onConfig: video width:$witdh,height$height ratio:$ratio duration:${duration}\n view width:${surfaceView.measuredWidth},height${surfaceView.measuredHeight}"
+                            "bef onConfig: video width:$witdh,height:$height ratio:$ratio duration:${duration}\n view width:${surfaceView.measuredWidth},height${surfaceView.measuredHeight}"
                         )
-                        val videoHeight: Int
-                        val videoWidth: Int
+                        var videoHeight: Int
+                        var videoWidth: Int
                         if (height > witdh) {
                             videoHeight = surfaceView.measuredHeight
-                            videoWidth = (videoHeight * ratio).toInt()
+                            videoWidth = (videoHeight * ratio).roundToInt()
                         } else {
                             videoWidth = surfaceView.measuredWidth
                             videoHeight = (videoWidth / ratio).toInt()
                         }
+                        videoWidth = witdh
+                        videoHeight = height
+                        Log.i(
+                            TAG,
+                            "aft onConfig: video width:$witdh,height:$height ratio:$ratio duration:${duration}\n view width:${videoWidth},height${videoHeight}"
+                        )
                         MediaScope.launch(Dispatchers.Main) {
                             surfaceView.layoutParams.also {
                                 it.width = videoWidth
@@ -202,19 +211,23 @@ class FFMpegComposeActivity : AppCompatActivity() {
                         Log.i(TAG, "onPalyComplete: ${playManager?.getPlayerState()}")
                         MediaScope.launch(Dispatchers.Main) {
                             Toast.makeText(
-                                this@FFMpegComposeActivity, "onPalyComplete", Toast.LENGTH_SHORT
+                                this@FFMpegActivity, "onPalyComplete", Toast.LENGTH_SHORT
                             ).show()
                         }
                     }
 
+                    override fun onPlayError(code: Int) {
+                        Log.i(TAG, "onPlayError: ${code}")
+                    }
+
                 })
                 prepare(path, surface, outConfig)
-//                prepare(path, surface)
+                //                prepare(path, surface)
             }
         }
     }
 
-    private val outConfig = OutConfig(1080, 720, 378, 496, fps = 24.toDouble())
+    private val outConfig = OutConfig(960, 540, 378, 496, fps = 24.toDouble())
 
     private fun surfaceReCreate(surface: Surface) {
         playManager?.surfaceReCreate(surface)
@@ -263,25 +276,25 @@ class FFMpegComposeActivity : AppCompatActivity() {
         updateUi(seek)
         playManager?.seekTo((seek * 1000).toLong())
 
-//            if (seek == preTime) {
-//                Log.i(TAG, "itemChange seek == preTime")
-//                return@launch
-//            }
-//            mCurrPlayTime.value = seek
-//            if (seek != 0.toDouble()) {
-//                val diffSeek = abs(seek - preTime)
-//                val minSeek = 1f / mFps.value
-//                if (diffSeek < minSeek) {
-//                    Log.i(TAG, "itemChange filter diffSeek:$diffSeek minSeek:${minSeek}")
-//                    return@launch
-//                }
-//            }
-//            preTime = seek
-//
-//            Log.i(TAG, "itemChange seek:$seek index:$index offset:$offset")
-//            playManager?.apply {
-//                seekTo(seek * 1000)
-//            }
+        //            if (seek == preTime) {
+        //                Log.i(TAG, "itemChange seek == preTime")
+        //                return@launch
+        //            }
+        //            mCurrPlayTime.value = seek
+        //            if (seek != 0.toDouble()) {
+        //                val diffSeek = abs(seek - preTime)
+        //                val minSeek = 1f / mFps.value
+        //                if (diffSeek < minSeek) {
+        //                    Log.i(TAG, "itemChange filter diffSeek:$diffSeek minSeek:${minSeek}")
+        //                    return@launch
+        //                }
+        //            }
+        //            preTime = seek
+        //
+        //            Log.i(TAG, "itemChange seek:$seek index:$index offset:$offset")
+        //            playManager?.apply {
+        //                seekTo(seek * 1000)
+        //            }
     }
 
     private fun uiSeekTo(seekTime: Double) {
@@ -290,8 +303,8 @@ class FFMpegComposeActivity : AppCompatActivity() {
             playManager?.apply {
                 mCurrPlayTime.value = seekTime
                 seekTo((seekTime * 1000).toLong())
-//                mCurrPlayTime.value -= 1.0f / mFps.value
-//                seekTo((mCurrPlayTime.value * 1000).toLong())
+                //                mCurrPlayTime.value -= 1.0f / mFps.value
+                //                seekTo((mCurrPlayTime.value * 1000).toLong())
             }
         }
     }
@@ -300,7 +313,7 @@ class FFMpegComposeActivity : AppCompatActivity() {
         path?.also {
             MediaScope.launch {
                 if (it.isNotEmpty() && !it.startsWith("http")) {
-//                        val outFile = File(Environment.getExternalStorageDirectory(), "testout.mp4")
+                    //                        val outFile = File(Environment.getExternalStorageDirectory(), "testout.mp4")
                     val outFile = File(application.externalCacheDir, "testout.mp4")
                     if (!outFile.exists()) {
                         outFile.createNewFile()
@@ -310,7 +323,7 @@ class FFMpegComposeActivity : AppCompatActivity() {
                     Log.i(TAG, "cutting file:${outFile.absolutePath}")
                     val destPath = outFile.absolutePath
                     val startTime = 0 * 1000
-                    val allTime = 2.0 * 1000
+                    val allTime = 5.0 * 1000
                     FFMpegUtils.cutting(path,
                         destPath,
                         startTime.toLong(),
@@ -334,6 +347,7 @@ class FFMpegComposeActivity : AppCompatActivity() {
 
                             override fun onDone() {
                                 Log.i(TAG, "onDone: ")
+                                finish()
                             }
 
                         })
@@ -344,6 +358,7 @@ class FFMpegComposeActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
+        FFMpegUtils.removeLogProxy(this)
         playManager?.also {
             it.stop()
         }
@@ -353,7 +368,7 @@ class FFMpegComposeActivity : AppCompatActivity() {
     private fun initGetVideoFrames() {
         MediaScope.launch(Dispatchers.IO) {
             FFMpegUtils.getVideoFrames(path,
-                DisplayUtil.dp2px(this@FFMpegComposeActivity, itemSize.toFloat()),
+                DisplayUtil.dp2px(this@FFMpegActivity, itemSize.toFloat()),
                 0,
                 false,
                 object : FFMpegUtils.VideoFrameArrivedInterface {
@@ -493,7 +508,6 @@ class FFMpegComposeActivity : AppCompatActivity() {
                         }
                     )
                 }
-
                 Text(
                     text = "fps:${fps.value},size:${size.value.width.toInt()}*${size.value.height.toInt()},duration:${
                         String.format(
@@ -567,7 +581,7 @@ class FFMpegComposeActivity : AppCompatActivity() {
                                     if (event.changes.size == 1) {
                                         if (event.type == PointerEventType.Press) {
                                             isSeek.value = true
-//                                            pause()
+                                            //                                            pause()
                                         }
                                     }
                                 }
@@ -672,6 +686,26 @@ class FFMpegComposeActivity : AppCompatActivity() {
             onClick = onclick
         ) {
             Text(text = text)
+        }
+    }
+
+    override fun println(priority: Int, tag: String, msg: String) {
+        when (priority) {
+            Log.DEBUG -> {
+                Log.d(tag, "demo-${msg}")
+            }
+
+            Log.INFO -> {
+                Log.i(tag, "demo-${msg}")
+            }
+
+            Log.ERROR -> {
+                Log.e(tag, "demo-${msg}")
+            }
+
+            else -> {
+                Log.d(tag, "demo-${msg}")
+            }
         }
     }
 }

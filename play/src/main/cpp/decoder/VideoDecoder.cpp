@@ -1,6 +1,6 @@
 #include <bits/sysconf.h>
 #include "VideoDecoder.h"
-#include "../utils/loghelper.h"
+#include "Logger.h"
 #include "../utils/CommonUtils.h"
 #include "../reader/FFVideoReader.h"
 #include "libyuv/scale.h"
@@ -89,7 +89,7 @@ void VideoDecoder::initConfig(JNIEnv *env, jobject out_config) {
              videoWidth, videoHeight,
              outWidth, outHeight, cropWidth, cropHeight, outFps)
     } else {
-        LOGE("not out config")
+        LOGI("not out config")
     }
     setOutConfig(outConfig);
 }
@@ -124,7 +124,7 @@ bool VideoDecoder::prepare(JNIEnv *env) {
     }
 
     mVideoCodec = avcodec_find_decoder(params->codec_id);
-    LOGE("find codec %s", mVideoCodec->name)
+    LOGI("find codec %s", mVideoCodec->name)
 
     if (mVideoCodec == nullptr) {
         std::string msg = "not find decoder";
@@ -250,8 +250,9 @@ int VideoDecoder::decode(AVPacket *avPacket, AVFrame *frame) {
     mNeedResent = sendRes == AVERROR(EAGAIN) || isEof;
     bool isKeyFrame = avPacket->flags & AV_PKT_FLAG_KEY;
     LOGI(
-            "[video] avcodec_send_packet...pts: %" PRId64 ", dts: %" PRId64 ", isKeyFrame: %d, res: %d, isEof: %d,extra_hw_frames:%d",
-            avPacket->pts, avPacket->dts, isKeyFrame, sendRes, isEof,
+            "[video] avcodec_send_packet...pts: %" PRId64 "(%f), dts: %" PRId64 ", isKeyFrame: %d, res: %d, isEof: %d,extra_hw_frames:%d",
+            avPacket->pts, avPacket->pts * av_q2d(getStream()->time_base) * 1000, avPacket->dts,
+            isKeyFrame, sendRes, isEof,
             mCodecContext->extra_hw_frames)
     // avcodec_receive_frame的-11，表示需要发新帧
     receiveRes = avcodec_receive_frame(mCodecContext, pAvFrame);
@@ -259,7 +260,7 @@ int VideoDecoder::decode(AVPacket *avPacket, AVFrame *frame) {
     LOGI("[video] avcodec_receive_frame %d %s", receiveRes, av_err2str(receiveRes))
 
     if (receiveRes != 0) {
-        LOGE("[video] avcodec_receive_frame err: %d, resent: %d", receiveRes, mNeedResent)
+        LOGI("[video] avcodec_receive_frame err: %d, resent: %d", receiveRes, mNeedResent)
         av_frame_free(&pAvFrame);
         // force EOF
         if (isEof && receiveRes == AVERROR_EOF) {
@@ -566,7 +567,7 @@ void VideoDecoder::seekUnlock() {
 
 void VideoDecoder::updateTimestamp(AVFrame *frame) {
     if (mStartTimeMsForSync < 0) {
-        LOGE("update video start time")
+        LOGI("update video start time")
         mStartTimeMsForSync = getCurrentTimeMs();
     }
 
@@ -582,7 +583,7 @@ void VideoDecoder::updateTimestamp(AVFrame *frame) {
     if (mFixStartTime) {
         mStartTimeMsForSync = getCurrentTimeMs() - mCurTimeMs;
         mFixStartTime = false;
-        LOGE("fix video start time")
+        LOGI("fix video start time")
     }
 }
 
@@ -646,7 +647,7 @@ int VideoDecoder::seek(int64_t pos) {
                                  INT64_MIN, seekPos, INT64_MAX,
                                  0);
     flush();
-    LOGE("[video] seek to: %ld, seekPos: %" PRId64 ", ret: %d", pos, seekPos, ret)
+    LOGI("[video] seek to: %ld, seekPos: %" PRId64 ", ret: %d", pos, seekPos, ret)
     // seek后需要恢复起始时间
     mFixStartTime = true;
     return ret;

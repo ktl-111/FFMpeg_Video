@@ -1,5 +1,5 @@
 #include "AudioDecoder.h"
-#include "../utils/loghelper.h"
+#include "Logger.h"
 #include "../utils/CommonUtils.h"
 
 AudioDecoder::AudioDecoder(int index, AVFormatContext *ftx) : BaseDecoder(index, ftx) {
@@ -273,7 +273,7 @@ void AudioDecoder::updateTimestamp(AVFrame *frame) {
     if (mFixStartTime) {
         mStartTimeMsForSync = getCurrentTimeMs() - mCurTimeStampMs;
         mFixStartTime = false;
-        LOGE("fix audio start time")
+        LOGI("fix audio start time")
     }
 }
 

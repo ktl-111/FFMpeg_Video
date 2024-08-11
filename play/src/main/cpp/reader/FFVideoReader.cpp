@@ -1,6 +1,6 @@
 #include <assert.h>
 #include "FFVideoReader.h"
-#include "../utils/loghelper.h"
+#include "Logger.h"
 #include "../utils/CommonUtils.h"
 #include "../libyuv/libyuv.h"
 
@@ -102,7 +102,7 @@ void FFVideoReader::getFrame(int64_t pts, int width, int height, uint8_t *buffer
     }
 
     if (find) {
-        LOGE(
+        LOGI(
                 "[FFVideoReader], get frame decode done, pts: %" PRId64 ", time: %f, format: %d, consume: %" PRId64 ", decodeCount: %d",
                 frame->pts,
                 (frame->pts * av_q2d(mediaInfo.video_time_base)),
@@ -238,12 +238,12 @@ int FFVideoReader::getRotate(AVStream *stream) {
     AVDictionaryEntry *tag = nullptr;
 
     while ((tag = av_dict_get(stream->metadata, "", tag, AV_DICT_IGNORE_SUFFIX))) {
-        LOGW("[video] metadata: %s, %s", tag->key, tag->value)
+        LOGI("[video] metadata: %s, %s", tag->key, tag->value)
     }
 
     tag = av_dict_get(stream->metadata, "rotate", nullptr, 0);
     const char *string = tag == nullptr ? "-1" : tag->value;
-    LOGE("try getRotate from tag(rotate): %s", string)
+    LOGI("try getRotate from tag(rotate): %s", string)
     int rotate;
     if (tag != nullptr) {
         rotate = atoi(tag->value);
@@ -257,11 +257,11 @@ int FFVideoReader::getRotate(AVStream *stream) {
         rotate = (int) theta;
     }
 
-    LOGE("getRotate: %d", rotate);
+    LOGI("getRotate: %d", rotate);
     if (rotate < 0) { // CCW -> CC(Clockwise)
         rotate %= 360;
         rotate += 360;
-        LOGE("getRotate fix: %d", rotate);
+        LOGI("getRotate fix: %d", rotate);
     }
 
     return rotate < 0 ? 0 : rotate;

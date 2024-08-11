@@ -1,4 +1,5 @@
 #include <jni.h>
+#include "Logger.h"
 #include "FFMpegPlayer.h"
 
 void my_logoutput(void *ptr, int level, const char *fmt, va_list vl) {
@@ -29,7 +30,8 @@ extern "C"
 JNIEXPORT jboolean JNICALL
 Java_com_example_play_proxy_FFMpegProxy_nativePrepare(JNIEnv *env, jobject thiz,
                                                       jlong native_manager, jstring path,
-                                                      jobject surface, jobject out_config) {
+                                                      jobject surface,
+                                                      jobject out_config) {
     auto *pPlayer = reinterpret_cast<FFMpegPlayer *>(native_manager);
     const char *c_path = env->GetStringUTFChars(path, nullptr);
     std::string s_path = c_path;
@@ -134,4 +136,10 @@ Java_com_example_play_proxy_FFMpegProxy_getPlayerState(JNIEnv *env, jobject thiz
         return pPlayer->getPlayerState();
     }
     return 0;
+}
+extern "C"
+JNIEXPORT void JNICALL
+Java_com_example_play_utils_FFMpegUtils_nativeSetNativeLogLevel(JNIEnv *env, jobject thiz,
+                                                                jint logLevel) {
+    Logger::setLogLevel(logLevel);
 }

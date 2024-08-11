@@ -1,6 +1,6 @@
 #include "AVFrameQueue.h"
 #include <ctime>
-#include "../utils/loghelper.h"
+#include "Logger.h"
 
 extern "C" {
 #include "libavutil/time.h"
@@ -54,7 +54,7 @@ int AVFrameQueue::popTo(AVFrame *dstFrame) {
     } else {
         ret = av_frame_ref(dstFrame, frame);
         if (ret != 0) {
-            LOGE("[AVFrameQueue], popTo failed, ref: %d", ret);
+            LOGI("[AVFrameQueue], popTo failed, ref: %d", ret);
         }
     }
     LOGI("[AVFrameQueue] popTo pts:%ld %d %d,ret:%d", dstFrame->pts, dstFrame->format,
@@ -71,7 +71,7 @@ int AVFrameQueue::front(AVFrame *dstFrame) {
     pthread_mutex_lock(&mMutex);
     bool isEmpty = mQueue.empty() && mQueue.size() <= 0;
     if (isEmpty) {
-        LOGE("[AVFrameQueue], front empty")
+        LOGI("[AVFrameQueue], front empty")
         pthread_mutex_unlock(&mMutex);
         return -1;
     }
@@ -82,7 +82,7 @@ int AVFrameQueue::front(AVFrame *dstFrame) {
 
     int ref = av_frame_ref(dstFrame, frame);
     if (ref != 0) {
-        LOGE("[AVFrameQueue], front failed, ref: %d %s", ref, av_err2str(ref));
+        LOGI("[AVFrameQueue], front failed, ref: %d %s", ref, av_err2str(ref));
     }
     pthread_mutex_unlock(&mMutex);
     return ref;
@@ -144,7 +144,7 @@ void AVFrameQueue::checkEmptyWait() {
 bool AVFrameQueue::checkLastIsEofFrame() {
     pthread_mutex_lock(&mMutex);
     if (mQueue.empty()) {
-        LOGE("[AVFrameQueue],checkLastIsEofPack isEmpty")
+        LOGI("[AVFrameQueue],checkLastIsEofPack isEmpty")
         pthread_mutex_unlock(&mMutex);
         return false;
     }

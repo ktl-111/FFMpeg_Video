@@ -15,7 +15,7 @@ interface IPaly {
      *
      * @param seekTime Long ms
      */
-    fun seekTo(seekTime: Long)
+    fun seekTo(seekTime: Long, nextStep: Step = Step.UnknownStep)
     fun surfaceReCreate(surface: Surface)
     fun surfaceDestroy()
     fun getPlayerState(): PlayerState

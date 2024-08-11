@@ -1,9 +1,9 @@
 package com.example.play
 
-import android.util.Log
 import android.view.Surface
 import com.example.play.config.OutConfig
 import com.example.play.proxy.FFMpegProxy
+import com.example.play.utils.LogHelper
 import com.example.play.utils.MediaScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.BufferOverflow
@@ -23,22 +23,30 @@ class PlayManager : IPaly {
     }
     private var callStop = false
     private val seekFlow by lazy {
-        MutableSharedFlow<Long>(1, 0, BufferOverflow.DROP_OLDEST)
-            .also { flow ->
-                MediaScope.launch(Dispatchers.Default) {
-                    flow.distinctUntilChanged().onEach { seekTime ->
-                        Log.i(TAG, "flow seek start: ${seekTime},callStop:$callStop")
-                        if (callStop) {
-                            return@onEach;
-                        }
-                        seekDoneFlow.value = false
-                        mProxy.seekTo(seekTime)
-                        seekDoneFlow.value = true
-                        Log.i(TAG, "flow seek end: ${seekTime}")
-                    }.collect()
-                }
+        MutableSharedFlow<SeekBean>(1, 0, BufferOverflow.DROP_OLDEST).also { flow ->
+            MediaScope.launch(Dispatchers.Default) {
+                flow.distinctUntilChanged { old, new ->
+                    if (old.seekTime == 0L && new.seekTime == 0L) {
+                        false
+                    } else {
+                        old == new
+                    }
+                }.onEach { seekBean ->
+                    LogHelper.i(TAG, "flow seek start: ${seekBean},callStop:$callStop")
+                    if (callStop) {
+                        return@onEach;
+                    }
+                    seekDoneFlow.value = false
+                    mProxy.seekTo(seekBean.seekTime)
+                    seekDoneFlow.value = true
+                    LogHelper.i(TAG, "flow seek end: ${seekBean}")
+                    nextStep(seekBean.nextStep)
+                }.collect()
             }
+        }
     }
+
+    data class SeekBean(val seekTime: Long, val nextStep: Step)
 
     override fun init(iPalyListener: IPalyListener?) {
         this.iPalyListener = iPalyListener
@@ -46,7 +54,7 @@ class PlayManager : IPaly {
 
     override fun prepare(path: String, surface: Surface, outConfig: OutConfig?) {
         if (path.isEmpty()) {
-            Log.i(TAG, "prepare path is empty")
+            LogHelper.i(TAG, "prepare path is empty")
             return
         }
         mProxy = FFMpegProxy()
@@ -65,15 +73,14 @@ class PlayManager : IPaly {
             MediaScope.launch(Dispatchers.IO) {
                 callStop = true
                 val seekResult = seekDoneFlow.value
-                Log.i(TAG, "stop,curr seekDoneFlow:$seekResult")
+                LogHelper.i(TAG, "stop,curr seekDoneFlow:$seekResult")
                 if (!seekResult) {
                     seekDoneFlow.onEach { result ->
-                        Log.i(TAG, "stop seekDoneFlow result:$result")
+                        LogHelper.i(TAG, "stop seekDoneFlow result:$result")
                         if (result) {
                             mProxy.stop()
                         }
-                    }
-                        .collect()
+                    }.collect()
                 } else {
                     mProxy.stop()
                 }
@@ -93,10 +100,10 @@ class PlayManager : IPaly {
         }
     }
 
-    override fun seekTo(seekTime: Long) {
+    override fun seekTo(seekTime: Long, nextStep: Step) {
         if (this::mProxy.isInitialized) {
             MediaScope.launch(Dispatchers.IO) {
-                seekFlow.emit(seekTime)
+                seekFlow.emit(SeekBean(seekTime, nextStep))
             }
         }
     }
@@ -126,6 +133,15 @@ class PlayManager : IPaly {
             mProxy.getCurrTimestamp()
         } else {
             0
+        }
+    }
+
+    private fun nextStep(step: Step) {
+        LogHelper.i(TAG, "nextStep: ${step}")
+        when (step) {
+            Step.PauseStep -> pause()
+            Step.PlayStep -> start()
+            Step.UnknownStep -> {}
         }
     }
 }

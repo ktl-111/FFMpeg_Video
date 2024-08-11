@@ -1,11 +1,12 @@
 package com.example.play.proxy
 
-import android.util.Log
 import android.view.Surface
 import com.example.play.IPaly
 import com.example.play.IPalyListener
 import com.example.play.PlayerState
+import com.example.play.Step
 import com.example.play.config.OutConfig
+import com.example.play.utils.LogHelper
 
 internal class FFMpegProxy : IPaly {
     init {
@@ -23,7 +24,7 @@ internal class FFMpegProxy : IPaly {
 
     override fun prepare(path: String, surface: Surface, outConfig: OutConfig?) {
         if (path.isEmpty()) {
-            Log.e(TAG, "prepare path is empty")
+            LogHelper.e(TAG, "prepare path is empty")
             return
         }
         this.outConfig = outConfig;
@@ -48,7 +49,7 @@ internal class FFMpegProxy : IPaly {
         nativePause(nativeManager)
     }
 
-    override fun seekTo(seekTime: Long) {
+    override fun seekTo(seekTime: Long, nextStep: Step) {
         nativeSeekTo(nativeManager, seekTime)
     }
 
@@ -84,21 +85,26 @@ internal class FFMpegProxy : IPaly {
     private external fun nativeSurfaceDestroy(nativeManager: Long)
     private external fun getCurrTimestamp(nativeManager: Long): Long
     private external fun getPlayerState(nativeManager: Long): Int
-    private fun onNativeVideoConfig(width: Int, height: Int, duration: Double, fps: Double) {
-        Log.i(
+    private fun onNativeVideoConfig(width: Int, height: Int, duration: Double, fps: Double, codecName: String) {
+        LogHelper.i(
             TAG,
-            "onNativeVideoConfig: ${width}*${height} duration:${duration} fps:${fps} palyListener:${palyListener}"
+            "onNativeVideoConfig: ${width}*${height} duration:${duration} fps:${fps} codecName:${codecName}"
         )
         palyListener?.onVideoConfig(width, height, duration, fps)
     }
 
     private fun onNativePalyProgress(time: Double) {
-        Log.i(TAG, "onNativePalyProgress: ${time}")
+        LogHelper.d(TAG, "onNativePalyProgress: ${time}")
         palyListener?.onPalyProgress(time)
     }
 
     private fun onNativePalyComplete() {
-        Log.i(TAG, "onNativePalyComplete: ")
+        LogHelper.i(TAG, "onNativePalyComplete: ")
         palyListener?.onPalyComplete()
+    }
+
+    private fun onPlayError(code: Int) {
+        LogHelper.e(TAG, "onPlayError code:${code}")
+        palyListener?.onPlayError(code)
     }
 }

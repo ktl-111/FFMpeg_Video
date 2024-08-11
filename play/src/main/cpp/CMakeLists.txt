@@ -48,6 +48,7 @@ add_library(ffmpegplayer SHARED
         ${CONFIGESOURCE}
         ${YUVSOURCE})
 
+#关联lib库
 target_link_libraries(
         ffmpegplayer
         log

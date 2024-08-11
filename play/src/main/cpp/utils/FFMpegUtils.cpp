@@ -1,11 +1,12 @@
 #include <jni.h>
 #include <string>
-#include <loghelper.h>
+#include <Logger.h>
 #include <bits/sysconf.h>
 #include "../reader/FFVideoReader.h"
 #include "libyuv/scale.h"
 #include "libyuv/convert.h"
 #include "../globals.h"
+#include "YuvUtil.h"
 #include "libyuv/video_common.h"
 #include "VideoDecoder.h"
 
@@ -20,10 +21,10 @@ extern "C" {
 extern "C"
 JNIEXPORT void JNICALL
 Java_com_example_play_utils_FFMpegUtils_getVideoFramesCore(JNIEnv *env, jobject thiz,
-                                                           jstring path,
-                                                           jint width, jint height,
-                                                           jboolean precise,
-                                                           jobject callback) {
+                                                                     jstring path,
+                                                                     jint width, jint height,
+                                                                     jboolean precise,
+                                                                     jobject callback) {
     // path
     const char *c_path = env->GetStringUTFChars(path, nullptr);
     std::string s_path = c_path;
@@ -86,7 +87,7 @@ Java_com_example_play_utils_FFMpegUtils_getVideoFramesCore(JNIEnv *env, jobject 
         jboolean abort = env->CallBooleanMethod(callback, onProgress, frameBuffer, ptsArr[i], width,
                                                 height, rotate, i);
         if (abort) {
-            LOGE("onProgress abort");
+            LOGI("onProgress abort");
             break;
         }
 
@@ -102,11 +103,11 @@ Java_com_example_play_utils_FFMpegUtils_getVideoFramesCore(JNIEnv *env, jobject 
 extern "C"
 JNIEXPORT void JNICALL
 Java_com_example_play_utils_FFMpegUtils_nativeCutting(JNIEnv *env, jobject thiz,
-                                                      jstring src_path, jstring dest_path,
-                                                      jlong starttime,
-                                                      jlong endtime,
-                                                      jobject out_config,
-                                                      jobject callback) {
+                                                                jstring src_path, jstring dest_path,
+                                                                jlong starttime,
+                                                                jlong endtime,
+                                                                jobject out_config,
+                                                                jobject callback) {
     double start_time = starttime / 1000;
     double end_time = endtime / 1000;
     double progress = 0;
@@ -152,6 +153,11 @@ Java_com_example_play_utils_FFMpegUtils_nativeCutting(JNIEnv *env, jobject thiz,
     int cropWidth = videoDecoder->getCropWidth();
     int cropHeight = videoDecoder->getCropHeight();
     int outFps = (int) videoDecoder->getOutFps();
+    double srcFps = videoDecoder->getFps();
+    if (srcFps < outFps) {
+        LOGI("cutting src srcFps:(%f) < outFps:(%d)", srcFps, outFps)
+        outFps = (int) srcFps;
+    }
     bool prepareResult = videoDecoder->prepare(env);
     if (!prepareResult) {
         env->CallVoidMethod(callback, onFail, ERRORCODE_PREPARE_FILE);
@@ -217,7 +223,7 @@ Java_com_example_play_utils_FFMpegUtils_nativeCutting(JNIEnv *env, jobject thiz,
     inputs->pad_idx = 0;
     inputs->next = NULL;
     const char *fpsTag = "fps=";
-    char *fpsFilter = new char[strlen(fpsTag), sizeof(outFps)];
+    char *fpsFilter = new char[strlen(fpsTag) + sizeof(outFps)];
     sprintf(fpsFilter, "%s%d", fpsTag, outFps);
     LOGI("cutting fpsfilter:%s", fpsFilter)
     //buffer->输出(outputs)->filter in(av_strdup("in")->fps filter->filter out(av_strdup("out"))->输入(inputs)->buffersink
@@ -374,7 +380,7 @@ Java_com_example_play_utils_FFMpegUtils_nativeCutting(JNIEnv *env, jobject thiz,
             if (frameFlags <
                 0 ||
                 buffersinkGetFrame < 0) {
-                LOGE("cutting filter frame %d %d", frameFlags, buffersinkGetFrame);
+                LOGI("cutting filter frame %d %d", frameFlags, buffersinkGetFrame);
                 if (buffersinkGetFrame == AVERROR(EAGAIN)) {
                     av_frame_free(&frame);
                     av_frame_free(&filtered_frame);

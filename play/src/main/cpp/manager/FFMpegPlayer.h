@@ -8,7 +8,7 @@
 #include <ctime>
 #include <thread>
 #include "../utils/MutexObj.h"
-#include "../utils/loghelper.h"
+#include "Logger.h"
 #include "../decoder/VideoDecoder.h"
 #include "../decoder/AudioDecoder.h"
 #include "../queue/AVPacketQueue.h"
@@ -31,19 +31,22 @@ typedef struct PlayerJniContext {
     jmethodID onVideoConfig;
     jmethodID onPlayProgress;
     jmethodID onPlayCompleted;
+    jmethodID onPlayError;
 
     void reset() {
         instance = nullptr;
         onVideoConfig = nullptr;
         onPlayProgress = nullptr;
         onPlayCompleted = nullptr;
+        onPlayError = nullptr;
     }
 
     bool isValid() {
         return instance != nullptr &&
                onPlayCompleted != nullptr &&
                onPlayProgress != nullptr
-               && onVideoConfig != nullptr;
+               && onVideoConfig != nullptr
+               && onPlayError != nullptr;
     }
 
 } PlayerJniContext;

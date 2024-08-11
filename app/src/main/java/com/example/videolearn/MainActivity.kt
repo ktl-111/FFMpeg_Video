@@ -9,8 +9,10 @@ import android.os.Build
 import android.os.Bundle
 import android.util.Log
 import android.webkit.MimeTypeMap
-import android.widget.Toast
 import androidx.activity.compose.setContent
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -20,8 +22,7 @@ import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import com.example.play.utils.MediaScope
-import com.example.videolearn.ffmpegcompose.FFMpegComposeActivity
+import com.example.videolearn.ffmpegcompose.FFMpegActivity
 import com.example.videolearn.live.LiveActivity
 import com.example.videolearn.shotscreen.ShotScreenActivity
 import com.example.videolearn.test.ParseDataActivity
@@ -29,9 +30,6 @@ import com.example.videolearn.test.TestActivity
 import com.example.videolearn.utils.ResultUtils
 import com.example.videolearn.videocall.VideoCallActivity
 import com.example.videolearn.videoplay.VideoPlayActiivty
-import com.luck.picture.lib.utils.ToastUtils
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
 import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
@@ -93,38 +91,27 @@ class MainActivity : AppCompatActivity() {
         } else {
             Manifest.permission.READ_EXTERNAL_STORAGE
         }
-        ResultUtils.getInstance(this).singlePermissions(
-            permission
-        ) { result ->
+        ResultUtils.getInstance(this).singlePermissions(permission) { result ->
             Log.i(TAG, "select: $result")
             if (!result) {
                 return@singlePermissions
             }
-            val intent = Intent(Intent.ACTION_GET_CONTENT)
-            intent.type = "*/*"
-            intent.putExtra(Intent.EXTRA_MIME_TYPES, arrayOf("image/gif", "video/*"))
-            intent.addCategory(Intent.CATEGORY_OPENABLE)
-            ResultUtils.getInstance(this).request(
-                Intent.createChooser(intent, "选择视频"), 100
-            ) { requestCode, resultCode, data ->
-                if (resultCode == RESULT_OK) {
-                    Toast.makeText(this, "等待中", Toast.LENGTH_SHORT).show()
-                    MediaScope.launch(Dispatchers.IO) {
-                        val uri = data.data
-                        val uriToFileApiQ = uriToFileApiQ(uri, this@MainActivity)
-                        Log.i(
-                            TAG,
-                            "onActivityResult: ${uriToFileApiQ?.absolutePath} ${uri?.path} ${uri?.toString()}"
-                        )
-                        launch(Dispatchers.Main) {
-                            startActivity(Intent(
-                                this@MainActivity,
-                                FFMpegComposeActivity::class.java
-                            ).also { it.putExtra("filepath", uriToFileApiQ?.absolutePath) })
-                        }
-                    }
-                }
+            val items = arrayOf("video/mp4", "image/gif")
+            val alertBuilder: AlertDialog.Builder = AlertDialog.Builder(this)
+            alertBuilder.setTitle("select type")
+            alertBuilder.setSingleChoiceItems(items, -1) { dialog, index ->
+                mMediaPickLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.SingleMimeType(items[index])))
+                dialog.dismiss()
             }
+            alertBuilder.create().show()
+        }
+    }
+
+    private val mMediaPickLauncher = registerForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+        uri?.let { uri ->
+            val uriToFileApiQ = uriToFileApiQ(uri, this)
+            Log.i(TAG, "onActivityResult: ${uriToFileApiQ?.absolutePath} ${uri.path}")
+            startActivity(Intent(this, FFMpegActivity::class.java).also { it.putExtra("filepath", uriToFileApiQ?.absolutePath) })
         }
     }
 
@@ -176,7 +163,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     fun live() {
-//        startActivity(Intent(this, MainActivity::class.java))
+        //        startActivity(Intent(this, MainActivity::class.java))
         startActivity(Intent(this, LiveActivity::class.java))
     }
 

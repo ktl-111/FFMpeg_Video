@@ -90,8 +90,41 @@ object FFMpegUtils {
         cb: VideoCuttingInterface
     )
 
+    private external fun nativeSetNativeLogLevel(logLevel: Int)
+
+    /**
+     * 画幅裁切   eg：视频分辨率大小的处理，切成手表的长宽比例
+     *
+     * @param src    原视频路径
+     * @param dest   输出视频路径
+     * @param width  分辨率调整后的宽
+     * @param height 分辨率调整后的高
+     * @return 状态 0成功
+     */
+    external fun crop(src: String?, dest: String?, width: Int, height: Int): Int
+
     private fun allocateFrame(width: Int, height: Int): ByteBuffer {
         return ByteBuffer.allocateDirect(width * height * 4).order(ByteOrder.LITTLE_ENDIAN)
     }
 
+    /**
+     *设置nativelog打印等级,生产环境建议只打印error
+     * @param logLevel Int [android.util.Log]
+     */
+    fun setNativeLogLevel(logLevel: Int) {
+        LogHelper.i("utils", "setNativeLogLevel ${logLevel}")
+        nativeSetNativeLogLevel(logLevel)
+    }
+
+    /**
+     * 添加sdk层logproxy
+     * @param logProxy LogProxy
+     */
+    fun addLogProxy(logProxy: LogProxy) {
+        LogHelper.addLogProxy(logProxy)
+    }
+
+    fun removeLogProxy(logProxy: LogProxy) {
+        LogHelper.removeLogProxy(logProxy)
+    }
 }

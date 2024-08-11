@@ -1,6 +1,6 @@
 #include "AVPacketQueue.h"
 #include <ctime>
-#include "../utils/loghelper.h"
+#include "Logger.h"
 
 AVPacketQueue::AVPacketQueue(int64_t maxSize) {
     pthread_mutex_init(&mMutex, nullptr);
@@ -35,7 +35,7 @@ int AVPacketQueue::popTo(AVPacket *packet) {
     pthread_mutex_lock(&mMutex);
     bool isEmpty = mQueue.empty() && mQueue.size() <= 0;
     if (isEmpty) {
-        LOGE("[AVPacketQueue],popTo isEmpty")
+        LOGI("[AVPacketQueue],popTo isEmpty")
         pthread_mutex_unlock(&mMutex);
         return -1;
     }
@@ -113,7 +113,7 @@ void AVPacketQueue::checkEmptyWait() {
 bool AVPacketQueue::checkLastIsEofPack() {
     pthread_mutex_lock(&mMutex);
     if (mQueue.empty()) {
-        LOGE("[AVPacketQueue],checkLastIsEofPack isEmpty")
+        LOGI("[AVPacketQueue],checkLastIsEofPack isEmpty")
         pthread_mutex_unlock(&mMutex);
         return false;
     }

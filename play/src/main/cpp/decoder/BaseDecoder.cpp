@@ -1,5 +1,5 @@
 #include "BaseDecoder.h"
-#include "../utils/loghelper.h"
+#include "Logger.h"
 
 BaseDecoder::BaseDecoder(int index, AVFormatContext *ftx) {
     mStreamIndex = index;
@@ -7,7 +7,7 @@ BaseDecoder::BaseDecoder(int index, AVFormatContext *ftx) {
     mStream = mFtx->streams[index];
     mTimeBase = mStream->time_base;
     mDuration = mStream->duration * av_q2d(mTimeBase);
-    LOGE("[BaseDecoder], index: %d, duration: %f, time base: {num: %d, den: %d}",
+    LOGI("[BaseDecoder], index: %d, duration: %f, time base: {num: %d, den: %d}",
          index, mDuration, mTimeBase.num, mTimeBase.den);
     if (mDuration < 0.0) {
         mDuration = 0.0;

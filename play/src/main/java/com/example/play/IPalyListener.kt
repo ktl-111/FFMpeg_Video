@@ -10,4 +10,5 @@ interface IPalyListener {
      */
     fun onPalyProgress(time: Double)
     fun onPalyComplete()
+    fun onPlayError(code: Int)
 }

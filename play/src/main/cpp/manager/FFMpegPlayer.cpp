@@ -2,6 +2,7 @@
 // Created by Administrator on 2023/11/19.
 //
 #include "FFMpegPlayer.h"
+#include "../globals.h"
 
 FFMpegPlayer::FFMpegPlayer() {
     mMutexObj = std::make_shared<MutexObj>();
@@ -22,9 +23,10 @@ void FFMpegPlayer::init(JNIEnv *env, jobject thiz) {
     LOGI("FFMpegPlayer init")
     mPlayerJni.reset();
     mPlayerJni.instance = env->NewGlobalRef(thiz);
-    mPlayerJni.onVideoConfig = env->GetMethodID(jclazz, "onNativeVideoConfig", "(IIDD)V");
+    mPlayerJni.onVideoConfig = env->GetMethodID(jclazz, "onNativeVideoConfig", "(IIDDLjava/lang/String;)V");
     mPlayerJni.onPlayProgress = env->GetMethodID(jclazz, "onNativePalyProgress", "(D)V");
     mPlayerJni.onPlayCompleted = env->GetMethodID(jclazz, "onNativePalyComplete", "()V");
+    mPlayerJni.onPlayError = env->GetMethodID(jclazz, "onPlayError", "(I)V");
 }
 
 bool resultIsFail(int result) {
@@ -39,14 +41,13 @@ bool FFMpegPlayer::prepare(JNIEnv *env, std::string &path, jobject surface, jobj
     // 设置JavaVM，否则无法进行硬解码
     av_jni_set_java_vm(mJvm, nullptr);
     //分配 mAvFormatContext
-    LOGI("avformat_alloc_context")
     mAvFormatContext = avformat_alloc_context();
 
     //打开文件输入流
-    LOGI("avformat_open_input")
     int result = avformat_open_input(&mAvFormatContext, path.c_str(), nullptr, nullptr);
     if (resultIsFail(result)) {
         LOGE("avformat_open_input fail,result:%d", result)
+        env->CallVoidMethod(mPlayerJni.instance, mPlayerJni.onPlayError, ERRORCODE_PREPARE_FILE);
         return false;
     }
 
@@ -54,9 +55,9 @@ bool FFMpegPlayer::prepare(JNIEnv *env, std::string &path, jobject surface, jobj
     result = avformat_find_stream_info(mAvFormatContext, nullptr);
     if (resultIsFail(result)) {
         LOGE("avformat_find_stream_info fail,result:%d", result)
+        env->CallVoidMethod(mPlayerJni.instance, mPlayerJni.onPlayError, ERRORCODE_FIND_STERAM);
         return false;
     }
-
     bool audioPrePared = false;
     bool videoPrepared = false;
     for (int i = 0; i < mAvFormatContext->nb_streams; ++i) {
@@ -79,9 +80,12 @@ bool FFMpegPlayer::prepare(JNIEnv *env, std::string &path, jobject surface, jobj
                     surfaceWidth = mVideoDecoder->getCropWidth();
                     surfaceHeight = mVideoDecoder->getCropHeight();
                 }
+                const char *codecName = avcodec_get_name(codecpar->codec_id);
+
                 env->CallVoidMethod(mPlayerJni.instance, mPlayerJni.onVideoConfig,
                                     surfaceWidth, surfaceHeight,
-                                    mVideoDecoder->getDuration(), mVideoDecoder->getFps());
+                                    mVideoDecoder->getDuration(), mVideoDecoder->getFps(),
+                                    env->NewStringUTF(codecName));
             }
         } else if (codecpar->codec_type == AVMEDIA_TYPE_AUDIO) {
             //音频流
@@ -109,7 +113,7 @@ bool FFMpegPlayer::prepare(JNIEnv *env, std::string &path, jobject surface, jobj
         updatePlayerState(PlayerState::PREPARE);
     }
     mVideoPacketQueue = std::make_shared<AVPacketQueue>(50);
-    mVideoFrameQueue = std::make_shared<AVFrameQueue>(50);
+    mVideoFrameQueue = std::make_shared<AVFrameQueue>(5 * mVideoDecoder->getFps());
     mVideoThread = new std::thread(&FFMpegPlayer::VideoDecodeLoop, this);
     mReadPacketThread = new std::thread(&FFMpegPlayer::ReadPacketLoop, this);
     mVideoDecodeThread = new std::thread(&FFMpegPlayer::ReadVideoFrameLoop, this);
@@ -189,7 +193,7 @@ bool FFMpegPlayer::seekTo(int64_t seekTime) {
 
     int ret = mVideoFrameQueue->getFrameByTime(pFrame, seekTime, mIsBackSeek);
     if (ret != 0) {
-        LOGE("seek %ld get frame fail %d", seekTime, ret)
+        LOGI("seek %ld get frame fail %d", seekTime, ret)
         av_frame_free(&pFrame);
         pFrame = nullptr;
 //        if (ret == AVERROR(EAGAIN)) {
@@ -227,29 +231,29 @@ void FFMpegPlayer::stop() {
     mMutexObj->wakeUp();
 
     if (mReadPacketThread != nullptr) {
-        LOGE("join mReadPacketThread")
+        LOGI("join mReadPacketThread")
         mReadPacketThread->join();
         delete mReadPacketThread;
         mReadPacketThread = nullptr;
-        LOGE("release mReadPacketThread")
+        LOGI("release mReadPacketThread")
     }
     if (mVideoDecodeThread != nullptr) {
-        LOGE("join mVideoDecodeThread")
+        LOGI("join mVideoDecodeThread")
         mVideoDecodeThread->join();
         delete mVideoDecodeThread;
         mVideoDecodeThread = nullptr;
-        LOGE("release mVideoDecodeThread")
+        LOGI("release mVideoDecodeThread")
     }
 
     if (mVideoThread != nullptr) {
-        LOGE("join mVideoThread")
+        LOGI("join mVideoThread")
         mVideoThread->join();
         delete mVideoThread;
         mVideoThread = nullptr;
-        LOGE("release mVideoThread")
+        LOGI("release mVideoThread")
     }
     mVideoDecoder = nullptr;
-    LOGE("release video res")
+    LOGI("release video res")
 
     mVideoFrameQueue->clear();
     mVideoFrameQueue = nullptr;
@@ -259,7 +263,7 @@ void FFMpegPlayer::stop() {
 
     // release audio res
     if (mAudioThread != nullptr) {
-        LOGE("join audio thread")
+        LOGI("join audio thread")
         if (mAudioPacketQueue) {
             mAudioPacketQueue->clear();
         }
@@ -268,13 +272,13 @@ void FFMpegPlayer::stop() {
         mAudioThread = nullptr;
     }
     mAudioDecoder = nullptr;
-    LOGE("release audio res")
+    LOGI("release audio res")
 
     if (mAvFormatContext != nullptr) {
         avformat_close_input(&mAvFormatContext);
         avformat_free_context(mAvFormatContext);
         mAvFormatContext = nullptr;
-        LOGE("format context...release")
+        LOGI("format context...release")
     }
 }
 
@@ -308,14 +312,14 @@ void FFMpegPlayer::VideoDecodeLoop() {
     bool needAttach = mJvm->GetEnv((void **) &env, JNI_VERSION_1_4) == JNI_EDETACHED;
     if (needAttach) {
         mJvm->AttachCurrentThread(&env, nullptr);
-        LOGE("[video] AttachCurrentThread")
+        LOGI("[video] AttachCurrentThread")
     }
     mVideoDecoder->setOnFrameArrived([this](AVFrame *frame) {
         JNIEnv *env = nullptr;
         bool needAttach = mJvm->GetEnv((void **) &env, JNI_VERSION_1_4) == JNI_EDETACHED;
         if (needAttach) {
             mJvm->AttachCurrentThread(&env, nullptr);
-            LOGE("[video] OnFrameArrived AttachCurrentThread")
+            LOGI("[video] OnFrameArrived AttachCurrentThread")
         }
         LOGI("OnFrameArrived start needAttach:%d", needAttach)
         if (!mHasAbort && mVideoDecoder) {
@@ -342,7 +346,7 @@ void FFMpegPlayer::VideoDecodeLoop() {
                 mJvm->DetachCurrentThread();
             }
         } else {
-            LOGE("[video] setOnFrameArrived, has abort")
+            LOGI("[video] setOnFrameArrived, has abort")
         }
     });
 
@@ -359,7 +363,7 @@ void FFMpegPlayer::VideoDecodeLoop() {
         }
 
         if (mHasAbort) {
-            LOGE("[video] VideoDecodeLoop has abort...")
+            LOGI("[video] VideoDecodeLoop has abort...")
             break;
         }
 
@@ -380,7 +384,7 @@ void FFMpegPlayer::VideoDecodeLoop() {
                     av_frame_free(&frame);
                 }
             } else {
-                LOGE("VideoDecodeLoop pop frame failed...")
+                LOGI("VideoDecodeLoop pop frame failed...")
             }
         }
     }
@@ -398,7 +402,7 @@ void FFMpegPlayer::AudioDecodeLoop() {
     JNIEnv *env = nullptr;
     if (mJvm->GetEnv((void **) &env, JNI_VERSION_1_4) == JNI_EDETACHED) {
         mJvm->AttachCurrentThread(&env, nullptr);
-        LOGE("[audio] AttachCurrentThread")
+        LOGI("[audio] AttachCurrentThread")
     }
 
     mAudioDecoder->setOnFrameArrived([this, env](AVFrame *frame) {
@@ -410,14 +414,14 @@ void FFMpegPlayer::AudioDecodeLoop() {
                 env->CallVoidMethod(mPlayerJni.instance, mPlayerJni.onPlayProgress, timestamp);
             }
         } else {
-            LOGE("[audio] setOnFrameArrived, has abort")
+            LOGI("[audio] setOnFrameArrived, has abort")
         }
     });
 
     while (true) {
 
         while (!mHasAbort && mAudioPacketQueue->isEmpty()) {
-            LOGE("[audio] no packet, wait...")
+            LOGI("[audio] no packet, wait...")
             mAudioPacketQueue->wait();
         }
         if (mPlayerState == PlayerState::PAUSE) {
@@ -426,7 +430,7 @@ void FFMpegPlayer::AudioDecodeLoop() {
             LOGI("[audio] decode pause wakup state:%d", mPlayerState);
         }
         if (mHasAbort) {
-            LOGE("[audio] has abort...")
+            LOGI("[audio] has abort...")
             break;
         }
 
@@ -441,11 +445,11 @@ void FFMpegPlayer::AudioDecodeLoop() {
                 av_packet_unref(packet);
                 av_packet_free(&packet);
                 if (ret == AVERROR_EOF) {
-                    LOGE("AudioDecodeLoop AVERROR_EOF")
+                    LOGI("AudioDecodeLoop AVERROR_EOF")
                     onPlayCompleted(env);
                 }
             } else {
-                LOGE("AudioDecodeLoop pop packet failed...")
+                LOGI("AudioDecodeLoop pop packet failed...")
             }
         }
     }
@@ -454,7 +458,7 @@ void FFMpegPlayer::AudioDecodeLoop() {
     mAudioPacketQueue = nullptr;
 
     mJvm->DetachCurrentThread();
-    LOGE("[audio] DetachCurrentThread");
+    LOGI("[audio] DetachCurrentThread");
 }
 
 void FFMpegPlayer::ReadVideoFrameLoop() {
@@ -535,9 +539,9 @@ void FFMpegPlayer::ReadPacketLoop() {
         }
         bool isEnd = readAvPacketToQueue(ReadPackType::ANY) != 0;
         if (isEnd) {
-            LOGW("read av packet end,wait start, mPlayerState: %d", mPlayerState)
+            LOGI("read av packet end,wait start, mPlayerState: %d", mPlayerState)
             mVideoPacketQueue->wait();
-            LOGW("read av packet end,wait end, mPlayerState: %d", mPlayerState)
+            LOGI("read av packet end,wait end, mPlayerState: %d", mPlayerState)
         }
     }
     LOGI("FFMpegPlayer::ReadPacketLoop end")
@@ -600,7 +604,7 @@ bool FFMpegPlayer::readAvPacketToQueue(ReadPackType type) {
     }
 
     if (!suc) {
-        LOGE("av_read_frame, other...pts: %" PRId64 ", index: %d", avPacket->pts,
+        LOGI("av_read_frame, other...pts: %" PRId64 ", index: %d", avPacket->pts,
              avPacket->stream_index)
         av_packet_free(&avPacket);
     }
