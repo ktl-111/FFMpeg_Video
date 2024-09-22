@@ -578,7 +578,7 @@ void VideoDecoder::updateTimestamp(AVFrame *frame) {
         pts = frame->pkt_dts;
     }
     // s -> ms
-    mCurTimeMs = (int64_t) (pts * av_q2d(frame->time_base) * 1000);
+    mCurTimeMs = (int64_t)(pts * av_q2d(frame->time_base) * 1000);
     LOGI("updateTimestamp updateTimestamp:%ld pts:%ld", mCurTimeMs, pts)
     if (mFixStartTime) {
         mStartTimeMsForSync = getCurrentTimeMs() - mCurTimeMs;
@@ -642,7 +642,7 @@ void VideoDecoder::avSync(AVFrame *frame) {
 }
 
 int VideoDecoder::seek(int64_t pos) {
-    int64_t seekPos = (int64_t) (pos / av_q2d(getTimeBase())) / 1000;
+    int64_t seekPos = (int64_t)(pos / av_q2d(getTimeBase())) / 1000;
     int ret = avformat_seek_file(mFtx, getStreamIndex(),
                                  INT64_MIN, seekPos, INT64_MAX,
                                  0);
@@ -681,5 +681,8 @@ void VideoDecoder::release() {
     }
     if (mOutConfig) {
         mOutConfig = nullptr;
+    }
+    if (mSeekMutexObj != nullptr) {
+        mSeekMutexObj = nullptr;
     }
 }

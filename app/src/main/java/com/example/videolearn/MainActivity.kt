@@ -7,8 +7,10 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.Environment
+import android.provider.DocumentsContract
+import android.provider.MediaStore
 import android.util.Log
-import android.webkit.MimeTypeMap
 import androidx.activity.compose.setContent
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -30,9 +32,7 @@ import com.example.videolearn.test.TestActivity
 import com.example.videolearn.utils.ResultUtils
 import com.example.videolearn.videocall.VideoCallActivity
 import com.example.videolearn.videoplay.VideoPlayActiivty
-import java.io.File
-import java.io.FileOutputStream
-import java.io.IOException
+
 
 class MainActivity : AppCompatActivity() {
     private val TAG = "MainActivity"
@@ -41,21 +41,6 @@ class MainActivity : AppCompatActivity() {
         setContent {
             rootView()
         }
-        ResultUtils.getInstance(this)
-            .permissions(
-                arrayOf(
-                    android.Manifest.permission.WRITE_EXTERNAL_STORAGE,
-                    android.Manifest.permission.READ_EXTERNAL_STORAGE
-                ), object : ResultUtils.PermissionsCallBack {
-                    override fun deniedList(deniedList: MutableList<String>?) {
-                    }
-
-                    override fun grantedList(grantedList: MutableList<String>?) {
-
-                    }
-                }
-            )
-        startService(Intent(this, MediaService::class.java))
     }
 
     @Composable
@@ -65,9 +50,11 @@ class MainActivity : AppCompatActivity() {
                 test()
             }
             button("投屏") {
+                startService(Intent(this@MainActivity, MediaService::class.java))
                 shotScreen()
             }
             button("视频通话") {
+                startService(Intent(this@MainActivity, MediaService::class.java))
                 video()
             }
             button("读取流显示") {
@@ -77,6 +64,7 @@ class MainActivity : AppCompatActivity() {
                 videoplay()
             }
             button("直播") {
+                startService(Intent(this@MainActivity, MediaService::class.java))
                 live()
             }
             button("ffmpeg") {
@@ -100,46 +88,90 @@ class MainActivity : AppCompatActivity() {
             val alertBuilder: AlertDialog.Builder = AlertDialog.Builder(this)
             alertBuilder.setTitle("select type")
             alertBuilder.setSingleChoiceItems(items, -1) { dialog, index ->
-                mMediaPickLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.SingleMimeType(items[index])))
+                mMediaPickLauncher.launch(
+                    PickVisualMediaRequest(
+                        ActivityResultContracts.PickVisualMedia.SingleMimeType(
+                            items[index]
+                        )
+                    )
+                )
                 dialog.dismiss()
             }
             alertBuilder.create().show()
         }
     }
 
-    private val mMediaPickLauncher = registerForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
-        uri?.let { uri ->
-            val uriToFileApiQ = uriToFileApiQ(uri, this)
-            Log.i(TAG, "onActivityResult: ${uriToFileApiQ?.absolutePath} ${uri.path}")
-            startActivity(Intent(this, FFMpegActivity::class.java).also { it.putExtra("filepath", uriToFileApiQ?.absolutePath) })
-        }
-    }
-
-    fun uriToFileApiQ(uri: Uri?, context: Context): File? {
-        var file: File? = null
-        if (uri == null) return file
-        //android10以上转换
-        if (uri.scheme == ContentResolver.SCHEME_FILE) {
-            file = File(uri.path)
-        } else if (uri.scheme == ContentResolver.SCHEME_CONTENT) {
-            //把文件复制到沙盒目录
-            val contentResolver = context.contentResolver
-            val displayName =
-                (System.currentTimeMillis() + Math.round((Math.random() + 1) * 1000)).toString() + "." + MimeTypeMap.getSingleton()
-                    .getExtensionFromMimeType(contentResolver.getType(uri))
-            try {
-                val `is` = contentResolver.openInputStream(uri)
-                val cache = File(context.cacheDir.absolutePath, displayName)
-                val fos = FileOutputStream(cache)
-                `is`!!.copyTo(fos)
-                file = cache
-                fos.close()
-                `is`.close()
-            } catch (e: IOException) {
-                e.printStackTrace()
+    private val mMediaPickLauncher =
+        registerForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+            uri?.let { uri ->
+                val uriToFileApiQ = uri2Path(this, uri)
+                Log.i(TAG, "onActivityResult: ${uriToFileApiQ} ${uri.path}")
+                startActivity(Intent(this, FFMpegActivity::class.java)
+                    .also { it.putExtra("filepath", uriToFileApiQ) })
             }
         }
-        return file
+
+    private fun uri2Path(context: Context, uri: Uri?): String? {
+        if (uri == null) {
+            return null
+        }
+        if (ContentResolver.SCHEME_FILE == uri.scheme) {
+            return uri.path
+        } else if (ContentResolver.SCHEME_CONTENT == uri.scheme) {
+            val authority = uri.authority!!
+            if (authority.startsWith("com.android.externalstorage")) {
+                return Environment.getExternalStorageDirectory().toString() + "/" + uri.path!!
+                    .split(":".toRegex()).dropLastWhile { it.isEmpty() }.toTypedArray()[1]
+            } else {
+                var queryUri = MediaStore.Files.getContentUri("external")
+                var querySelection = "_id=?"
+                var queryParams: Array<String>? = null
+                Log.i(TAG, "Uri2Path: authority:${authority} uri:$uri")
+                if (uri.toString().contains("com.android.providers.media.photopicker")) {
+                    queryUri = uri
+                    querySelection = ""
+                } else if (authority == "media") {
+                    queryParams = arrayOf(uri.toString().substring(uri.toString().lastIndexOf('/') + 1))
+                } else if (authority.startsWith("com.android.providers")) {
+                    queryParams = arrayOf(DocumentsContract.getDocumentId(uri).split(":".toRegex())
+                        .dropLastWhile { it.isEmpty() }
+                        .toTypedArray()[1])
+                }
+
+                val contentResolver = context.contentResolver
+                val cursor = contentResolver.query(queryUri, arrayOf(MediaStore.Files.FileColumns.DATA), querySelection, queryParams, null)
+                if (cursor != null) {
+                    cursor.moveToFirst()
+                    try {
+                        val idx = cursor.getColumnIndex(MediaStore.Files.FileColumns.DATA)
+                        return cursor.getString(idx)
+                    } catch (e: Exception) {
+                    } finally {
+                        cursor.close()
+                    }
+                }
+            }
+        }
+        return null
+    }
+
+    class CustomizePickVisualMedia : ActivityResultContracts.PickVisualMedia() {
+        override fun createIntent(context: Context, input: PickVisualMediaRequest): Intent {
+            return if (!isPhotoPickerAvailable()) {
+                Intent(Intent.ACTION_GET_CONTENT).also {
+                    val mediaType = input.mediaType
+                    val array = if (mediaType is SingleMimeType) {
+                        arrayOf(mediaType.mimeType)
+                    } else {
+                        arrayOf("image/gif", "video/mp4")
+                    }
+                    it.type = "*/*"
+                    it.putExtra(Intent.EXTRA_MIME_TYPES, array)
+                }
+            } else {
+                super.createIntent(context, input)
+            }
+        }
     }
 
     fun test() {

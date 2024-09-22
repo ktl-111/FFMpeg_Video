@@ -221,8 +221,8 @@ class FFMpegActivity : AppCompatActivity(), LogProxy {
                     }
 
                 })
-                prepare(path, surface, outConfig)
-                //                prepare(path, surface)
+//                prepare(path, surface, outConfig)
+                prepare(path, surface)
             }
         }
     }

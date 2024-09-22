@@ -23,7 +23,8 @@ void FFMpegPlayer::init(JNIEnv *env, jobject thiz) {
     LOGI("FFMpegPlayer init")
     mPlayerJni.reset();
     mPlayerJni.instance = env->NewGlobalRef(thiz);
-    mPlayerJni.onVideoConfig = env->GetMethodID(jclazz, "onNativeVideoConfig", "(IIDDLjava/lang/String;)V");
+    mPlayerJni.onVideoConfig = env->GetMethodID(jclazz, "onNativeVideoConfig",
+                                                "(IIDDLjava/lang/String;)V");
     mPlayerJni.onPlayProgress = env->GetMethodID(jclazz, "onNativePalyProgress", "(D)V");
     mPlayerJni.onPlayCompleted = env->GetMethodID(jclazz, "onNativePalyComplete", "()V");
     mPlayerJni.onPlayError = env->GetMethodID(jclazz, "onPlayError", "(I)V");
@@ -676,13 +677,17 @@ bool FFMpegPlayer::pushFrameToQueue(AVFrame *frame,
             LOGI("pushFrameToQueue is seek,filter eof frame")
             return false;
         }
-        int64_t diff = (int64_t) (frame->pts * av_q2d(frame->time_base) * 1000) - mCurrSeekTime;
+        int64_t diff = (int64_t)(frame->pts * av_q2d(frame->time_base) * 1000) - mCurrSeekTime;
         bool push;
         if (mIsBackSeek) {
             if (queue->isEmpty()) {
                 int64_t diffFps = 1000.0f / mVideoDecoder->getFps();
                 LOGI("pushFrameToQueue check back seek diff:%ld diffFps:%ld", diff, diffFps)
-                push = abs(diff) <= diffFps * 2;
+                if (diff < 0) {
+                    push = abs(diff) <= diffFps * 2;
+                } else {
+                    push = true;
+                }
             } else {
                 push = true;
             }
