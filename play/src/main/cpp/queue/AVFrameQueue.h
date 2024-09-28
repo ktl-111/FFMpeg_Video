@@ -16,15 +16,17 @@ public:
 
     ~AVFrameQueue();
 
-    void push(AVFrame *frame);
+    void pushBack(AVFrame *frame);
 
-    AVFrame *pop();
+    void pushFront(AVFrame *frame);
 
     bool checkLastIsEofFrame();
 
-    int popTo(AVFrame *dstFrame);
+    AVFrame *popFront();
 
-    int front(AVFrame *packet);
+    AVFrame *back();
+
+    AVFrame *front();
 
     void clear();
 
@@ -40,12 +42,11 @@ public:
 
     void notify();
 
-    int getFrameByTime(AVFrame *dstFrame, int64_t time, bool isBack);
+    AVFrame *getFrameByTime(int64_t time);
 
     int64_t mMaxSize = 60;
 private:
-
-    std::queue<AVFrame *> mQueue;
+    std::deque<AVFrame *> mQueue;
 
     pthread_cond_t mCond{};
     pthread_mutex_t mMutex{};

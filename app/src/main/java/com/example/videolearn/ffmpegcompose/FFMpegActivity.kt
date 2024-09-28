@@ -221,8 +221,8 @@ class FFMpegActivity : AppCompatActivity(), LogProxy {
                     }
 
                 })
-//                prepare(path, surface, outConfig)
-                prepare(path, surface)
+                prepare(path, surface, outConfig)
+//                prepare(path, surface)
             }
         }
     }
@@ -255,6 +255,11 @@ class FFMpegActivity : AppCompatActivity(), LogProxy {
     private fun pause() {
         Log.i(TAG, "pause: ")
         playManager?.pause()
+    }
+
+    override fun onPause() {
+        super.onPause()
+        pause()
     }
 
     private fun updateUi(time: Double) {
@@ -311,7 +316,7 @@ class FFMpegActivity : AppCompatActivity(), LogProxy {
 
     private fun cutting() {
         path?.also {
-            MediaScope.launch {
+            MediaScope.launch(Dispatchers.Default) {
                 if (it.isNotEmpty() && !it.startsWith("http")) {
                     //                        val outFile = File(Environment.getExternalStorageDirectory(), "testout.mp4")
                     val outFile = File(application.externalCacheDir, "testout.mp4")
@@ -324,6 +329,7 @@ class FFMpegActivity : AppCompatActivity(), LogProxy {
                     val destPath = outFile.absolutePath
                     val startTime = 0 * 1000
                     val allTime = 5.0 * 1000
+                    val currentTimeMillis = System.currentTimeMillis()
                     FFMpegUtils.cutting(path,
                         destPath,
                         startTime.toLong(),
@@ -346,7 +352,7 @@ class FFMpegActivity : AppCompatActivity(), LogProxy {
                             }
 
                             override fun onDone() {
-                                Log.i(TAG, "onDone: ")
+                                Log.i(TAG, "onDone: ${System.currentTimeMillis() - currentTimeMillis}")
                                 finish()
                             }
 

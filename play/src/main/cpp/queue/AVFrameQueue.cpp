@@ -19,73 +19,60 @@ AVFrameQueue::~AVFrameQueue() {
     pthread_cond_destroy(&mCond);
 }
 
-void AVFrameQueue::push(AVFrame *packet) {
+void AVFrameQueue::pushBack(AVFrame *frame) {
     pthread_mutex_lock(&mMutex);
-    LOGI("[AVFrameQueue] push pts:%ld %d", packet->pts, packet->format)
-    mQueue.push(packet);
+    LOGI("[AVFrameQueue] pushBack pts:%ld %d", frame->pts, frame->format)
+    mQueue.push_back(frame);
     pthread_mutex_unlock(&mMutex);
     notify();
 }
 
-AVFrame *AVFrameQueue::pop() {
+void AVFrameQueue::pushFront(AVFrame *frame) {
     pthread_mutex_lock(&mMutex);
-    AVFrame *packet = mQueue.front();
-    mQueue.pop();
+    LOGI("[AVFrameQueue] pushFront pts:%ld %d", frame->pts, frame->format)
+    mQueue.push_front(frame);
     pthread_mutex_unlock(&mMutex);
     notify();
-    return packet;
 }
 
-int AVFrameQueue::popTo(AVFrame *dstFrame) {
+AVFrame *AVFrameQueue::popFront() {
     pthread_mutex_lock(&mMutex);
-    bool isEmpty = mQueue.empty() && mQueue.size() <= 0;
-    if (isEmpty) {
+    if (mQueue.empty()) {
+        LOGI("[AVFrameQueue] popFront is empty")
         pthread_mutex_unlock(&mMutex);
-        return -1;
+        return nullptr;
     }
     AVFrame *frame = mQueue.front();
-    if (frame == nullptr) {
-        LOGE("[AVFrameQueue], popTo failed")
-    }
-    int ret;
-    if (frame->pkt_size == 0) {
-        dstFrame->pkt_size = 0;
-        ret = 0;
-    } else {
-        ret = av_frame_ref(dstFrame, frame);
-        if (ret != 0) {
-            LOGI("[AVFrameQueue], popTo failed, ref: %d", ret);
-        }
-    }
-    LOGI("[AVFrameQueue] popTo pts:%ld %d %d,ret:%d", dstFrame->pts, dstFrame->format,
-         dstFrame->pkt_size, ret)
-
-    av_frame_free(&frame);
-    mQueue.pop();
+    mQueue.pop_front();
     pthread_mutex_unlock(&mMutex);
     notify();
-    return ret;
+    return frame;
 }
 
-int AVFrameQueue::front(AVFrame *dstFrame) {
+AVFrame *AVFrameQueue::back() {
     pthread_mutex_lock(&mMutex);
-    bool isEmpty = mQueue.empty() && mQueue.size() <= 0;
-    if (isEmpty) {
-        LOGI("[AVFrameQueue], front empty")
+    if (mQueue.empty()) {
+        LOGI("[AVFrameQueue] back is empty")
         pthread_mutex_unlock(&mMutex);
-        return -1;
+        return nullptr;
+    }
+    AVFrame *frame = mQueue.back();
+    pthread_mutex_unlock(&mMutex);
+    notify();
+    return frame;
+}
+
+AVFrame *AVFrameQueue::front() {
+    pthread_mutex_lock(&mMutex);
+    if (mQueue.empty()) {
+        LOGI("[AVFrameQueue] front is empty")
+        pthread_mutex_unlock(&mMutex);
+        return nullptr;
     }
     AVFrame *frame = mQueue.front();
-    if (frame == nullptr) {
-        LOGE("[AVFrameQueue], front failed")
-    }
-
-    int ref = av_frame_ref(dstFrame, frame);
-    if (ref != 0) {
-        LOGI("[AVFrameQueue], front failed, ref: %d %s", ref, av_err2str(ref));
-    }
     pthread_mutex_unlock(&mMutex);
-    return ref;
+    notify();
+    return frame;
 }
 
 bool AVFrameQueue::isFull() {
@@ -173,45 +160,67 @@ void AVFrameQueue::clear() {
         if (packet != nullptr) {
             av_frame_free(&packet);
         }
-        mQueue.pop();
+        mQueue.pop_front();
     }
     pthread_mutex_unlock(&mMutex);
     notify();
 }
 
-int AVFrameQueue::getFrameByTime(AVFrame *dstFrame, int64_t time, bool isBack) {
+AVFrame *AVFrameQueue::getFrameByTime(int64_t time) {
     pthread_mutex_lock(&mMutex);
-    int ret = -1;
-    bool isPop = false;
     if (mQueue.empty()) {
-        LOGI("[AVFrameQueue] is empty")
-        ret = AVERROR(EAGAIN);
-    } else {
-        while (!mQueue.empty()) {
-            AVFrame *srcFrame = mQueue.front();
-            int64_t pts = srcFrame->pts;
-            pts *= av_q2d(srcFrame->time_base) * 1000;
-            LOGI("[AVFrameQueue], getFrameByTime %ld %ld", pts, time)
+        LOGI("[AVFrameQueue],getFrameByTime is empty")
+        pthread_mutex_unlock(&mMutex);
+        return nullptr;
+    }
+    bool isPop = false;
+    AVFrame *preFrame = nullptr;
+    bool freePreFrame = true;
+    AVFrame *finalFrame = nullptr;
+    while (!mQueue.empty()) {
+        //获取pts在time之间的frame
+        AVFrame *srcFrame = mQueue.front();
+        int64_t pts = srcFrame->pts;
+        pts *= av_q2d(srcFrame->time_base) * 1000;
+        if (preFrame != nullptr) {
+            LOGI("[AVFrameQueue],getFrameByTime while %ld %ld preFrame:%ld(%p)", pts, time,
+                 preFrame->pts, preFrame)
+        } else {
+            LOGI("[AVFrameQueue],getFrameByTime while %ld %ld ", pts, time)
+        }
 
-            if (pts >= time) {
-                ret = av_frame_ref(dstFrame, srcFrame);
-                if (ret != 0 && srcFrame->data[0] != NULL) {
-                    LOGI("[AVFrameQueue],memcpy ret:%d", ret)
-                    memcpy(dstFrame->data, srcFrame->data, sizeof(srcFrame->data));
-                }
-//                av_frame_free(&srcFrame);
-                break;
+        if (pts >= time) {
+            if (preFrame != nullptr) {
+                freePreFrame = false;
+                mQueue.push_front(preFrame);
+                finalFrame = preFrame;
             } else {
-                mQueue.pop();
-                av_frame_free(&srcFrame);
-                srcFrame = nullptr;
-                isPop = true;
+                finalFrame = srcFrame;
             }
+            pts = finalFrame->pts * (av_q2d(finalFrame->time_base) * 1000);
+            LOGI("[AVFrameQueue],getFrameByTime success pts:%ld", pts)
+            break;
+        } else {
+            if (preFrame != nullptr) {
+                av_frame_free(&preFrame);
+                preFrame = nullptr;
+            }
+            isPop = true;
+            mQueue.pop_front();
+            preFrame = srcFrame;
+            LOGI("[AVFrameQueue],getFrameByTime not find srcFrame:%p", srcFrame)
+
         }
     }
+    if (freePreFrame && preFrame != nullptr) {
+        LOGI("pushFrameToQueue freePreFrame %p", preFrame)
+        av_frame_free(&preFrame);
+        preFrame = nullptr;
+    }
+    LOGI("[AVFrameQueue],getFrameByTime done")
     pthread_mutex_unlock(&mMutex);
     if (isPop) {
         notify();
     }
-    return ret;
+    return finalFrame;
 }

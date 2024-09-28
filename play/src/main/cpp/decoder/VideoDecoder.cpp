@@ -13,6 +13,7 @@
 
 VideoDecoder::VideoDecoder(int index, AVFormatContext *ftx) : BaseDecoder(index, ftx) {
     mSeekMutexObj = std::make_shared<MutexObj>();
+    mSurfaceMutexObj = std::make_shared<MutexObj>();
 
     AVStream *pStream = getStream();
     AVCodecParameters *params = pStream->codecpar;
@@ -54,7 +55,7 @@ void VideoDecoder::initConfig(JNIEnv *env, jobject out_config) {
         int videoWidth = getWidth();
         int videoHeight = getHeight();
 
-        if (videoWidth * videoHeight > outWidth * outHeight) {
+        if ((outWidth != 0 && outHeight != 0) && videoWidth * videoHeight > outWidth * outHeight) {
             float shrinkPercent = outWidth * outHeight / (videoWidth * videoHeight * 1.0f);
             outWidth = videoWidth * shrinkPercent;
             outHeight = videoHeight * shrinkPercent;
@@ -478,6 +479,7 @@ void VideoDecoder::resultCallback(AVFrame *srcFrame) {
     }
     LOGI("resultCallback frame:%p", &dstFrame)
     av_frame_free(&dstFrame);
+    dstFrame = nullptr;
 }
 
 void VideoDecoder::showFrameToWindow(AVFrame *pFrame) {
@@ -493,6 +495,7 @@ void VideoDecoder::showFrameToWindow(AVFrame *pFrame) {
     //将yuv数据转成rgb
 
     //windowBuffer 入参出参,
+    mSurfaceMutexObj->lock();
     int result = ANativeWindow_lock(nativeWindow, &windowBuffer, nullptr);
     LOGI("showFrameToWindow ANativeWindow_lock %d %s stride:%d %d*%d", result,
          av_err2str(result),
@@ -506,6 +509,9 @@ void VideoDecoder::showFrameToWindow(AVFrame *pFrame) {
     uint8_t *buffer = static_cast<uint8_t *>(windowBuffer.bits);
     startTime = std::chrono::steady_clock::now();
     for (int i = 0; i < pFrame->height; ++i) {
+        if (!nativeWindow) {
+            break;
+        }
         //从rgbFrame->data中拷贝数据到window中
         //windowBuffer.stride * 4 === 像素*4个字节(rgba)
         memcpy(buffer + i * windowBuffer.stride * 4,
@@ -519,8 +525,11 @@ void VideoDecoder::showFrameToWindow(AVFrame *pFrame) {
     auto diffMilli = std::chrono::duration<double, std::milli>(endTime - startTime).count();
     LOGI("video rgb->显示 耗时:%f毫秒 pts:%ld(%f)", diffMilli, pFrame->pts,
          pFrame->pts * av_q2d(pFrame->time_base))
-    result = ANativeWindow_unlockAndPost(nativeWindow);
+    if (nativeWindow) {
+        result = ANativeWindow_unlockAndPost(nativeWindow);
+    }
     LOGI("showFrameToWindow ANativeWindow_unlockAndPost %d %s", result, av_err2str(result))
+    mSurfaceMutexObj->unlock();
 }
 
 int VideoDecoder::converToSurface(AVFrame *srcFrame, AVFrame *dstFrame) {
@@ -578,7 +587,7 @@ void VideoDecoder::updateTimestamp(AVFrame *frame) {
         pts = frame->pkt_dts;
     }
     // s -> ms
-    mCurTimeMs = (int64_t)(pts * av_q2d(frame->time_base) * 1000);
+    mCurTimeMs = (int64_t) (pts * av_q2d(frame->time_base) * 1000);
     LOGI("updateTimestamp updateTimestamp:%ld pts:%ld", mCurTimeMs, pts)
     if (mFixStartTime) {
         mStartTimeMsForSync = getCurrentTimeMs() - mCurTimeMs;
@@ -642,7 +651,7 @@ void VideoDecoder::avSync(AVFrame *frame) {
 }
 
 int VideoDecoder::seek(int64_t pos) {
-    int64_t seekPos = (int64_t)(pos / av_q2d(getTimeBase())) / 1000;
+    int64_t seekPos = (int64_t) (pos / av_q2d(getTimeBase())) / 1000;
     int ret = avformat_seek_file(mFtx, getStreamIndex(),
                                  INT64_MIN, seekPos, INT64_MAX,
                                  0);
@@ -673,6 +682,9 @@ void VideoDecoder::release() {
         nativeWindow = nullptr;
         mSurface = nullptr;
     }
+    if (dstWindowBuffer) {
+        free(dstWindowBuffer);
+    }
 
     if (mCodecContext) {
         avcodec_free_context(&mCodecContext);
@@ -682,7 +694,10 @@ void VideoDecoder::release() {
     if (mOutConfig) {
         mOutConfig = nullptr;
     }
-    if (mSeekMutexObj != nullptr) {
+    if (mSeekMutexObj) {
         mSeekMutexObj = nullptr;
+    }
+    if (mSurfaceMutexObj) {
+        mSurfaceMutexObj = nullptr;
     }
 }

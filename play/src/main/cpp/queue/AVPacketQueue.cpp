@@ -35,18 +35,18 @@ int AVPacketQueue::popTo(AVPacket *packet) {
     pthread_mutex_lock(&mMutex);
     bool isEmpty = mQueue.empty() && mQueue.size() <= 0;
     if (isEmpty) {
-        LOGI("[AVPacketQueue],popTo isEmpty")
+        LOGI("[AVPacketQueue],popFront isEmpty")
         pthread_mutex_unlock(&mMutex);
         return -1;
     }
     AVPacket *pkt = mQueue.front();
     if (pkt == nullptr) {
-        LOGE("[AVPacketQueue], popTo failed")
+        LOGE("[AVPacketQueue], popFront failed")
     }
 
     int ref = av_packet_ref(packet, pkt);
     if (ref != 0) {
-        LOGE("[AVPacketQueue], popTo failed, ref: %d", ref);
+        LOGE("[AVPacketQueue], popFront failed, ref: %d", ref);
     }
 
     // flush packet

@@ -85,6 +85,7 @@ private:
     ANativeWindow_Buffer windowBuffer;
     uint8_t *dstWindowBuffer = nullptr;
     std::shared_ptr<MutexObj> mSeekMutexObj = nullptr;
+    std::shared_ptr<MutexObj> mSurfaceMutexObj = nullptr;
     SwsContext *mTransformContext = nullptr;
     SwsContext *mSwsContext = nullptr;
     int64_t mStartTimeMsForSync = -1;

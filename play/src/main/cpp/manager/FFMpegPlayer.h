@@ -130,7 +130,7 @@ private:
 
     bool pushPacketToQueue(AVPacket *packet, const std::shared_ptr<AVPacketQueue> &queue) const;
 
-    bool pushFrameToQueue(AVFrame *frame, const std::shared_ptr<AVFrameQueue> &queue);
+    bool pushFrameToQueue(AVFrame *frame, const std::shared_ptr<AVFrameQueue> &queue, bool front);
 
     void ReadPacketLoop();
 
