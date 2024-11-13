@@ -6,6 +6,7 @@ import com.example.play.IPalyListener
 import com.example.play.PlayerState
 import com.example.play.Step
 import com.example.play.config.OutConfig
+import com.example.play.utils.FFMpegUtils
 import com.example.play.utils.LogHelper
 
 internal class FFMpegProxy : IPaly {
@@ -69,6 +70,9 @@ internal class FFMpegProxy : IPaly {
         return getCurrTimestamp(nativeManager)
     }
 
+    override fun cutting(srcPath: String, destPath: String, startTime: Long, endTime: Long, outConfig: OutConfig?, cb: FFMpegUtils.VideoCuttingInterface) {
+        nativeCutting(nativeManager, srcPath, destPath, startTime, endTime, outConfig, cb)
+    }
 
     private external fun nativeInit(): Long
     private external fun nativePrepare(
@@ -85,6 +89,17 @@ internal class FFMpegProxy : IPaly {
     private external fun nativeSurfaceDestroy(nativeManager: Long)
     private external fun getCurrTimestamp(nativeManager: Long): Long
     private external fun getPlayerState(nativeManager: Long): Int
+
+    private external fun nativeCutting(
+        nativeManager: Long,
+        srcPath: String,
+        destPath: String,
+        startTime: Long,
+        endTime: Long,
+        outConfig: OutConfig?,
+        cb: FFMpegUtils.VideoCuttingInterface
+    )
+
     private fun onNativeVideoConfig(width: Int, height: Int, duration: Double, fps: Double, codecName: String) {
         LogHelper.i(
             TAG,

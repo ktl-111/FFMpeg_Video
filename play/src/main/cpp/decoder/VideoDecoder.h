@@ -52,7 +52,7 @@ public:
 
     virtual int decode(AVPacket *packet, AVFrame *frame) override;
 
-    void converFrame(AVFrame *converSrcFrame, AVFrame *dstFrame);
+    void convertFrame(AVFrame *srcFrame, AVFrame *dstFrame);
 
     virtual void avSync(AVFrame *frame) override;
 

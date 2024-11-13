@@ -24,45 +24,17 @@ void AVPacketQueue::push(AVPacket *packet) {
 
 AVPacket *AVPacketQueue::pop() {
     pthread_mutex_lock(&mMutex);
+    bool isEmpty = mQueue.empty() && mQueue.size() <= 0;
+    if (isEmpty) {
+        LOGI("[AVPacketQueue],popFront isEmpty")
+        pthread_mutex_unlock(&mMutex);
+        return nullptr;
+    }
     AVPacket *packet = mQueue.front();
     mQueue.pop();
     pthread_mutex_unlock(&mMutex);
     notify();
     return packet;
-}
-
-int AVPacketQueue::popTo(AVPacket *packet) {
-    pthread_mutex_lock(&mMutex);
-    bool isEmpty = mQueue.empty() && mQueue.size() <= 0;
-    if (isEmpty) {
-        LOGI("[AVPacketQueue],popFront isEmpty")
-        pthread_mutex_unlock(&mMutex);
-        return -1;
-    }
-    AVPacket *pkt = mQueue.front();
-    if (pkt == nullptr) {
-        LOGE("[AVPacketQueue], popFront failed")
-    }
-
-    int ref = av_packet_ref(packet, pkt);
-    if (ref != 0) {
-        LOGE("[AVPacketQueue], popFront failed, ref: %d", ref);
-    }
-
-    // flush packet
-    if (pkt->size == 0 && pkt->data == nullptr) {
-        // av_packet_ref出来后，packet->data不为nullptr了，这里强制reset下
-        LOGI("[AVPacketQueue], flush packet index: %d", pkt->stream_index)
-        packet->size = 0;
-        packet->data = nullptr;
-    }
-
-    av_packet_free(&pkt);
-    av_free(pkt);
-    mQueue.pop();
-    pthread_mutex_unlock(&mMutex);
-    notify();
-    return 0;
 }
 
 bool AVPacketQueue::isFull() {

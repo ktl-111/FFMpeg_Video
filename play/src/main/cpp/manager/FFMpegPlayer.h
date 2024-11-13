@@ -21,6 +21,7 @@ extern "C" {
 #include "../include/libavformat/avformat.h"
 #include "../include/libavcodec/avcodec.h"
 #include "../include/libavcodec/jni.h"
+#include "libavutil/opt.h"
 }
 #ifndef VIDEOLEARN_FFMPEGPLAY_H
 #define VIDEOLEARN_FFMPEGPLAY_H
@@ -43,10 +44,10 @@ typedef struct PlayerJniContext {
 
     bool isValid() {
         return instance != nullptr &&
-               onPlayCompleted != nullptr &&
-               onPlayProgress != nullptr
-               && onVideoConfig != nullptr
-               && onPlayError != nullptr;
+                onPlayCompleted != nullptr &&
+                onPlayProgress != nullptr
+                        && onVideoConfig != nullptr
+                && onPlayError != nullptr;
     }
 
 } PlayerJniContext;
@@ -93,6 +94,9 @@ public:
     int getPlayerState();
 
     int64_t getCurrTimestamp();
+
+    void cutting(JNIEnv *env,const char *srcPath, const char *destPath, jlong startTime, jlong endTime,
+                 jobject out_config, jobject cb);
 
 private:
     bool mHasAbort = false;

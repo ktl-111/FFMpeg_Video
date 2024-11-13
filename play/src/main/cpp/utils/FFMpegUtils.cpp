@@ -21,10 +21,10 @@ extern "C" {
 extern "C"
 JNIEXPORT void JNICALL
 Java_com_example_play_utils_FFMpegUtils_getVideoFramesCore(JNIEnv *env, jobject thiz,
-                                                                     jstring path,
-                                                                     jint width, jint height,
-                                                                     jboolean precise,
-                                                                     jobject callback) {
+                                                           jstring path,
+                                                           jint width, jint height,
+                                                           jboolean precise,
+                                                           jobject callback) {
     // path
     const char *c_path = env->GetStringUTFChars(path, nullptr);
     std::string s_path = c_path;
@@ -103,11 +103,11 @@ Java_com_example_play_utils_FFMpegUtils_getVideoFramesCore(JNIEnv *env, jobject 
 extern "C"
 JNIEXPORT void JNICALL
 Java_com_example_play_utils_FFMpegUtils_nativeCutting(JNIEnv *env, jobject thiz,
-                                                                jstring src_path, jstring dest_path,
-                                                                jlong starttime,
-                                                                jlong endtime,
-                                                                jobject out_config,
-                                                                jobject callback) {
+                                                      jstring src_path, jstring dest_path,
+                                                      jlong starttime,
+                                                      jlong endtime,
+                                                      jobject out_config,
+                                                      jobject callback) {
     double start_time = starttime / 1000;
     double end_time = endtime / 1000;
     double progress = 0;
@@ -295,6 +295,13 @@ Java_com_example_play_utils_FFMpegUtils_nativeCutting(JNIEnv *env, jobject thiz,
 //    encodeContext->sample_aspect_ratio = decodecContext->sample_aspect_ratio;
     encodeContext->max_b_frames = 0;//不需要B帧
     encodeContext->gop_size = outStream->avg_frame_rate.num;//多少帧一个I帧
+    // 调节编码速度(这里选择的是最快)
+    int re = av_opt_set(encodeContext->priv_data, "preset", "veryfast", 0);
+    if (re != 0) {
+        LOGI("cutting priv_data set fail,%d %s", result, av_err2str(result))
+        env->CallVoidMethod(callback, onFail, ERRORCODE_AVCODEC_OPEN2);
+        return;
+    }
 
     result = avcodec_open2(encodeContext, encoder, NULL);
     if (result != 0) {
@@ -403,7 +410,7 @@ Java_com_example_play_utils_FFMpegUtils_nativeCutting(JNIEnv *env, jobject thiz,
                 break;
             }
             AVFrame *dstFrame = av_frame_alloc();
-            videoDecoder->converFrame(filtered_frame, dstFrame);
+            videoDecoder->convertFrame(filtered_frame, dstFrame);
 
             dstFrame->pict_type = AV_PICTURE_TYPE_NONE;
             do {

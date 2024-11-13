@@ -271,14 +271,14 @@ int VideoDecoder::decode(AVPacket *avPacket, AVFrame *frame) {
         return receiveRes;
     }
 
-    converFrame(pAvFrame, frame);
+    convertFrame(pAvFrame, frame);
 
     return receiveRes;
 }
 
-void VideoDecoder::converFrame(AVFrame *srcFrame, AVFrame *dstFrame) {
+void VideoDecoder::convertFrame(AVFrame *srcFrame, AVFrame *dstFrame) {
     auto ptsMs = srcFrame->pts * av_q2d(getStream()->time_base) * 1000;
-    LOGI("converFrame avcodec_receive_frame...pts: %" PRId64 ", time: %f, format: %s, need retry: %d",
+    LOGI("convertFrame avcodec_receive_frame...pts: %" PRId64 ", time: %f, format: %s, need retry: %d",
          srcFrame->pts, ptsMs, av_get_pix_fmt_name((AVPixelFormat) srcFrame->format),
          mNeedResent)
 
@@ -293,7 +293,7 @@ void VideoDecoder::converFrame(AVFrame *srcFrame, AVFrame *dstFrame) {
         converSrcFrame->duration = srcFrame->duration;
         converSrcFrame->time_base = srcFrame->time_base;
         int ret = converFrameTo420Frame(srcFrame, converSrcFrame);
-        LOGI("converFrame converFrameTo420Frame ret:%d", ret)
+        LOGI("convertFrame converFrameTo420Frame ret:%d", ret)
         av_frame_free(&srcFrame);
         srcFrame = nullptr;
         srcFrame = converSrcFrame;
@@ -314,7 +314,7 @@ void VideoDecoder::converFrame(AVFrame *srcFrame, AVFrame *dstFrame) {
         rotateFrame->pkt_size = srcFrame->pkt_size;
         rotateFrame->format = srcFrame->format;
         int ret = av_frame_get_buffer(rotateFrame, 0);
-        LOGI("converFrame decode av_frame_get_buffer %d", ret)
+        LOGI("convertFrame decode av_frame_get_buffer %d", ret)
         ret = libyuv::I420Rotate(srcFrame->data[0], srcFrame->linesize[0],
                                  srcFrame->data[1], srcFrame->linesize[1],
                                  srcFrame->data[2], srcFrame->linesize[2],
@@ -323,7 +323,7 @@ void VideoDecoder::converFrame(AVFrame *srcFrame, AVFrame *dstFrame) {
                                  rotateFrame->data[2], rotateFrame->linesize[2],
                                  srcFrame->width, srcFrame->height,
                                  libyuv::RotationMode(mRotate));
-        LOGI("converFrame I420Rotate %d %d*%d", ret, rotateFrame->width, rotateFrame->height)
+        LOGI("convertFrame I420Rotate %d %d*%d", ret, rotateFrame->width, rotateFrame->height)
         av_frame_free(&srcFrame);
         srcFrame = nullptr;
         srcFrame = rotateFrame;
@@ -347,7 +347,7 @@ void VideoDecoder::converFrame(AVFrame *srcFrame, AVFrame *dstFrame) {
     if (dstWidth != srcFrame->width || dstHeight != srcFrame->height) {
         needScale = true;
     }
-    LOGI("converFrame needScale:%d %d*%d", needScale, dstWidth, dstHeight)
+    LOGI("convertFrame needScale:%d %d*%d", needScale, dstWidth, dstHeight)
     if (needScale) {
         AVFrame *scaleFrame = av_frame_alloc();
         scaleFrame->width = dstWidth;
@@ -374,14 +374,14 @@ void VideoDecoder::converFrame(AVFrame *srcFrame, AVFrame *dstFrame) {
                                     scaleFrame->data[2], scaleFrame->linesize[2],
                                     dstWidth, dstHeight, libyuv::kFilterNone);
         }
-        LOGI("converFrame Scale:%d", ret)
+        LOGI("convertFrame Scale:%d", ret)
         av_frame_free(&srcFrame);
         srcFrame = nullptr;
         srcFrame = scaleFrame;
     }
     bool needCrop = false;
     if (cropWidth != 0 && cropHeight != 0 &&
-        (cropWidth < srcFrame->width || cropHeight < srcFrame->height)) {
+            (cropWidth < srcFrame->width || cropHeight < srcFrame->height)) {
         needCrop = true;
     }
     if (needCrop) {
@@ -402,7 +402,7 @@ void VideoDecoder::converFrame(AVFrame *srcFrame, AVFrame *dstFrame) {
 
         int diffHeight = srcHeight - cropHeight;
         int dy = diffHeight / 2 + diffHeight % 2;
-        LOGI("converFrame av_frame_get_buffer:%d src:%d*%d d:%d-%d crop:%d*%d", ret,
+        LOGI("convertFrame av_frame_get_buffer:%d src:%d*%d d:%d-%d crop:%d*%d", ret,
              srcWidth,
              srcHeight, dx, dy,
              cropWidth, cropHeight)
@@ -434,7 +434,7 @@ void VideoDecoder::converFrame(AVFrame *srcFrame, AVFrame *dstFrame) {
                                         libyuv::kRotate0, libyuv::FOURCC_I420
             );
         }
-        LOGI("converFrame Crop:%d", ret)
+        LOGI("convertFrame Crop:%d", ret)
         av_free(buffer);
         av_frame_free(&srcFrame);
         srcFrame = nullptr;
@@ -442,9 +442,8 @@ void VideoDecoder::converFrame(AVFrame *srcFrame, AVFrame *dstFrame) {
     }
     int result = av_frame_ref(dstFrame, srcFrame);
     dstFrame->time_base = mTimeBase;
-//    }
 
-    LOGI("converFrame done result:%d pts:%ld(%f) format:%s %d*%d", result,
+    LOGI("convertFrame done result:%d pts:%ld(%f) format:%s %d*%d", result,
          dstFrame->pts, dstFrame->pts * av_q2d(dstFrame->time_base),
          av_get_pix_fmt_name((AVPixelFormat) dstFrame->format),
          dstFrame->width, dstFrame->height)
@@ -684,6 +683,7 @@ void VideoDecoder::release() {
     }
     if (dstWindowBuffer) {
         free(dstWindowBuffer);
+        dstWindowBuffer = nullptr;
     }
 
     if (mCodecContext) {

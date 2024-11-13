@@ -3,6 +3,7 @@
 
 #include <queue>
 #include <pthread.h>
+#include <string>
 
 extern "C" {
 #include "../include/libavcodec/avcodec.h"
@@ -12,23 +13,27 @@ extern "C" {
 class AVFrameQueue {
 
 public:
-    AVFrameQueue(int64_t maxSize);
+    AVFrameQueue(int64_t maxSize, std::string tag);
 
     ~AVFrameQueue();
 
-    void pushBack(AVFrame *frame);
+    void pushBack(AVFrame *frame, bool noti);
 
     void pushFront(AVFrame *frame);
 
     bool checkLastIsEofFrame();
 
-    AVFrame *popFront();
+    AVFrame *getFrame(bool pop, bool findBack);
+
+    AVFrame *getFrameUnlock(bool pop, bool findBack);
 
     AVFrame *back();
 
     AVFrame *front();
 
-    void clear();
+    AVFrame *popFront();
+
+    void clear(bool noti);
 
     bool isFull();
 
@@ -42,7 +47,9 @@ public:
 
     void notify();
 
-    AVFrame *getFrameByTime(int64_t time);
+    AVFrame *getFrameByTime(int64_t time, bool findBack);
+
+    AVFrame *getFrameByIndex(int index);
 
     int64_t mMaxSize = 60;
 private:
@@ -50,6 +57,8 @@ private:
 
     pthread_cond_t mCond{};
     pthread_mutex_t mMutex{};
+    char *mTag = nullptr;
+    int currIndex = -1;
 };
 
 

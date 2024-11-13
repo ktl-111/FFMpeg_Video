@@ -143,3 +143,19 @@ Java_com_example_play_utils_FFMpegUtils_nativeSetNativeLogLevel(JNIEnv *env, job
                                                                 jint logLevel) {
     Logger::setLogLevel(logLevel);
 }
+extern "C"
+JNIEXPORT void JNICALL
+Java_com_example_play_proxy_FFMpegProxy_nativeCutting(JNIEnv *env, jobject thiz,
+                                                      jlong native_manager, jstring src_path,
+                                                      jstring dest_path, jlong start_time,
+                                                      jlong end_time, jobject out_config,
+                                                      jobject cb) {
+    FFMpegPlayer *pPlayer = reinterpret_cast<FFMpegPlayer *>(native_manager);
+    if (pPlayer != nullptr) {
+        const char *c_srcPath = env->GetStringUTFChars(src_path, nullptr);
+        const char *c_desPath = env->GetStringUTFChars(dest_path, nullptr);
+        pPlayer->cutting(env, c_srcPath, c_desPath, start_time, end_time, out_config, cb);
+        env->ReleaseStringUTFChars(src_path, c_srcPath);
+        env->ReleaseStringUTFChars(dest_path, c_desPath);
+    }
+}

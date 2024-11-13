@@ -81,7 +81,7 @@ void FFVideoReader::getFrame(int64_t pts, int width, int height, uint8_t *buffer
         int sendRes = avcodec_send_packet(codecContext, pkt);
         int receiveRes = avcodec_receive_frame(codecContext, frame);
         decodeCount++;
-        LOGD("[FFVideoReader], receiveRes: %d, sendRes: %d", receiveRes, sendRes);
+        LOGI("[FFVideoReader], receiveRes: %d, sendRes: %d", receiveRes, sendRes);
         if (receiveRes == AVERROR(EAGAIN)) {
             continue;
         }
@@ -213,7 +213,7 @@ void FFVideoReader::getNextFrame(const std::function<void(AVFrame *)> &frameArri
 
         int sendRes = avcodec_send_packet(getCodecContext(), pkt);
         int receiveRes = avcodec_receive_frame(getCodecContext(), mAvFrame);
-        LOGD("[FFVideoReader], getNextFrame receiveRes: %d, sendRes: %d, isKeyFrame: %d",
+        LOGI("[FFVideoReader], getNextFrame receiveRes: %d, sendRes: %d, isKeyFrame: %d",
              receiveRes, sendRes, isKeyFrame(pkt));
         av_packet_unref(pkt);
 

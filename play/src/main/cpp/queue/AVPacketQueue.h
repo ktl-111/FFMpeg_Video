@@ -22,8 +22,6 @@ public:
 
     bool checkLastIsEofPack();
 
-    int popTo(AVPacket *packet);
-
     void clear();
 
     bool isFull();

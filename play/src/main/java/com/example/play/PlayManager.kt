@@ -3,6 +3,7 @@ package com.example.play
 import android.view.Surface
 import com.example.play.config.OutConfig
 import com.example.play.proxy.FFMpegProxy
+import com.example.play.utils.FFMpegUtils
 import com.example.play.utils.LogHelper
 import com.example.play.utils.MediaScope
 import kotlinx.coroutines.Dispatchers
@@ -142,6 +143,12 @@ class PlayManager : IPaly {
             Step.PauseStep -> pause()
             Step.PlayStep -> start()
             Step.UnknownStep -> {}
+        }
+    }
+
+    override fun cutting(srcPath: String, destPath: String, startTime: Long, endTime: Long, outConfig: OutConfig?, cb: FFMpegUtils.VideoCuttingInterface) {
+        if (this::mProxy.isInitialized) {
+            mProxy.cutting(srcPath, destPath, startTime, endTime, outConfig, cb)
         }
     }
 }

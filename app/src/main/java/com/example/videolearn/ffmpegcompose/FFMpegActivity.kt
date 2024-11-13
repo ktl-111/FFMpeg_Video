@@ -227,7 +227,8 @@ class FFMpegActivity : AppCompatActivity(), LogProxy {
         }
     }
 
-    private val outConfig = OutConfig(960, 540, 378, 496, fps = 24.toDouble())
+        private val outConfig = OutConfig(960, 540, 378, 496, fps = 24.toDouble())
+//    private val outConfig = OutConfig(0, 0, 0, 0, fps = 24.toDouble())
 
     private fun surfaceReCreate(surface: Surface) {
         playManager?.surfaceReCreate(surface)
@@ -325,15 +326,15 @@ class FFMpegActivity : AppCompatActivity(), LogProxy {
                     } else {
                         outFile.delete()
                     }
-                    Log.i(TAG, "cutting file:${outFile.absolutePath}")
                     val destPath = outFile.absolutePath
-                    val startTime = 0 * 1000
-                    val allTime = 5.0 * 1000
+                    val startTime = playManager?.getCurrTimestamp() ?: 0
+                    val allTime = 5_000
                     val currentTimeMillis = System.currentTimeMillis()
-                    FFMpegUtils.cutting(path,
+                    Log.i(TAG, "cutting file:${outFile.absolutePath} startTime:${startTime}")
+                    playManager?.cutting(path,
                         destPath,
-                        startTime.toLong(),
-                        (startTime + allTime).toLong(),
+                        startTime,
+                        startTime + allTime,
                         outConfig,
                         object : FFMpegUtils.VideoCuttingInterface {
                             override fun onStart() {
@@ -369,6 +370,11 @@ class FFMpegActivity : AppCompatActivity(), LogProxy {
             it.stop()
         }
         playManager = null
+        videoList.forEach {
+            it.bitmap.value?.also {
+                it.recycle()
+            }
+        }
     }
 
     private fun initGetVideoFrames() {
@@ -413,23 +419,23 @@ class FFMpegActivity : AppCompatActivity(), LogProxy {
                                 TAG,
                                 "onProgress pts:${pts} index:${index} rotate:${rotate} videoBean:${videoBean} ${width}*${height}"
                             )
-                            val bitMap = frame.let {
-                                val bitmap = Bitmap.createBitmap(
-                                    width, height, Bitmap.Config.ARGB_8888
-                                )
-                                bitmap!!.copyPixelsFromBuffer(it)
+                            val bitmap = Bitmap.createBitmap(
+                                width, height, Bitmap.Config.ARGB_8888).let {
+                                it.copyPixelsFromBuffer(frame)
+                                frame.clear()
                                 if (rotate != 0) {
                                     val matrix = Matrix()
                                     matrix.postRotate(rotate.toFloat())
                                     Bitmap.createBitmap(
-                                        bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true
+                                        it, 0, 0, it.width, it.height, matrix, true
                                     )
                                 } else {
-                                    bitmap
+                                    it
                                 }
                             }
+
                             videoBean.also {
-                                it.bitmap.value = bitMap
+                                it.bitmap.value = bitmap
                             }
                         }
                         return playManager == null
