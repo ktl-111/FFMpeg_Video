@@ -173,8 +173,97 @@ bool VideoDecoder::prepare(JNIEnv *env) {
     mStartTimeMsForSync = -1;
     LOGI("[video] prepare name:%s,threadCount:%ld,%d*%d,mFps:%f", mVideoCodec->name,
          threadCount, mWidth, mHeight, mFps)
-
+    initFilter();
     return true;
+}
+
+void VideoDecoder::releaseFilter() {
+    if (buffersinkContext) {
+        avfilter_free(buffersinkContext);
+        buffersinkContext = nullptr;
+    }
+    if (buffersrcContext) {
+        avfilter_free(buffersrcContext);
+        buffersrcContext = nullptr;
+    }
+    if (inputs) {
+        avfilter_inout_free(&inputs);
+        inputs = nullptr;
+    }
+    if (outputs) {
+        avfilter_inout_free(&outputs);
+        outputs = nullptr;
+    }
+    if (filter_graph) {
+        avfilter_graph_free(&filter_graph);
+        filter_graph = nullptr;
+    }
+}
+
+void VideoDecoder::initFilter() {
+    int result = 0;
+    //设置filter
+    const AVFilter *buffersrc = avfilter_get_by_name("buffer");
+    const AVFilter *buffersink = avfilter_get_by_name("buffersink");
+    filter_graph = avfilter_graph_alloc();
+
+    if (!buffersrc || !buffersink || !filter_graph) {
+        LOGE("initFilter buffersrc  buffersink avfilter_graph_alloc fail")
+        return;
+    }
+    char args[512];
+    /* buffer video source: the decoded frames from the decoder will be inserted here. */
+    snprintf(args, sizeof(args),
+             "video_size=%dx%d:pix_fmt=%d:time_base=%d/%d:pixel_aspect=%d/%d",
+             getWidth(), getHeight(), getCodecContext()->pix_fmt,
+             getTimeBase().num, getTimeBase().den,
+             getCodecContext()->sample_aspect_ratio.num,
+             getCodecContext()->sample_aspect_ratio.den);
+    LOGI("initFilter args %s", args)
+    result = avfilter_graph_create_filter(&buffersrcContext, buffersrc, "in",
+                                          args, NULL, filter_graph);
+
+    if (result != 0) {
+        LOGE("initFilter buffersrc fail,%d %s", result, av_err2str(result))
+        return;
+    }
+
+    result = avfilter_graph_create_filter(&buffersinkContext, buffersink, "out",
+                                          NULL, NULL, filter_graph);
+    if (result != 0) {
+        LOGE("initFilter buffersink fail,%d %s", result, av_err2str(result))
+        return;
+    }
+    outputs = avfilter_inout_alloc();
+    inputs = avfilter_inout_alloc();
+    //in->fps filter的输入端口名称
+    //outputs->源头的输出
+    outputs->name = av_strdup("in");
+    outputs->filter_ctx = buffersrcContext;
+    outputs->pad_idx = 0;
+    outputs->next = NULL;
+    //out->fps filter的输出端口名称
+    //outputs->filter后的输入
+    inputs->name = av_strdup("out");
+    inputs->filter_ctx = buffersinkContext;
+    inputs->pad_idx = 0;
+    inputs->next = NULL;
+    const char *fpsTag = "fps=";
+    int fps = getOutFps();
+    char *fpsFilter = new char[strlen(fpsTag) + sizeof(fps)];
+    sprintf(fpsFilter, "%s%d", fpsTag, fps);
+    LOGI("initFilter fpsfilter:%s", fpsFilter)
+    //buffer->输出(outputs)->filter in(av_strdup("in")->fps filter->filter out(av_strdup("out"))->输入(inputs)->buffersink
+    result = avfilter_graph_parse_ptr(filter_graph, fpsFilter, &inputs, &outputs, NULL);
+    if (result != 0) {
+        LOGE("initFilter avfilter_graph_parse_ptr fail,%d %s", result, av_err2str(result))
+        return;
+    }
+    result = avfilter_graph_config(filter_graph, NULL);
+    if (result != 0) {
+        LOGE("initFilter avfilter_graph_config fail,%d %s", result, av_err2str(result))
+        return;
+    }
 }
 
 void VideoDecoder::surfaceReCreate(JNIEnv *env, jobject surface) {
@@ -239,7 +328,9 @@ int VideoDecoder::converFrameTo420Frame(AVFrame *srcFrame, AVFrame *dstFrame) {
 
 int VideoDecoder::decode(AVPacket *avPacket, AVFrame *frame) {
     // 主动塞到队列中的flush帧
-    LOGI("decode start pts:%ld dts:%ld", avPacket->pts, avPacket->dts)
+    LOGI("decode start pts:%ld(%f) dts:%ld", avPacket->pts,
+         avPacket->pts * av_q2d(getTimeBase()),
+         avPacket->dts)
     int sendRes = -1;
     int receiveRes = -1;
 
@@ -270,8 +361,47 @@ int VideoDecoder::decode(AVPacket *avPacket, AVFrame *frame) {
         }
         return receiveRes;
     }
+//    if (pAvFrame-) {
+//        av_frame_free(&pAvFrame);
+//        //概率性receiveRes==0，但是获取的数据是eof
+//        receiveRes = AVERROR_EOF;
+//        mNeedResent = false;
+//        return receiveRes;
+//    }
+    AVFrame *filtered_frame = av_frame_alloc();
+    // 将帧发送到filter图中
+    int frameFlags = av_buffersrc_add_frame_flags(buffersrcContext, pAvFrame,
+                                                  AV_BUFFERSRC_FLAG_PUSH);
+    int buffersinkGetFrame = av_buffersink_get_frame(buffersinkContext, filtered_frame);
+    if (frameFlags < 0 || buffersinkGetFrame < 0) {
+        LOGI("decode filter frame %d %d time:%f", frameFlags, buffersinkGetFrame,
+             pAvFrame->pts * av_q2d(pAvFrame->time_base));
+        av_frame_free(&pAvFrame);
+        av_frame_free(&filtered_frame);
+        if (isEof && buffersinkGetFrame == AVERROR_EOF) {
+            buffersinkGetFrame = AVERROR_EOF;
+            mNeedResent = false;
+        }
+        return buffersinkGetFrame;
+    }
 
-    convertFrame(pAvFrame, frame);
+    AVRational outTimeBase = {1, (int) getOutFps() * TimeBaseDiff};
+
+    filtered_frame->pts = filtered_frame->pts * TimeBaseDiff;
+    filtered_frame->pkt_dts = filtered_frame->pts - TimeBaseDiff;
+    filtered_frame->time_base = outTimeBase;
+    filtered_frame->duration = TimeBaseDiff;
+    convertFrame(filtered_frame, frame);
+//    av_frame_free(&filtered_frame);
+//    filtered_frame = nullptr;
+//    filtered_frame->time_base = outTimeBase;
+
+    LOGI("decode filterframe %ld(%f)  format:%s %d",
+         frame->pts,
+         frame->pts * av_q2d(outTimeBase),
+         av_get_pix_fmt_name((AVPixelFormat) frame->format), filtered_frame->key_frame)
+//    convertFrame(pAvFrame, frame);
+//    frame->time_base = mTimeBase;
 
     return receiveRes;
 }
@@ -313,6 +443,7 @@ void VideoDecoder::convertFrame(AVFrame *srcFrame, AVFrame *dstFrame) {
         rotateFrame->duration = srcFrame->duration;
         rotateFrame->pkt_size = srcFrame->pkt_size;
         rotateFrame->format = srcFrame->format;
+        rotateFrame->time_base = srcFrame->time_base;
         int ret = av_frame_get_buffer(rotateFrame, 0);
         LOGI("convertFrame decode av_frame_get_buffer %d", ret)
         ret = libyuv::I420Rotate(srcFrame->data[0], srcFrame->linesize[0],
@@ -358,6 +489,7 @@ void VideoDecoder::convertFrame(AVFrame *srcFrame, AVFrame *dstFrame) {
         scaleFrame->pkt_dts = srcFrame->pkt_dts;
         scaleFrame->duration = srcFrame->duration;
         scaleFrame->pkt_size = srcFrame->pkt_size;
+        scaleFrame->time_base = srcFrame->time_base;
         int ret = av_frame_get_buffer(scaleFrame, 0);
         if (srcFrame->format == AV_PIX_FMT_BGRA) {
             ret = libyuv::ARGBScale(srcFrame->data[0], srcFrame->linesize[0],
@@ -395,6 +527,7 @@ void VideoDecoder::convertFrame(AVFrame *srcFrame, AVFrame *dstFrame) {
         cropFrame->pts = srcFrame->pts;
         cropFrame->pkt_dts = srcFrame->pkt_dts;
         cropFrame->duration = srcFrame->duration;
+        cropFrame->time_base = srcFrame->time_base;
         int ret = av_frame_get_buffer(cropFrame, 0);
 
         int diffWidth = srcWidth - cropWidth;
@@ -441,7 +574,6 @@ void VideoDecoder::convertFrame(AVFrame *srcFrame, AVFrame *dstFrame) {
         srcFrame = cropFrame;
     }
     int result = av_frame_ref(dstFrame, srcFrame);
-    dstFrame->time_base = mTimeBase;
 
     LOGI("convertFrame done result:%d pts:%ld(%f) format:%s %d*%d", result,
          dstFrame->pts, dstFrame->pts * av_q2d(dstFrame->time_base),
@@ -658,6 +790,8 @@ int VideoDecoder::seek(int64_t pos) {
     LOGI("[video] seek to: %ld, seekPos: %" PRId64 ", ret: %d", pos, seekPos, ret)
     // seek后需要恢复起始时间
     mFixStartTime = true;
+    releaseFilter();
+    initFilter();
     return ret;
 }
 
@@ -700,4 +834,5 @@ void VideoDecoder::release() {
     if (mSurfaceMutexObj) {
         mSurfaceMutexObj = nullptr;
     }
+    releaseFilter();
 }

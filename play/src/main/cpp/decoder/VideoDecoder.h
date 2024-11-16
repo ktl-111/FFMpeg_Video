@@ -95,9 +95,18 @@ private:
     std::shared_ptr<OutConfig> mOutConfig = nullptr;
 
     const AVCodec *mVideoCodec = nullptr;
+    AVFilterGraph *filter_graph = nullptr;
 
+    AVFilterInOut *outputs = nullptr;
+    AVFilterInOut *inputs = nullptr;
+    AVFilterContext *buffersinkContext = nullptr;
+    AVFilterContext *buffersrcContext = nullptr;
+
+    void initFilter();
+    void releaseFilter();
 
     int converToSurface(AVFrame *srcFrame, AVFrame *dstFrame);
+
     int converFrameTo420Frame(AVFrame *srcFrame, AVFrame *dstFrame);
 };
 

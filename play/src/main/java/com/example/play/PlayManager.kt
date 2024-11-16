@@ -7,6 +7,7 @@ import com.example.play.utils.FFMpegUtils
 import com.example.play.utils.LogHelper
 import com.example.play.utils.MediaScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -146,8 +147,10 @@ class PlayManager : IPaly {
         }
     }
 
+    @OptIn(ExperimentalCoroutinesApi::class)
     override fun cutting(srcPath: String, destPath: String, startTime: Long, endTime: Long, outConfig: OutConfig?, cb: FFMpegUtils.VideoCuttingInterface) {
         if (this::mProxy.isInitialized) {
+            seekFlow.resetReplayCache()
             mProxy.cutting(srcPath, destPath, startTime, endTime, outConfig, cb)
         }
     }

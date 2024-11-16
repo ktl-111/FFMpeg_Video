@@ -114,7 +114,7 @@ bool FFMpegPlayer::prepare(JNIEnv *env, std::string &path, jobject surface, jobj
         updatePlayerState(PlayerState::PREPARE);
     }
     mVideoPacketQueue = std::make_shared<AVPacketQueue>(50);
-    mVideoFrameQueue = std::make_shared<AVFrameQueue>(6 * mVideoDecoder->getFps(), "cache");
+    mVideoFrameQueue = std::make_shared<AVFrameQueue>(10 * mVideoDecoder->getOutFps(), "cache");
     mVideoThread = new std::thread(&FFMpegPlayer::VideoDecodeLoop, this);
     mReadPacketThread = new std::thread(&FFMpegPlayer::ReadPacketLoop, this);
     mVideoDecodeThread = new std::thread(&FFMpegPlayer::ReadVideoFrameLoop, this);
@@ -382,6 +382,7 @@ void FFMpegPlayer::VideoDecodeLoop() {
 
         AVFrame *frame = mVideoFrameQueue->getFrame(false, false);
         if (frame == nullptr) {
+            mVideoFrameQueue->wait();
             LOGI("[video] VideoDecodeLoop getFrame is null")
             continue;
         }
@@ -513,6 +514,7 @@ void FFMpegPlayer::ReadVideoFrameLoop() {
                 AVFrame *pFrame = tempFrameQueue->getFrame(true, false);
                 if (pFrame == nullptr) {
                     LOGI("ReadVideoFrameLoop getFrame is null")
+                    tempFrameQueue->wait();
                     continue;
                 }
                 if (!pushFrameToQueue(pFrame, mVideoFrameQueue, false)) {
@@ -780,7 +782,6 @@ FFMpegPlayer::cutting(JNIEnv *env, const char *srcPath, const char *destPath, jl
         outFps = (int) srcFps;
     }
     AVStream *inSteram = mVideoDecoder->getStream();
-    AVRational &inTimeBase = inSteram->time_base;
     AVCodecParameters *codec_params = inSteram->codecpar;
     AVCodecContext *decodecContext = mVideoDecoder->getCodecContext();
 
@@ -846,7 +847,7 @@ FFMpegPlayer::cutting(JNIEnv *env, const char *srcPath, const char *destPath, jl
     // 调节编码速度(这里选择的是最快)
     int re = 0;
     //ultrafast,superfast,veryfast
-    re = av_opt_set(encodeContext->priv_data, "preset", "superfast", 0);
+    re = av_opt_set(encodeContext->priv_data, "preset", "veryfast", 0);
     if (re != 0) {
         LOGI("cutting priv_data set fail,%d %s", result, av_err2str(result))
         env->CallVoidMethod(callback, onFail, ERRORCODE_AVCODEC_OPEN2);
@@ -875,144 +876,75 @@ FFMpegPlayer::cutting(JNIEnv *env, const char *srcPath, const char *destPath, jl
         return;
     }
 
-    //设置filter
-    const AVFilter *buffersrc = avfilter_get_by_name("buffer");
-    const AVFilter *buffersink = avfilter_get_by_name("buffersink");
-    AVFilterGraph *filter_graph = avfilter_graph_alloc();
-
-    if (!buffersrc || !buffersink || !filter_graph) {
-        LOGE("cutting buffersrc  buffersink avfilter_graph_alloc fail")
-        env->CallVoidMethod(callback, onFail, ERRORCODE_GET_AVFILTER);
-        return;
-    }
-    AVFilterContext *buffersinkContext;
-    AVFilterContext *buffersrcContext;
-    char args[512];
-    /* buffer video source: the decoded frames from the decoder will be inserted here. */
-    snprintf(args, sizeof(args),
-             "video_size=%dx%d:pix_fmt=%d:time_base=%d/%d:pixel_aspect=%d/%d",
-             encodeContext->width, encodeContext->height, decodecContext->pix_fmt,
-             inTimeBase.num, inTimeBase.den,
-             decodecContext->sample_aspect_ratio.num, decodecContext->sample_aspect_ratio.den);
-    LOGI("cutting args %s", args)
-    result = avfilter_graph_create_filter(&buffersrcContext, buffersrc, "in",
-                                          args, NULL, filter_graph);
-
-    if (result != 0) {
-        LOGE("cutting buffersrc fail,%d %s", result, av_err2str(result))
-        env->CallVoidMethod(callback, onFail, ERRORCODE_CREATE_FILTER);
-        return;
-    }
-
-    result = avfilter_graph_create_filter(&buffersinkContext, buffersink, "out",
-                                          NULL, NULL, filter_graph);
-    if (result != 0) {
-        LOGE("cutting buffersink fail,%d %s", result, av_err2str(result))
-        env->CallVoidMethod(callback, onFail, ERRORCODE_CREATE_FILTER);
-        return;
-    }
-    AVFilterInOut *outputs = avfilter_inout_alloc();
-    AVFilterInOut *inputs = avfilter_inout_alloc();
-    //in->fps filter的输入端口名称
-    //outputs->源头的输出
-    outputs->name = av_strdup("in");
-    outputs->filter_ctx = buffersrcContext;
-    outputs->pad_idx = 0;
-    outputs->next = NULL;
-    //out->fps filter的输出端口名称
-    //outputs->filter后的输入
-    inputs->name = av_strdup("out");
-    inputs->filter_ctx = buffersinkContext;
-    inputs->pad_idx = 0;
-    inputs->next = NULL;
-    const char *fpsTag = "fps=";
-    char *fpsFilter = new char[strlen(fpsTag) + sizeof(outFps)];
-    sprintf(fpsFilter, "%s%d", fpsTag, outFps);
-    LOGI("cutting fpsfilter:%s", fpsFilter)
-    //buffer->输出(outputs)->filter in(av_strdup("in")->fps filter->filter out(av_strdup("out"))->输入(inputs)->buffersink
-    result = avfilter_graph_parse_ptr(filter_graph, fpsFilter, &inputs, &outputs, NULL);
-    if (result != 0) {
-        LOGE("cutting avfilter_graph_parse_ptr fail,%d %s", result, av_err2str(result))
-        env->CallVoidMethod(callback, onFail, ERRORCODE_FILTER_ERROR);
-        return;
-    }
-    result = avfilter_graph_config(filter_graph, NULL);
-    if (result != 0) {
-        LOGE("cutting avfilter_graph_config fail,%d %s", result, av_err2str(result))
-        env->CallVoidMethod(callback, onFail, ERRORCODE_FILTER_ERROR);
-        return;
-    }
-
-    LOGI("cutting seek %f", start_time / av_q2d(inTimeBase))
-
     jdouble frameCount = outFps * (end_time - start_time);
     progress += 1;
     env->CallVoidMethod(callback, onProgress, progress);
-
+    if (mVideoFrameQueue->isEmpty()) {
+        LOGI("cutting is empty")
+        mVideoFrameQueue->wait();
+    }
+    AVFrame *front = mVideoFrameQueue->front();
+    bool clear = front->pts * av_q2d(front->time_base) > start_time;
+    if (clear) {
+        LOGI("cutting first time > start time")
+        mVideoDecoder->seekLock();
+        mVideoDecoder->seek(starttime);
+        mVideoPacketQueue->clear();
+        mVideoFrameQueue->clear(true);
+        mVideoDecoder->seekUnlock();
+    }
+    bool pop = true;
+    if (!clear) {
+        AVFrame *back = mVideoFrameQueue->back();
+        if (back->pts * av_q2d(front->time_base) >= end_time) {
+            pop = false;
+        }
+    }
+    mVideoFrameQueue->resetIndex();
     int writeFramsCount = 0;
-    int index = -1;
-    bool findFrame = false;
     while (1) {
         int sendResult = 0;
         int receiveResult = 0;
-        // 初始化filter图的帧
-        index++;
-        AVFrame *frame = mVideoFrameQueue->getFrameByIndex(index);
-        double time = frame->pts * av_q2d(inTimeBase);
-        if (frame->pts <= start_time / av_q2d(inTimeBase)) {
-            LOGI("cutting pts < start_time %ld %f %f", frame->pts,
-                 start_time / av_q2d(inTimeBase), time)
+        if (mVideoFrameQueue->isEmpty()) {
+            mVideoFrameQueue->wait();
+        }
+        AVFrame *frame = mVideoFrameQueue->getFrame(pop, false);
+        if (frame == nullptr) {
+            mVideoFrameQueue->wait();
             continue;
         }
-        if (!findFrame) {
-            findFrame = true;
-            index--;
-            continue;
-        }
-        LOGI("cutting red %f", time)
-        AVFrame *filtered_frame = av_frame_alloc();
-        // 将帧发送到filter图中
-        int frameFlags = av_buffersrc_add_frame_flags(buffersrcContext, frame,
-                                                      AV_BUFFERSRC_FLAG_KEEP_REF);
-        int buffersinkGetFrame = av_buffersink_get_frame(buffersinkContext, filtered_frame);
-        if (frameFlags <
-                0 ||
-                buffersinkGetFrame < 0) {
-            LOGI("cutting filter frame %d %d", frameFlags, buffersinkGetFrame);
-            if (buffersinkGetFrame == AVERROR(EAGAIN)) {
-                av_frame_free(&filtered_frame);
-                continue;
-            }
-            env->CallVoidMethod(callback, onFail, ERRORCODE_FILTER_WRITE_ERROR);
-            return;
-        }
-        LOGI("cutting filterframe %ld(%f)  format:%s",
-             filtered_frame->pts * TimeBaseDiff,
-             filtered_frame->pts * TimeBaseDiff * av_q2d(outTimeBase),
-             av_get_pix_fmt_name((AVPixelFormat) filtered_frame->format))
-
-        if (filtered_frame->pts * TimeBaseDiff * av_q2d(outTimeBase) > end_time) {
-            LOGI("cutting pts > endpts")
-            av_frame_free(&filtered_frame);
+        if (frame->pkt_size == 0) {
+            //eof
+            LOGI("cutting eof")
             break;
         }
+        double time = frame->pts * av_q2d(frame->time_base);
+        if (time < start_time) {
+            LOGI("cutting time(%f) < start_time(%f) ", time, start_time)
+            continue;
+        }
+        if (time >= end_time) {
+            LOGI("cutting time(%f) > end_time(%f) ", time, end_time)
+            break;
+        }
+        LOGI("cutting red %f", time)
 
-        filtered_frame->pict_type = AV_PICTURE_TYPE_NONE;
+//        frame->pict_type = AV_PICTURE_TYPE_NONE;
 
         do {
             sendResult = -1;
             receiveResult = -1;
-            sendResult = avcodec_send_frame(encodeContext, filtered_frame);
+            sendResult = avcodec_send_frame(encodeContext, frame);
             if (sendResult == 0) {
                 AVPacket *receivePacket = av_packet_alloc();
                 receiveResult = avcodec_receive_packet(encodeContext, receivePacket);
                 if (receiveResult == 0) {
                     receivePacket->stream_index = outStream->index;
                     receivePacket->pts = writeFramsCount;
-                    receivePacket->dts = receivePacket->pts - TimeBaseDiff;
+                    receivePacket->dts = receivePacket->pts ;
                     receivePacket->duration = TimeBaseDiff;
 
-                    LOGI("cutting av_interleaved_write_frame result pts:%ld %f dts:%ld %f duration:%ld %f",
+                    LOGI("cutting av_interleaved_write_frame result pts:%ld(%f) dts:%ld %f duration:%ld %f",
                          receivePacket->pts,
                          receivePacket->pts * av_q2d(encodeContext->time_base),
                          receivePacket->dts,
@@ -1039,11 +971,11 @@ FFMpegPlayer::cutting(JNIEnv *env, const char *srcPath, const char *destPath, jl
 
                 av_packet_free(&receivePacket);
             }
+
             LOGI("cutting encode sendResult:%d receiveResult:%d", sendResult, receiveResult)
         } while (sendResult == AVERROR(EAGAIN) && receiveResult == AVERROR(EAGAIN));
-        // 清理资源
-        if (receiveResult == AVERROR(EAGAIN)) {
-            continue;
+        if (pop) {
+            av_frame_free(&frame);
         }
         LOGI("cutting av_write_frame")
     }
@@ -1101,9 +1033,6 @@ FFMpegPlayer::cutting(JNIEnv *env, const char *srcPath, const char *destPath, jl
 
     avcodec_close(encodeContext);
     avcodec_free_context(&encodeContext);
-    avfilter_graph_free(&filter_graph);
-    avfilter_inout_free(&inputs);
-    avfilter_inout_free(&outputs);
     LOGI("cutting done!!!")
     progress = 100;
     env->CallVoidMethod(callback, onProgress, progress);

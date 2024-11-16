@@ -178,13 +178,15 @@ class FFMpegActivity : AppCompatActivity(), LogProxy {
                         var videoWidth: Int
                         if (height > witdh) {
                             videoHeight = surfaceView.measuredHeight
-                            videoWidth = (videoHeight * ratio).roundToInt()
+                            videoWidth = (videoHeight * ratio).toInt()
                         } else {
                             videoWidth = surfaceView.measuredWidth
                             videoHeight = (videoWidth / ratio).toInt()
                         }
-                        videoWidth = witdh
-                        videoHeight = height
+//                        videoHeight += videoHeight % 2
+//                        videoWidth += videoWidth % 2
+//                        videoWidth = witdh
+//                        videoHeight = height
                         Log.i(
                             TAG,
                             "aft onConfig: video width:$witdh,height:$height ratio:$ratio duration:${duration}\n view width:${videoWidth},height${videoHeight}"
@@ -227,8 +229,8 @@ class FFMpegActivity : AppCompatActivity(), LogProxy {
         }
     }
 
-        private val outConfig = OutConfig(960, 540, 378, 496, fps = 24.toDouble())
-//    private val outConfig = OutConfig(0, 0, 0, 0, fps = 24.toDouble())
+    private val outConfig = OutConfig(960, 540, 378, 496, fps = 24.toDouble())
+//    private val outConfig = OutConfig(1920, 1080, 0, 0, fps = 24.toDouble())
 
     private fun surfaceReCreate(surface: Surface) {
         playManager?.surfaceReCreate(surface)
@@ -327,7 +329,7 @@ class FFMpegActivity : AppCompatActivity(), LogProxy {
                         outFile.delete()
                     }
                     val destPath = outFile.absolutePath
-                    val startTime = playManager?.getCurrTimestamp() ?: 0
+                    val startTime = (mCurrPlayTime.value * 1000).toLong()
                     val allTime = 5_000
                     val currentTimeMillis = System.currentTimeMillis()
                     Log.i(TAG, "cutting file:${outFile.absolutePath} startTime:${startTime}")
@@ -353,7 +355,11 @@ class FFMpegActivity : AppCompatActivity(), LogProxy {
                             }
 
                             override fun onDone() {
-                                Log.i(TAG, "onDone: ${System.currentTimeMillis() - currentTimeMillis}")
+                                val cost = System.currentTimeMillis() - currentTimeMillis
+                                Log.i(TAG, "onDone: $cost")
+                                launch(Dispatchers.Main) {
+                                    Toast.makeText(this@FFMpegActivity, "cost:${cost}", Toast.LENGTH_SHORT).show()
+                                }
                                 finish()
                             }
 
@@ -382,7 +388,7 @@ class FFMpegActivity : AppCompatActivity(), LogProxy {
             FFMpegUtils.getVideoFrames(path,
                 DisplayUtil.dp2px(this@FFMpegActivity, itemSize.toFloat()),
                 0,
-                false,
+                path.endsWith(".gif"),
                 object : FFMpegUtils.VideoFrameArrivedInterface {
                     override fun onStart(duration: Double): DoubleArray {
                         val size = Math.ceil(duration).toInt()

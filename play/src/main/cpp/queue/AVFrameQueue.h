@@ -23,6 +23,8 @@ public:
 
     bool checkLastIsEofFrame();
 
+    void resetIndex();
+
     AVFrame *getFrame(bool pop, bool findBack);
 
     AVFrame *getFrameUnlock(bool pop, bool findBack);
@@ -30,8 +32,6 @@ public:
     AVFrame *back();
 
     AVFrame *front();
-
-    AVFrame *popFront();
 
     void clear(bool noti);
 

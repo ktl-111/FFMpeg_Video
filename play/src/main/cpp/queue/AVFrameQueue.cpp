@@ -25,9 +25,16 @@ AVFrameQueue::~AVFrameQueue() {
     pthread_cond_destroy(&mCond);
 }
 
+void AVFrameQueue::resetIndex() {
+    pthread_mutex_lock(&mMutex);
+    currIndex = -1;
+    pthread_mutex_unlock(&mMutex);
+}
+
 void AVFrameQueue::pushBack(AVFrame *frame, bool noti) {
     pthread_mutex_lock(&mMutex);
-    LOGI("[AVFrameQueue(%s)] pushBack pts:%ld size:%ld index:%d", mTag, frame->pts, mQueue.size(),
+    LOGI("[AVFrameQueue(%s)] pushBack pts:%ld(%f) size:%ld index:%d", mTag, frame->pts,
+         frame->pts * av_q2d(frame->time_base), mQueue.size(),
          currIndex)
     mQueue.push_back(frame);
     pthread_mutex_unlock(&mMutex);
@@ -38,7 +45,8 @@ void AVFrameQueue::pushBack(AVFrame *frame, bool noti) {
 
 void AVFrameQueue::pushFront(AVFrame *frame) {
     pthread_mutex_lock(&mMutex);
-    LOGI("[AVFrameQueue(%s)] pushFront pts:%ld %d", mTag, frame->pts, frame->format)
+    LOGI("[AVFrameQueue(%s)] pushFront pts:%ld(%f) %d", mTag, frame->pts,
+         frame->pts * av_q2d(frame->time_base), frame->format)
     mQueue.push_front(frame);
     currIndex++;
     pthread_mutex_unlock(&mMutex);
@@ -62,10 +70,12 @@ AVFrame *AVFrameQueue::getFrameUnlock(bool pop, bool findBack) {
     if (currIndex < 0) {
         LOGI("[AVFrameQueue(%s)] getFrame currIndex < 0", mTag)
         currIndex = 0;
+        return nullptr;
     } else {
         if (currIndex >= size) {
             currIndex = size - 1;
             LOGI("[AVFrameQueue(%s)] getFrame currIndex > size", mTag)
+            return nullptr;
         }
     }
     AVFrame *frame = mQueue.at(currIndex);
@@ -84,7 +94,7 @@ AVFrame *AVFrameQueue::getFrameUnlock(bool pop, bool findBack) {
 
     LOGI("[AVFrameQueue(%s)] getFrame end pts:%ld index:%d size:%ld isFull:%d pop:%d", mTag,
          frame->pts,
-         currIndex, size, isFull, pop)
+         currIndex, mQueue.size(), isFull, pop)
     return frame;
 }
 
@@ -104,20 +114,6 @@ AVFrame *AVFrameQueue::back() {
         return nullptr;
     }
     AVFrame *frame = mQueue.back();
-    pthread_mutex_unlock(&mMutex);
-    notify();
-    return frame;
-}
-
-AVFrame *AVFrameQueue::popFront() {
-    pthread_mutex_lock(&mMutex);
-    if (mQueue.empty()) {
-        LOGI("[AVFrameQueue(%s)] popFront is empty", mTag)
-        pthread_mutex_unlock(&mMutex);
-        return nullptr;
-    }
-    AVFrame *frame = mQueue.front();
-    mQueue.pop_front();
     pthread_mutex_unlock(&mMutex);
     notify();
     return frame;
