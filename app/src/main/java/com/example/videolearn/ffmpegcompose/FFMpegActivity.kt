@@ -229,7 +229,7 @@ class FFMpegActivity : AppCompatActivity(), LogProxy {
         }
     }
 
-    private val outConfig = OutConfig(960, 540, 378, 496, fps = 24.toDouble())
+    private val outConfig = OutConfig(960, 540, 378, 496, fps = 60.toDouble())
 //    private val outConfig = OutConfig(1920, 1080, 0, 0, fps = 24.toDouble())
 
     private fun surfaceReCreate(surface: Surface) {
@@ -541,6 +541,7 @@ class FFMpegActivity : AppCompatActivity(), LogProxy {
             Column(
                 modifier = Modifier
                     .padding(10.dp)
+                    .height(itemSize.dp)
                     .fillMaxWidth()
                     .wrapContentHeight()
             ) {

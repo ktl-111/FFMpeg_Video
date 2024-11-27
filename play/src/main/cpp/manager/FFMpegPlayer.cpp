@@ -114,7 +114,7 @@ bool FFMpegPlayer::prepare(JNIEnv *env, std::string &path, jobject surface, jobj
         updatePlayerState(PlayerState::PREPARE);
     }
     mVideoPacketQueue = std::make_shared<AVPacketQueue>(50);
-    mVideoFrameQueue = std::make_shared<AVFrameQueue>(10 * mVideoDecoder->getOutFps(), "cache");
+    mVideoFrameQueue = std::make_shared<AVFrameQueue>(6 * mVideoDecoder->getOutFps(), "cache");
     mVideoThread = new std::thread(&FFMpegPlayer::VideoDecodeLoop, this);
     mReadPacketThread = new std::thread(&FFMpegPlayer::ReadPacketLoop, this);
     mVideoDecodeThread = new std::thread(&FFMpegPlayer::ReadVideoFrameLoop, this);
@@ -821,14 +821,14 @@ FFMpegPlayer::cutting(JNIEnv *env, const char *srcPath, const char *destPath, jl
 //    av_dict_copy(&outStream->metadata, inSteram->metadata, 0);
 //    outStream->side_data = inSteram->side_data;
 //    outStream->nb_side_data = inSteram->nb_side_data;
-    //查找解码器
+
     const AVCodec *encoder = avcodec_find_encoder(outStream->codecpar->codec_id);
     if (!encoder) {
-        LOGE("not find encoder")
+        LOGE("cutting not find encoder")
         env->CallVoidMethod(callback, onFail, ERRORCODE_NOT_FIND_ENCODE);
         return;
     }
-    LOGI("find encoder %s", encoder->name)
+    LOGI("cutting find encoder %s", encoder->name)
     AVCodecContext *encodeContext = avcodec_alloc_context3(encoder);
     encodeContext->codec_type = AVMEDIA_TYPE_VIDEO;
     encodeContext->width = outStream->codecpar->width;
@@ -844,14 +844,10 @@ FFMpegPlayer::cutting(JNIEnv *env, const char *srcPath, const char *destPath, jl
 //    encodeContext->sample_aspect_ratio = decodecContext->sample_aspect_ratio;
     encodeContext->max_b_frames = 0;//不需要B帧
     encodeContext->gop_size = outStream->avg_frame_rate.num;//多少帧一个I帧
-    // 调节编码速度(这里选择的是最快)
-    int re = 0;
     //ultrafast,superfast,veryfast
-    re = av_opt_set(encodeContext->priv_data, "preset", "veryfast", 0);
-    if (re != 0) {
+    result = av_opt_set(encodeContext->priv_data, "preset", "veryfast", 0);
+    if (result != 0) {
         LOGI("cutting priv_data set fail,%d %s", result, av_err2str(result))
-        env->CallVoidMethod(callback, onFail, ERRORCODE_AVCODEC_OPEN2);
-        return;
     }
 
     result = avcodec_open2(encodeContext, encoder, NULL);
@@ -867,7 +863,6 @@ FFMpegPlayer::cutting(JNIEnv *env, const char *srcPath, const char *destPath, jl
         env->CallVoidMethod(callback, onFail, ERRORCODE_PARAMETERS_TO_CONTEXT);
         return;
     }
-    LOGI("cutting name:%s", avcodec_get_name(outFormatContext->video_codec_id))
     // 打开输出文件
     if (avio_open(&outFormatContext->pb, destPath, AVIO_FLAG_WRITE) < 0 ||
             avformat_write_header(outFormatContext, NULL) < 0) {
@@ -902,23 +897,24 @@ FFMpegPlayer::cutting(JNIEnv *env, const char *srcPath, const char *destPath, jl
     }
     mVideoFrameQueue->resetIndex();
     int writeFramsCount = 0;
+    int pts = 0;
     while (1) {
         int sendResult = 0;
         int receiveResult = 0;
         if (mVideoFrameQueue->isEmpty()) {
             mVideoFrameQueue->wait();
         }
-        AVFrame *frame = mVideoFrameQueue->getFrame(pop, false);
-        if (frame == nullptr) {
+        AVFrame *cacheFrame = mVideoFrameQueue->getFrame(pop, false);
+        if (cacheFrame == nullptr) {
             mVideoFrameQueue->wait();
             continue;
         }
-        if (frame->pkt_size == 0) {
+        if (cacheFrame->pkt_size == 0) {
             //eof
             LOGI("cutting eof")
             break;
         }
-        double time = frame->pts * av_q2d(frame->time_base);
+        double time = cacheFrame->pts * av_q2d(cacheFrame->time_base);
         if (time < start_time) {
             LOGI("cutting time(%f) < start_time(%f) ", time, start_time)
             continue;
@@ -928,8 +924,11 @@ FFMpegPlayer::cutting(JNIEnv *env, const char *srcPath, const char *destPath, jl
             break;
         }
         LOGI("cutting red %f", time)
-
-//        frame->pict_type = AV_PICTURE_TYPE_NONE;
+        AVFrame *frame = av_frame_alloc();
+        av_frame_ref(frame, cacheFrame);
+        frame->pict_type = AV_PICTURE_TYPE_NONE;
+        frame->pts = pts;
+        pts++;
 
         do {
             sendResult = -1;
@@ -941,7 +940,7 @@ FFMpegPlayer::cutting(JNIEnv *env, const char *srcPath, const char *destPath, jl
                 if (receiveResult == 0) {
                     receivePacket->stream_index = outStream->index;
                     receivePacket->pts = writeFramsCount;
-                    receivePacket->dts = receivePacket->pts ;
+                    receivePacket->dts = receivePacket->pts - TimeBaseDiff;
                     receivePacket->duration = TimeBaseDiff;
 
                     LOGI("cutting av_interleaved_write_frame result pts:%ld(%f) dts:%ld %f duration:%ld %f",
@@ -974,8 +973,10 @@ FFMpegPlayer::cutting(JNIEnv *env, const char *srcPath, const char *destPath, jl
 
             LOGI("cutting encode sendResult:%d receiveResult:%d", sendResult, receiveResult)
         } while (sendResult == AVERROR(EAGAIN) && receiveResult == AVERROR(EAGAIN));
+        av_frame_unref(frame);
+        av_frame_free(&frame);
         if (pop) {
-            av_frame_free(&frame);
+            av_frame_free(&cacheFrame);
         }
         LOGI("cutting av_write_frame")
     }
@@ -993,7 +994,7 @@ FFMpegPlayer::cutting(JNIEnv *env, const char *srcPath, const char *destPath, jl
             if (receiveResult == 0) {
                 receivePacket->stream_index = outStream->index;
                 receivePacket->pts = writeFramsCount;
-                receivePacket->dts = receivePacket->pts;
+                receivePacket->dts = receivePacket->pts - TimeBaseDiff;
                 receivePacket->duration = TimeBaseDiff;
 
                 LOGI("cutting av_interleaved_write_frame result flush pts:%ld %f dts:%ld %f duration:%ld %f",
@@ -1023,7 +1024,7 @@ FFMpegPlayer::cutting(JNIEnv *env, const char *srcPath, const char *destPath, jl
         }
         LOGI("cutting encode flush sendResult:%d %s receiveResult:%d ",
              sendResult, av_err2str(sendResult), receiveResult)
-        av_packet_unref(receivePacket);
+        av_packet_free(&receivePacket);
     } while (sendResult >= 0 || receiveResult >= 0);
     av_write_trailer(outFormatContext);
     // 关闭输出文件
@@ -1037,4 +1038,9 @@ FFMpegPlayer::cutting(JNIEnv *env, const char *srcPath, const char *destPath, jl
     progress = 100;
     env->CallVoidMethod(callback, onProgress, progress);
     env->CallVoidMethod(callback, onDone);
+    jcalss = nullptr;
+    onStart = nullptr;
+    onProgress = nullptr;
+    onDone = nullptr;
+    onFail = nullptr;
 }

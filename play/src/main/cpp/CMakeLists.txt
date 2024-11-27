@@ -26,14 +26,6 @@ aux_source_directory(queue QUEUESOURCE)
 aux_source_directory(include INCLUDESOURCE)
 aux_source_directory(config CONFIGESOURCE)
 
-if(${ANDROID_ABI} MATCHES "armeabi-v7a")
-    include_directories(include/armeabi-v7a)
-    message("This is armeabi-v7a")
-elseif(${ANDROID_ABI} MATCHES "arm64-v8a")
-    include_directories(include/arm64-v8a)
-    message("This is arm64-v8a")
-endif()
-
 project("play")
 
 add_library(ffmpegplayer SHARED
@@ -48,17 +40,16 @@ add_library(ffmpegplayer SHARED
         ${CONFIGESOURCE}
         ${YUVSOURCE})
 
-#关联lib库
 target_link_libraries(
         ffmpegplayer
         log
-#        avcodec
-#        avfilter
-#        avformat
-#        avutil
-#        swresample
-#        swscale
-        ffmpeg
+        avcodec
+        avfilter
+        avformat
+        avutil
+        swresample
+        swscale
+        x264
         android
         OpenSLES
         yuv)

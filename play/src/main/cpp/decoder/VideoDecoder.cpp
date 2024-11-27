@@ -108,24 +108,67 @@ bool VideoDecoder::prepare(JNIEnv *env) {
 
     AVCodecParameters *params = stream->codecpar;
 
-    // find decoder
     bool useHwDecoder = true;
     std::string mediacodecName;
-    switch (params->codec_id) {
-        case AV_CODEC_ID_H264:
-            mediacodecName = "h264_mediacodec";
-            break;
-        case AV_CODEC_ID_HEVC:
-            mediacodecName = "hevc_mediacodec";
-            break;
-        default:
-            useHwDecoder = false;
-            LOGE("format(%d) not support hw decode, maybe rebuild ffmpeg so", params->codec_id)
-            break;
-    }
+    if (useHwDecoder) {
+        switch (params->codec_id) {
+            case AV_CODEC_ID_H264:
+                mediacodecName = "h264_mediacodec";
+                break;
+            case AV_CODEC_ID_HEVC:
+                mediacodecName = "hevc_mediacodec";
+                break;
+            default:
+                useHwDecoder = false;
+                LOGE("prepare format(%d) not support hw decode, maybe rebuild ffmpeg so",
+                     params->codec_id)
+                break;
+        }
+        if (useHwDecoder) {
+            enum AVPixelFormat hw_pix_fmt = AV_PIX_FMT_NONE;
+            AVHWDeviceType type = av_hwdevice_find_type_by_name("mediacodec");
+            const AVCodec *mediacodec = avcodec_find_decoder_by_name(mediacodecName.c_str());
+            if (mediacodec) {
+                LOGE("prepare find %s", mediacodecName.c_str())
+                for (int i = 0;; ++i) {
+                    const AVCodecHWConfig *config = avcodec_get_hw_config(mediacodec, i);
+                    if (!config) {
+                        LOGE("prepare Decoder: %s does not support device type: %s",
+                             mediacodec->name,
+                             av_hwdevice_get_type_name(type))
+                        break;
+                    }
+                    if (config->methods & AV_CODEC_HW_CONFIG_METHOD_HW_DEVICE_CTX &&
+                            config->device_type == type) {
+                        // AV_PIX_FMT_MEDIACODEC(165)
+                        hw_pix_fmt = config->pix_fmt;
+                        LOGI("prepare Decoder: %s support device type: %s, hw_pix_fmt: %d, AV_PIX_FMT_MEDIACODEC: %d",
+                             mediacodec->name, av_hwdevice_get_type_name(type), hw_pix_fmt,
+                             AV_PIX_FMT_MEDIACODEC);
+                        break;
+                    }
+                }
 
-    mVideoCodec = avcodec_find_decoder(params->codec_id);
-    LOGI("find codec %s", mVideoCodec->name)
+                if (hw_pix_fmt != AV_PIX_FMT_NONE) {
+                    mVideoCodec = mediacodec;
+                }
+            }
+        }
+    }
+    if (mVideoCodec == nullptr) {
+        std::string codecName;
+        if (params->codec_id == AV_CODEC_ID_H264) {
+            codecName = "h264";
+        } else if (params->codec_id == AV_CODEC_ID_HEVC) {
+            codecName = "hevc";
+        }
+        if (!codecName.empty()) {
+            mVideoCodec = avcodec_find_decoder_by_name(codecName.c_str());
+        } else {
+            mVideoCodec = avcodec_find_decoder(params->codec_id);
+        }
+    }
+    LOGI("prepare find codec %s", mVideoCodec->name)
 
     if (mVideoCodec == nullptr) {
         std::string msg = "not find decoder";
@@ -145,7 +188,6 @@ bool VideoDecoder::prepare(JNIEnv *env) {
         return false;
     }
     avcodec_parameters_to_context(mCodecContext, params);
-
     if (mSurface) {
         //创建nativewindow
         nativeWindow = ANativeWindow_fromSurface(env, mSurface);
@@ -248,22 +290,27 @@ void VideoDecoder::initFilter() {
     inputs->filter_ctx = buffersinkContext;
     inputs->pad_idx = 0;
     inputs->next = NULL;
-    const char *fpsTag = "fps=";
     int fps = getOutFps();
-    char *fpsFilter = new char[strlen(fpsTag) + sizeof(fps)];
-    sprintf(fpsFilter, "%s%d", fpsTag, fps);
-    LOGI("initFilter fpsfilter:%s", fpsFilter)
-    //buffer->输出(outputs)->filter in(av_strdup("in")->fps filter->filter out(av_strdup("out"))->输入(inputs)->buffersink
-    result = avfilter_graph_parse_ptr(filter_graph, fpsFilter, &inputs, &outputs, NULL);
-    if (result != 0) {
-        LOGE("initFilter avfilter_graph_parse_ptr fail,%d %s", result, av_err2str(result))
-        return;
-    }
+    char *fpsFilter = new char[sizeof(fps)];
+    sprintf(fpsFilter, "%d", fps);
+    const AVFilter *pFilter = avfilter_get_by_name("fps");
+    AVFilterContext *fpsContext;
+    avfilter_graph_create_filter(&fpsContext, pFilter, "fps",
+                                 fpsFilter, NULL, filter_graph);
+    avfilter_link(buffersrcContext, 0, fpsContext, 0);
+    avfilter_link(fpsContext, 0, buffersinkContext, 0);
+
+//    //buffer->输出(outputs)->filter in(av_strdup("in")->fps filter->filter out(av_strdup("out"))->输入(inputs)->buffersink
+//    result = avfilter_graph_parse_ptr(filter_graph, "fps=30", &inputs, &outputs, NULL);
+//    if (result != 0) {
+//        LOGE("initFilter avfilter_graph_parse_ptr fail,%d %s", result, av_err2str(result))
+//        return;
+//    }
     result = avfilter_graph_config(filter_graph, NULL);
     if (result != 0) {
         LOGE("initFilter avfilter_graph_config fail,%d %s", result, av_err2str(result))
-        return;
     }
+    LOGI("initFilter done")
 }
 
 void VideoDecoder::surfaceReCreate(JNIEnv *env, jobject surface) {
@@ -342,10 +389,9 @@ int VideoDecoder::decode(AVPacket *avPacket, AVFrame *frame) {
     mNeedResent = sendRes == AVERROR(EAGAIN) || isEof;
     bool isKeyFrame = avPacket->flags & AV_PKT_FLAG_KEY;
     LOGI(
-            "[video] avcodec_send_packet...pts: %" PRId64 "(%f), dts: %" PRId64 ", isKeyFrame: %d, res: %d, isEof: %d,extra_hw_frames:%d",
+            "[video] avcodec_send_packet...pts: %" PRId64 "(%f), dts: %" PRId64 ", isKeyFrame: %d, res: %d, isEof: %d",
             avPacket->pts, avPacket->pts * av_q2d(getStream()->time_base) * 1000, avPacket->dts,
-            isKeyFrame, sendRes, isEof,
-            mCodecContext->extra_hw_frames)
+            isKeyFrame, sendRes, isEof)
     // avcodec_receive_frame的-11，表示需要发新帧
     receiveRes = avcodec_receive_frame(mCodecContext, pAvFrame);
 
@@ -368,14 +414,18 @@ int VideoDecoder::decode(AVPacket *avPacket, AVFrame *frame) {
 //        mNeedResent = false;
 //        return receiveRes;
 //    }
+
+    int64_t pts = pAvFrame->pts;
+    int keyFrame = pAvFrame->key_frame;
+    AVPictureType type = pAvFrame->pict_type;
     AVFrame *filtered_frame = av_frame_alloc();
     // 将帧发送到filter图中
     int frameFlags = av_buffersrc_add_frame_flags(buffersrcContext, pAvFrame,
                                                   AV_BUFFERSRC_FLAG_PUSH);
     int buffersinkGetFrame = av_buffersink_get_frame(buffersinkContext, filtered_frame);
     if (frameFlags < 0 || buffersinkGetFrame < 0) {
-        LOGI("decode filter frame %d %d time:%f", frameFlags, buffersinkGetFrame,
-             pAvFrame->pts * av_q2d(pAvFrame->time_base));
+        LOGI("decode filter frame %d %d pts:%ld(%f) %d %d", frameFlags, buffersinkGetFrame,
+             pts, pts * av_q2d(getTimeBase()), keyFrame, type);
         av_frame_free(&pAvFrame);
         av_frame_free(&filtered_frame);
         if (isEof && buffersinkGetFrame == AVERROR_EOF) {
@@ -390,16 +440,16 @@ int VideoDecoder::decode(AVPacket *avPacket, AVFrame *frame) {
     filtered_frame->pts = filtered_frame->pts * TimeBaseDiff;
     filtered_frame->pkt_dts = filtered_frame->pts - TimeBaseDiff;
     filtered_frame->time_base = outTimeBase;
-    filtered_frame->duration = TimeBaseDiff;
+    filtered_frame->pkt_duration = TimeBaseDiff;
     convertFrame(filtered_frame, frame);
 //    av_frame_free(&filtered_frame);
 //    filtered_frame = nullptr;
 //    filtered_frame->time_base = outTimeBase;
 
-    LOGI("decode filterframe %ld(%f)  format:%s %d",
+    LOGI("decode convertFrame %ld(%f)  format:%s %d",
          frame->pts,
          frame->pts * av_q2d(outTimeBase),
-         av_get_pix_fmt_name((AVPixelFormat) frame->format), filtered_frame->key_frame)
+         av_get_pix_fmt_name((AVPixelFormat) frame->format), frame->pict_type)
 //    convertFrame(pAvFrame, frame);
 //    frame->time_base = mTimeBase;
 
@@ -407,8 +457,8 @@ int VideoDecoder::decode(AVPacket *avPacket, AVFrame *frame) {
 }
 
 void VideoDecoder::convertFrame(AVFrame *srcFrame, AVFrame *dstFrame) {
-    auto ptsMs = srcFrame->pts * av_q2d(getStream()->time_base) * 1000;
-    LOGI("convertFrame avcodec_receive_frame...pts: %" PRId64 ", time: %f, format: %s, need retry: %d",
+    auto ptsMs = srcFrame->pts * av_q2d(srcFrame->time_base);
+    LOGI("convertFrame avcodec_receive_frame...pts: %" PRId64 "(%f), format: %s, need retry: %d",
          srcFrame->pts, ptsMs, av_get_pix_fmt_name((AVPixelFormat) srcFrame->format),
          mNeedResent)
 
@@ -420,11 +470,9 @@ void VideoDecoder::convertFrame(AVFrame *srcFrame, AVFrame *dstFrame) {
         converSrcFrame->height = srcFrame->height;
         av_frame_get_buffer(converSrcFrame, 0);
         converSrcFrame->pts = srcFrame->pts;
-        converSrcFrame->duration = srcFrame->duration;
+        converSrcFrame->pkt_duration = srcFrame->pkt_duration;
         converSrcFrame->time_base = srcFrame->time_base;
         int ret = converFrameTo420Frame(srcFrame, converSrcFrame);
-        LOGI("convertFrame converFrameTo420Frame ret:%d", ret)
-        av_frame_free(&srcFrame);
         srcFrame = nullptr;
         srcFrame = converSrcFrame;
     }
@@ -440,7 +488,7 @@ void VideoDecoder::convertFrame(AVFrame *srcFrame, AVFrame *dstFrame) {
         }
         rotateFrame->pts = srcFrame->pts;
         rotateFrame->pkt_dts = srcFrame->pkt_dts;
-        rotateFrame->duration = srcFrame->duration;
+        rotateFrame->pkt_duration = srcFrame->pkt_duration;
         rotateFrame->pkt_size = srcFrame->pkt_size;
         rotateFrame->format = srcFrame->format;
         rotateFrame->time_base = srcFrame->time_base;
@@ -487,7 +535,7 @@ void VideoDecoder::convertFrame(AVFrame *srcFrame, AVFrame *dstFrame) {
 
         scaleFrame->pts = srcFrame->pts;
         scaleFrame->pkt_dts = srcFrame->pkt_dts;
-        scaleFrame->duration = srcFrame->duration;
+        scaleFrame->pkt_duration = srcFrame->pkt_duration;
         scaleFrame->pkt_size = srcFrame->pkt_size;
         scaleFrame->time_base = srcFrame->time_base;
         int ret = av_frame_get_buffer(scaleFrame, 0);
@@ -526,7 +574,7 @@ void VideoDecoder::convertFrame(AVFrame *srcFrame, AVFrame *dstFrame) {
 
         cropFrame->pts = srcFrame->pts;
         cropFrame->pkt_dts = srcFrame->pkt_dts;
-        cropFrame->duration = srcFrame->duration;
+        cropFrame->pkt_duration = srcFrame->pkt_duration;
         cropFrame->time_base = srcFrame->time_base;
         int ret = av_frame_get_buffer(cropFrame, 0);
 
@@ -597,7 +645,7 @@ void VideoDecoder::resultCallback(AVFrame *srcFrame) {
     dstFrame->height = dstHeight;
     av_frame_get_buffer(dstFrame, 0);
     dstFrame->pts = srcFrame->pts;
-    dstFrame->duration = srcFrame->duration;
+    dstFrame->pkt_duration = srcFrame->pkt_duration;
     dstFrame->time_base = srcFrame->time_base;
     if (converToSurface(srcFrame, dstFrame) > 0) {
         LOGI("resultCallback converToSurface done")
@@ -620,7 +668,8 @@ void VideoDecoder::showFrameToWindow(AVFrame *pFrame) {
     }
     LOGI("showFrameToWindow pts:%ld(%lf) format:%s data:%p %d %d*%d", pFrame->pts,
          pFrame->pts * av_q2d(pFrame->time_base),
-         av_get_pix_fmt_name((AVPixelFormat) pFrame->format), &pFrame->data[3], pFrame->linesize[0],
+         av_get_pix_fmt_name((AVPixelFormat) pFrame->format), &pFrame->data[3],
+         pFrame->linesize[0],
          pFrame->width, pFrame->height)
     auto startTime = std::chrono::steady_clock::now();
     //将yuv数据转成rgb
@@ -728,17 +777,11 @@ void VideoDecoder::updateTimestamp(AVFrame *frame) {
 }
 
 int VideoDecoder::getWidth() const {
-    if (mOutConfig) {
-        return mOutConfig->getWidth();
-    }
     return mWidth;
 }
 
 
 int VideoDecoder::getHeight() const {
-    if (mOutConfig) {
-        return mOutConfig->getHeight();
-    }
     return mHeight;
 }
 
