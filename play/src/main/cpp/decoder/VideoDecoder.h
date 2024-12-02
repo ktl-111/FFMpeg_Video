@@ -30,17 +30,27 @@ public:
 
     void initConfig(JNIEnv *env, jobject out_config);
 
+    int getTargetWidth();
+
+    int getTargetHeight();
+
+    int getConfigWidth();
+
+    int getConfigHeight();
+
+    int getConfigCropWidth();
+
+    int getConfigCropHeight();
+
+    double getTargetFps() const;
+
+    double getConfigOutFps() const;
+
     int getWidth() const;
 
     int getHeight() const;
 
-    int getCropWidth();
-
-    int getCropHeight();
-
     double getFps() const;
-
-    double getOutFps() const;
 
     void setSurface(jobject surface);
 
@@ -103,11 +113,12 @@ private:
     AVFilterContext *buffersrcContext = nullptr;
 
     void initFilter();
+
     void releaseFilter();
 
-    int converToSurface(AVFrame *srcFrame, AVFrame *dstFrame);
+    int convertToSurface(AVFrame *srcFrame, AVFrame *dstFrame);
 
-    int converFrameTo420Frame(AVFrame *srcFrame, AVFrame *dstFrame);
+    int convertFrameTo420Frame(AVFrame *srcFrame, AVFrame *dstFrame);
 };
 
 

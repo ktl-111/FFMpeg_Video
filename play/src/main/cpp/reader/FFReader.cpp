@@ -1,25 +1,28 @@
 #include <bits/sysconf.h>
 #include "FFReader.h"
 #include "Logger.h"
+#include "CodecUtils.h"
+#include "../globals.h"
 
 
 FFReader::FFReader() {
-    LOGI( "FFReader")
+    LOGI("FFReader")
 }
 
 FFReader::~FFReader() {
     release();
-    LOGI( "~FFReader")
+    LOGI("~FFReader")
 }
 
-bool FFReader::init(std::string &path) {
+std::string FFReader::init(std::string &path, bool userHw) {
     mFtx = avformat_alloc_context();
     int ret = avformat_open_input(&mFtx, path.c_str(), nullptr, nullptr);
     if (ret < 0) {
-        LOGE( "[FFReader], avformat_open_input failed, ret: %d, err: %s", ret, av_err2str(ret))
-        return false;
+        LOGE("[FFReader], avformat_open_input failed, ret: %d, err: %s", ret, av_err2str(ret))
+        std::string msg = av_err2str(ret);
+        return msg;
     }
-    return true;
+    return RESULT_SUCCESS;
 }
 
 void FFReader::release() {
@@ -41,14 +44,18 @@ void FFReader::release() {
     mCurStreamIndex = -1;
     mVideoIndex = -1;
     mAudioIndex = -1;
-    LOGI( "[FFReader], release")
+    LOGI("[FFReader], release")
 }
 
-bool FFReader::selectTrack(TrackType type) {
+bool FFReader::isSuccess(const std::string& result) {
+    return result == RESULT_SUCCESS;
+}
+
+std::string FFReader::selectTrack(TrackType type, bool useHw) {
     mCurTrackType = type;
     if (mCodecContextArr[type] != nullptr) {
         mCurStreamIndex = type == Track_Video ? mVideoIndex : mAudioIndex;
-        return true;
+        return RESULT_SUCCESS;
     }
 
     if (mVideoIndex == -1 || mAudioIndex == -1) {
@@ -64,31 +71,32 @@ bool FFReader::selectTrack(TrackType type) {
         }
     }
     mCurStreamIndex = type == Track_Video ? mVideoIndex : mAudioIndex;
-    LOGI( "[FFReader], electTrack, type: %d, index: %d", type, mCurStreamIndex)
-    int ret = prepare();
-    return ret == 0;
+    LOGI("[FFReader], electTrack, type: %d, index: %d", type, mCurStreamIndex)
+    const std::string &msg = prepare(useHw);
+    return msg;
 }
 
-int FFReader::prepare() {
+std::string FFReader::prepare(bool useHw) {
     if (mCurStreamIndex < 0) {
-        LOGE( "[FFReader], prepare failed, index invalid.")
-        return -1;
+        LOGE("[FFReader], prepare failed, index invalid.")
+        return "mCurStreamIndex<0";
     }
 
     TrackType type = mCurTrackType;
-    LOGI( "[FFReader], prepare, index: %d, type: %d", mCurStreamIndex, type)
+    LOGI("[FFReader], prepare, index: %d, type: %d", mCurStreamIndex, type)
     AVCodecParameters *params = mFtx->streams[mCurStreamIndex]->codecpar;
-    const AVCodec *codec = avcodec_find_decoder(params->codec_id);
+    const AVCodec *codec = CodecUtils::findDecodec(params->codec_id, useHw);
     if (codec == nullptr) {
-        LOGE( "[FFReader], prepare failed, no codec")
-        return -2;
+        LOGE("[FFReader], prepare failed, no codec")
+        return "no find codec";
     }
+    LOGI("[FFReader], prepare, codeName:%s", codec->name)
     mCodecArr[type] = codec;
 
     AVCodecContext *codecContext = avcodec_alloc_context3(mCodecArr[type]);
     if (codecContext == nullptr) {
-        LOGE( "[FFReader], prepare failed, no codec ctx")
-        return -3;
+        LOGE("[FFReader], prepare failed, no codec ctx")
+        return "not codec ctx";
     }
     mCodecContextArr[type] = codecContext;
 
@@ -132,9 +140,16 @@ AVDISCARD_ALL	丢弃所有帧
     codecContext->thread_count = threadCount > 0 ? threadCount : 1;
     int ret = avcodec_open2(codecContext, mCodecArr[type], nullptr);
     if (ret != 0) {
-        LOGE( "[FFReader], open codec failed, name: %s, ret: %d", mCodecArr[type]->name, ret)
+        LOGE("[FFReader], open codec failed, name: %s, ret: %d", mCodecArr[type]->name, ret)
+        std::string errorMsg = av_err2str(ret);
+        return errorMsg;
+    } else {
+        return RESULT_SUCCESS;
     }
-    return ret;
+}
+
+const AVCodec *FFReader::getCodec() {
+    return mCodecArr[mCurTrackType];
 }
 
 int FFReader::fetchAvPacket(AVPacket *pkt) {
@@ -170,7 +185,7 @@ int FFReader::getKeyFrameIndex(int64_t timestamp) {
 }
 
 void FFReader::flush() {
-    LOGI( "[FFReader], avcodec_flush_buffers")
+    LOGI("[FFReader], avcodec_flush_buffers")
     avcodec_flush_buffers(mCodecContextArr[mCurTrackType]);
 }
 
@@ -180,12 +195,12 @@ void FFReader::seek(int64_t timestamp) {
     int ret = avformat_seek_file(mFtx, mCurStreamIndex, INT64_MIN, seekPos, INT64_MAX,
                                  AVSEEK_FLAG_BACKWARD | AVSEEK_FLAG_FRAME);
     if (ret < 0) {
-        LOGE( "[FFReader], avformat_seek_file failed, ret: %d, timestamp: %" PRId64, ret,
+        LOGE("[FFReader], avformat_seek_file failed, ret: %d, timestamp: %" PRId64, ret,
              timestamp)
     } else {
         LOGI(
-             "[FFReader], avformat_seek_file, ret: %d, timestamp: %" PRId64 ", seekPos: %" PRId64,
-             ret, timestamp, seekPos)
+                "[FFReader], avformat_seek_file, ret: %d, timestamp: %" PRId64 ", seekPos: %" PRId64,
+                ret, timestamp, seekPos)
     }
 }
 

@@ -24,6 +24,7 @@ class PlayManager : IPaly {
         MutableStateFlow(true)
     }
     private var callStop = false
+    private var callCutting = false
     private val seekFlow by lazy {
         MutableSharedFlow<SeekBean>(1, 0, BufferOverflow.DROP_OLDEST).also { flow ->
             MediaScope.launch(Dispatchers.Default) {
@@ -34,8 +35,8 @@ class PlayManager : IPaly {
                         old == new
                     }
                 }.onEach { seekBean ->
-                    LogHelper.i(TAG, "flow seek start: ${seekBean},callStop:$callStop")
-                    if (callStop) {
+                    LogHelper.i(TAG, "flow seek start: ${seekBean},callStop:$callStop,callCutting:${callCutting}")
+                    if (callStop || callCutting) {
                         return@onEach;
                     }
                     seekDoneFlow.value = false
@@ -102,9 +103,11 @@ class PlayManager : IPaly {
         }
     }
 
+    @OptIn(ExperimentalCoroutinesApi::class)
     override fun seekTo(seekTime: Long, nextStep: Step) {
         if (this::mProxy.isInitialized) {
             MediaScope.launch(Dispatchers.IO) {
+                seekFlow.resetReplayCache()
                 seekFlow.emit(SeekBean(seekTime, nextStep))
             }
         }
@@ -150,8 +153,10 @@ class PlayManager : IPaly {
     @OptIn(ExperimentalCoroutinesApi::class)
     override fun cutting(srcPath: String, destPath: String, startTime: Long, endTime: Long, outConfig: OutConfig?, cb: FFMpegUtils.VideoCuttingInterface) {
         if (this::mProxy.isInitialized) {
+            callCutting = true
             seekFlow.resetReplayCache()
             mProxy.cutting(srcPath, destPath, startTime, endTime, outConfig, cb)
+            callCutting = false
         }
     }
 }

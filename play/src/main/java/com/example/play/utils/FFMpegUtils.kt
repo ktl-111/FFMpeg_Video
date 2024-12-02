@@ -1,7 +1,11 @@
 package com.example.play.utils
 
+import android.os.Build
 import androidx.annotation.Keep
 import com.example.play.config.OutConfig
+import com.example.play.data.DecodeData
+import com.example.play.data.DecodeFrameData
+import com.example.play.data.PhoneData
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
@@ -50,6 +54,31 @@ object FFMpegUtils {
         fun onDone()
     }
 
+    /**
+     * 获取解码数据
+     * @param path String?
+     * @param useHwDecode Boolean 是否硬解
+     * @return DecodeData
+     */
+    fun getDecodeData(path: String?, useHwDecode: Boolean): DecodeData {
+        return if (path.isNullOrEmpty()) {
+            DecodeData(prepareMsg = "path is null or empty")
+        } else {
+            nativeTestDecode(path, useHwDecode, DecodeData())
+        }.also {
+            it.useHwDecode = useHwDecode
+            it.phoneData = PhoneData(Build.MODEL, isCpuV8(), Build.VERSION.RELEASE, Runtime.getRuntime().availableProcessors())
+        }
+    }
+
+    private fun isCpuV8(): Boolean {
+        return kotlin.runCatching {
+            Build.SUPPORTED_64_BIT_ABIS.find { it == "arm64-v8a" } != null
+        }.getOrElse { false }
+    }
+
+    private external fun nativeTestDecode(path: String, useHwDecode: Boolean, decodeData: DecodeData): DecodeData
+
     fun getVideoFrames(
         path: String?, width: Int, height: Int, precise: Boolean, cb: VideoFrameArrivedInterface
     ) {
@@ -92,20 +121,11 @@ object FFMpegUtils {
 
     private external fun nativeSetNativeLogLevel(logLevel: Int)
 
-    /**
-     * 画幅裁切   eg：视频分辨率大小的处理，切成手表的长宽比例
-     *
-     * @param src    原视频路径
-     * @param dest   输出视频路径
-     * @param width  分辨率调整后的宽
-     * @param height 分辨率调整后的高
-     * @return 状态 0成功
-     */
-    external fun crop(src: String?, dest: String?, width: Int, height: Int): Int
-
     private fun allocateFrame(width: Int, height: Int): ByteBuffer {
         return ByteBuffer.allocateDirect(width * height * 4).order(ByteOrder.LITTLE_ENDIAN)
     }
+
+    private fun allocateDecodeFrameData(): DecodeFrameData = DecodeFrameData()
 
     /**
      *设置nativelog打印等级,生产环境建议只打印error

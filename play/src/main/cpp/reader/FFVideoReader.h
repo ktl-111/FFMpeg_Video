@@ -11,18 +11,19 @@ public:
 
     ~FFVideoReader();
 
-    bool init(std::string &path) override;
+    std::string init(std::string &path, bool useHw) override;
 
     static int getRotate(AVStream *stream);
 
     int getRotate();
+    int getFps();
 
     void getFrame(int64_t pts, int width, int height, uint8_t *buffer, bool precise = true);
 
-    void getNextFrame(const std::function<void(AVFrame *)> &frameArrivedCallback);
+    void getNextFrame(const std::function<void(int sendCount, double costMilli,
+                                 AVFrame *,std::string errorMsg)> &frameArrivedCallback);
 
 private:
-    bool mInit = false;
 
     int64_t mLastPts = -1;
 

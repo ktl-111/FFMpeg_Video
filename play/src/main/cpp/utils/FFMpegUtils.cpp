@@ -9,6 +9,8 @@
 #include "YuvUtil.h"
 #include "libyuv/video_common.h"
 #include "VideoDecoder.h"
+#include "VideoFrameUtil.h"
+#include "CodecUtils.h"
 
 extern "C" {
 #include "libavfilter/avfilter.h"
@@ -44,7 +46,7 @@ Java_com_example_play_utils_FFMpegUtils_getVideoFramesCore(JNIEnv *env, jobject 
     FFVideoReader *videoReader = new FFVideoReader();
     videoReader->setDiscardType(DISCARD_NONREF);
     LOGI("getVideoFramesCore path:%s", c_path)
-    videoReader->init(s_path);
+    videoReader->init(s_path, false);
 
 
     int videoWidth = videoReader->getMediaInfo().width;
@@ -108,8 +110,8 @@ Java_com_example_play_utils_FFMpegUtils_nativeCutting(JNIEnv *env, jobject thiz,
                                                       jlong endtime,
                                                       jobject out_config,
                                                       jobject callback) {
-    double start_time = starttime / 1000;
-    double end_time = endtime / 1000;
+    double start_time = starttime / 1000.0;
+    double end_time = endtime / 1000.0;
     double progress = 0;
     // callback
     jclass jcalss = env->GetObjectClass(callback);
@@ -148,13 +150,11 @@ Java_com_example_play_utils_FFMpegUtils_nativeCutting(JNIEnv *env, jobject thiz,
                                                                                 inFormatContext);
     videoDecoder->initConfig(env, out_config);
 
-    int outWidth = videoDecoder->getWidth();
-    int outHeight = videoDecoder->getHeight();
-    int cropWidth = videoDecoder->getCropWidth();
-    int cropHeight = videoDecoder->getCropHeight();
-    int outFps = (int) videoDecoder->getOutFps();
+    int outFps = (int) videoDecoder->getConfigOutFps();
     double srcFps = videoDecoder->getFps();
-    if (srcFps < outFps) {
+    if (outFps == 0) {
+        outFps = (int) srcFps;
+    } else if (srcFps < outFps) {
         LOGI("cutting src srcFps:(%f) < outFps:(%d)", srcFps, outFps)
         outFps = (int) srcFps;
     }
@@ -267,11 +267,11 @@ Java_com_example_play_utils_FFMpegUtils_nativeCutting(JNIEnv *env, jobject thiz,
     outStream->avg_frame_rate = {outFps, 1};
     outStream->time_base = outTimeBase;
     outStream->start_time = 0;
-    outStream->codecpar->width = cropWidth != 0 ? cropWidth : outWidth;
-    outStream->codecpar->height = cropHeight != 0 ? cropHeight : outHeight;
-//    av_dict_copy(&outStream->metadata, inSteram->metadata, 0);
-//    outStream->side_data = inSteram->side_data;
-//    outStream->nb_side_data = inSteram->nb_side_data;
+    outStream->codecpar->width = videoDecoder->getTargetWidth();
+    outStream->codecpar->height = videoDecoder->getTargetHeight();
+    //    av_dict_copy(&outStream->metadata, inSteram->metadata, 0);
+    //    outStream->side_data = inSteram->side_data;
+    //    outStream->nb_side_data = inSteram->nb_side_data;
     //查找解码器
     const AVCodec *encoder = avcodec_find_encoder(outStream->codecpar->codec_id);
     if (!encoder) {
@@ -292,15 +292,14 @@ Java_com_example_play_utils_FFMpegUtils_nativeCutting(JNIEnv *env, jobject thiz,
     } else {
         encodeContext->pix_fmt = decodecContext->pix_fmt;
     }
-//    encodeContext->sample_aspect_ratio = decodecContext->sample_aspect_ratio;
+    //    encodeContext->sample_aspect_ratio = decodecContext->sample_aspect_ratio;
     encodeContext->max_b_frames = 0;//不需要B帧
     encodeContext->gop_size = outStream->avg_frame_rate.num;//多少帧一个I帧
-    // 调节编码速度(这里选择的是最快)
-    int re = av_opt_set(encodeContext->priv_data, "preset", "veryfast", 0);
-    if (re != 0) {
+
+    //ultrafast,superfast,veryfast
+    result = av_opt_set(encodeContext->priv_data, "preset", "veryfast", 0);
+    if (result != 0) {
         LOGI("cutting priv_data set fail,%d %s", result, av_err2str(result))
-        env->CallVoidMethod(callback, onFail, ERRORCODE_AVCODEC_OPEN2);
-        return;
     }
 
     result = avcodec_open2(encodeContext, encoder, NULL);
@@ -319,7 +318,7 @@ Java_com_example_play_utils_FFMpegUtils_nativeCutting(JNIEnv *env, jobject thiz,
     LOGI("cutting name:%s", avcodec_get_name(outFormatContext->video_codec_id))
     // 打开输出文件
     if (avio_open(&outFormatContext->pb, c_desPath, AVIO_FLAG_WRITE) < 0 ||
-        avformat_write_header(outFormatContext, NULL) < 0) {
+            avformat_write_header(outFormatContext, NULL) < 0) {
         LOGE("cutting not open des");
         env->CallVoidMethod(callback, onFail, ERRORCODE_OPEN_FILE);
         return;
@@ -385,8 +384,8 @@ Java_com_example_play_utils_FFMpegUtils_nativeCutting(JNIEnv *env, jobject thiz,
                                                           AV_BUFFERSRC_FLAG_KEEP_REF);
             int buffersinkGetFrame = av_buffersink_get_frame(buffersinkContext, filtered_frame);
             if (frameFlags <
-                0 ||
-                buffersinkGetFrame < 0) {
+                    0 ||
+                    buffersinkGetFrame < 0) {
                 LOGI("cutting filter frame %d %d", frameFlags, buffersinkGetFrame);
                 if (buffersinkGetFrame == AVERROR(EAGAIN)) {
                     av_frame_free(&frame);
@@ -536,4 +535,106 @@ Java_com_example_play_utils_FFMpegUtils_nativeCutting(JNIEnv *env, jobject thiz,
     progress = 100;
     env->CallVoidMethod(callback, onProgress, progress);
     env->CallVoidMethod(callback, onDone);
+}
+
+extern "C"
+JNIEXPORT jobject JNICALL
+Java_com_example_play_utils_FFMpegUtils_nativeTestDecode(JNIEnv *env, jobject thiz,
+                                                         jstring path,
+                                                         jboolean useHwDecode,
+                                                         jobject decodeData) {
+
+
+    jclass dataClass = env->FindClass("com/example/play/data/DecodeData");
+
+    const char *srcPath = env->GetStringUTFChars(path, nullptr);
+    std::string s_path = srcPath;
+    FFVideoReader *videoReader = new FFVideoReader();
+    videoReader->setDiscardType(DISCARD_NONREF);
+    const std::string &result = videoReader->init(s_path, useHwDecode);
+
+    env->SetObjectField(decodeData,
+                        env->GetFieldID(dataClass, "prepareMsg", "Ljava/lang/String;"),
+                        env->NewStringUTF(result.c_str()));
+
+
+    LOGI("TestHwDecode path:%s", srcPath)
+    if (!FFReader::isSuccess(result)) {
+        env->ReleaseStringUTFChars(path, srcPath);
+        env->DeleteLocalRef(dataClass);
+
+        videoReader->release();
+        delete videoReader;
+        return decodeData;
+    }
+
+    const char *codecName = videoReader->getCodec()->name;
+    int width = videoReader->getMediaInfo().width;
+    int height = videoReader->getMediaInfo().height;
+    double duration = videoReader->getDuration();
+    int rotate = videoReader->getRotate();
+    int fps = videoReader->getFps();
+
+    env->SetIntField(decodeData, env->GetFieldID(dataClass, "width", "I"), width);
+    env->SetIntField(decodeData, env->GetFieldID(dataClass, "height", "I"), height);
+    env->SetIntField(decodeData, env->GetFieldID(dataClass, "fps", "I"), fps);
+    env->SetDoubleField(decodeData, env->GetFieldID(dataClass, "duration", "D"), duration);
+    env->SetIntField(decodeData, env->GetFieldID(dataClass, "rotate", "I"), rotate);
+
+    env->SetObjectField(decodeData, env->GetFieldID(dataClass, "codeName", "Ljava/lang/String;"),
+                        env->NewStringUTF(codecName));
+    jobject listData = env->GetObjectField(decodeData, env->GetFieldID(dataClass, "frameDatas",
+                                                                       "Ljava/util/ArrayList;"));
+    jclass listClass = env->FindClass("java/util/ArrayList");
+    jmethodID addMethod = env->GetMethodID(listClass, "add", "(Ljava/lang/Object;)Z");
+
+    int decodeCount = 0;
+
+    while (true) {
+        decodeCount++;
+        if (decodeCount > 5) {
+            break;
+        }
+        videoReader->getNextFrame(
+                [env, thiz, listData, addMethod](int sendPacketCount, double costMilli,
+                                                 AVFrame *frame, std::string errorMsg) {
+                    jmethodID allocateDecodeFrameData = env->GetMethodID(env->GetObjectClass(thiz),
+                                                                         "allocateDecodeFrameData",
+                                                                         "()Lcom/example/play/data/DecodeFrameData;");
+                    jobject frameData = env->CallObjectMethod(thiz, allocateDecodeFrameData);
+
+                    jclass frameClass = env->FindClass(
+                            "com/example/play/data/DecodeFrameData");
+
+                    env->SetIntField(frameData, env->GetFieldID(frameClass, "sendPacketCount", "I"),
+                                     sendPacketCount);
+                    env->SetDoubleField(frameData,
+                                        env->GetFieldID(frameClass, "decodeCostTime", "D"),
+                                        costMilli);
+                    env->SetObjectField(frameData,
+                                        env->GetFieldID(frameClass, "decodeResult",
+                                                        "Ljava/lang/String;"),
+                                        env->NewStringUTF(errorMsg.c_str()));
+                    if (frame) {
+                        env->SetIntField(frameData, env->GetFieldID(frameClass, "pictType", "I"),
+                                         (int) frame->pict_type);
+                        const char *format = av_get_pix_fmt_name((AVPixelFormat) frame->format);
+
+                        env->SetObjectField(frameData,
+                                            env->GetFieldID(frameClass, "frameFormat",
+                                                            "Ljava/lang/String;"),
+                                            env->NewStringUTF(format));
+
+                    }
+
+                    env->CallBooleanMethod(listData, addMethod, frameData);
+                });
+    }
+    env->ReleaseStringUTFChars(path, srcPath);
+    env->DeleteLocalRef(dataClass);
+
+    videoReader->release();
+    delete videoReader;
+    dataClass = nullptr;
+    return decodeData;
 }

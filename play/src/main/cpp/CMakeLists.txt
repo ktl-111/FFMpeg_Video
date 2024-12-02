@@ -43,13 +43,7 @@ add_library(ffmpegplayer SHARED
 target_link_libraries(
         ffmpegplayer
         log
-        avcodec
-        avfilter
-        avformat
-        avutil
-        swresample
-        swscale
-        x264
+        ffmpeg
         android
         OpenSLES
         yuv)

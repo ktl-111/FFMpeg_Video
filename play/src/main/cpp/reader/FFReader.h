@@ -40,12 +40,15 @@ typedef struct MediaInfo {
 class FFReader {
 
 public:
+    static bool isSuccess(const std::string& result);
+
     FFReader();
+
     virtual ~FFReader();
 
-    virtual bool init(std::string &path);
+    virtual std::string init(std::string &path, bool useHw);
 
-    bool selectTrack(TrackType type);
+    std::string selectTrack(TrackType type, bool useHw);
 
     int fetchAvPacket(AVPacket *pkt);
 
@@ -78,6 +81,8 @@ public:
 
     void release();
 
+    const AVCodec *getCodec();
+
 protected:
     AVFormatContext *mFtx = nullptr;
     MediaInfo mMediaInfo;
@@ -93,7 +98,7 @@ private:
 
     DiscardType mDiscardType = DISCARD_NONE;
 
-    int prepare();
+    std::string prepare(bool useHw);
 };
 
 

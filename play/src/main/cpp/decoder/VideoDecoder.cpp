@@ -10,6 +10,8 @@
 #include "libyuv/convert_argb.h"
 #include "../globals.h"
 #include "libyuv/video_common.h"
+#include "VideoFrameUtil.h"
+#include "CodecUtils.h"
 
 VideoDecoder::VideoDecoder(int index, AVFormatContext *ftx) : BaseDecoder(index, ftx) {
     mSeekMutexObj = std::make_shared<MutexObj>();
@@ -81,7 +83,6 @@ void VideoDecoder::initConfig(JNIEnv *env, jobject out_config) {
 
         outWidth += outWidth % 2;
         outHeight += outHeight % 2;
-//
 
         outConfig = std::make_shared<OutConfig>(outWidth, outHeight, cropWidth, cropHeight,
                                                 outFps);
@@ -108,67 +109,7 @@ bool VideoDecoder::prepare(JNIEnv *env) {
 
     AVCodecParameters *params = stream->codecpar;
 
-    bool useHwDecoder = true;
-    std::string mediacodecName;
-    if (useHwDecoder) {
-        switch (params->codec_id) {
-            case AV_CODEC_ID_H264:
-                mediacodecName = "h264_mediacodec";
-                break;
-            case AV_CODEC_ID_HEVC:
-                mediacodecName = "hevc_mediacodec";
-                break;
-            default:
-                useHwDecoder = false;
-                LOGE("prepare format(%d) not support hw decode, maybe rebuild ffmpeg so",
-                     params->codec_id)
-                break;
-        }
-        if (useHwDecoder) {
-            enum AVPixelFormat hw_pix_fmt = AV_PIX_FMT_NONE;
-            AVHWDeviceType type = av_hwdevice_find_type_by_name("mediacodec");
-            const AVCodec *mediacodec = avcodec_find_decoder_by_name(mediacodecName.c_str());
-            if (mediacodec) {
-                LOGE("prepare find %s", mediacodecName.c_str())
-                for (int i = 0;; ++i) {
-                    const AVCodecHWConfig *config = avcodec_get_hw_config(mediacodec, i);
-                    if (!config) {
-                        LOGE("prepare Decoder: %s does not support device type: %s",
-                             mediacodec->name,
-                             av_hwdevice_get_type_name(type))
-                        break;
-                    }
-                    if (config->methods & AV_CODEC_HW_CONFIG_METHOD_HW_DEVICE_CTX &&
-                            config->device_type == type) {
-                        // AV_PIX_FMT_MEDIACODEC(165)
-                        hw_pix_fmt = config->pix_fmt;
-                        LOGI("prepare Decoder: %s support device type: %s, hw_pix_fmt: %d, AV_PIX_FMT_MEDIACODEC: %d",
-                             mediacodec->name, av_hwdevice_get_type_name(type), hw_pix_fmt,
-                             AV_PIX_FMT_MEDIACODEC);
-                        break;
-                    }
-                }
-
-                if (hw_pix_fmt != AV_PIX_FMT_NONE) {
-                    mVideoCodec = mediacodec;
-                }
-            }
-        }
-    }
-    if (mVideoCodec == nullptr) {
-        std::string codecName;
-        if (params->codec_id == AV_CODEC_ID_H264) {
-            codecName = "h264";
-        } else if (params->codec_id == AV_CODEC_ID_HEVC) {
-            codecName = "hevc";
-        }
-        if (!codecName.empty()) {
-            mVideoCodec = avcodec_find_decoder_by_name(codecName.c_str());
-        } else {
-            mVideoCodec = avcodec_find_decoder(params->codec_id);
-        }
-    }
-    LOGI("prepare find codec %s", mVideoCodec->name)
+    mVideoCodec = CodecUtils::findDecodec(params->codec_id, false);
 
     if (mVideoCodec == nullptr) {
         std::string msg = "not find decoder";
@@ -193,9 +134,7 @@ bool VideoDecoder::prepare(JNIEnv *env) {
         nativeWindow = ANativeWindow_fromSurface(env, mSurface);
         //修改缓冲区格式和大小,对应视频格式和大小
 
-        ANativeWindow_setBuffersGeometry(nativeWindow,
-                                         getCropWidth() != 0 ? getCropWidth() : getWidth(),
-                                         getCropHeight() != 0 ? getCropHeight() : getHeight(),
+        ANativeWindow_setBuffersGeometry(nativeWindow, getTargetWidth(), getTargetHeight(),
                                          WINDOW_FORMAT_RGBA_8888);
     }
     // 根据设备核心数设置线程数
@@ -290,22 +229,22 @@ void VideoDecoder::initFilter() {
     inputs->filter_ctx = buffersinkContext;
     inputs->pad_idx = 0;
     inputs->next = NULL;
-    int fps = getOutFps();
+    int fps = getTargetFps();
     char *fpsFilter = new char[sizeof(fps)];
     sprintf(fpsFilter, "%d", fps);
     const AVFilter *pFilter = avfilter_get_by_name("fps");
     AVFilterContext *fpsContext;
     avfilter_graph_create_filter(&fpsContext, pFilter, "fps",
                                  fpsFilter, NULL, filter_graph);
+    //    //buffer->输出(outputs)->filter in(av_strdup("in")->fps filter->filter out(av_strdup("out"))->输入(inputs)->buffersink
     avfilter_link(buffersrcContext, 0, fpsContext, 0);
     avfilter_link(fpsContext, 0, buffersinkContext, 0);
 
-//    //buffer->输出(outputs)->filter in(av_strdup("in")->fps filter->filter out(av_strdup("out"))->输入(inputs)->buffersink
-//    result = avfilter_graph_parse_ptr(filter_graph, "fps=30", &inputs, &outputs, NULL);
-//    if (result != 0) {
-//        LOGE("initFilter avfilter_graph_parse_ptr fail,%d %s", result, av_err2str(result))
-//        return;
-//    }
+    //    result = avfilter_graph_parse_ptr(filter_graph, "fps=30", &inputs, &outputs, NULL);
+    //    if (result != 0) {
+    //        LOGE("initFilter avfilter_graph_parse_ptr fail,%d %s", result, av_err2str(result))
+    //        return;
+    //    }
     result = avfilter_graph_config(filter_graph, NULL);
     if (result != 0) {
         LOGE("initFilter avfilter_graph_config fail,%d %s", result, av_err2str(result))
@@ -319,9 +258,7 @@ void VideoDecoder::surfaceReCreate(JNIEnv *env, jobject surface) {
     //创建nativewindow
     nativeWindow = ANativeWindow_fromSurface(env, mSurface);
     //修改缓冲区格式和大小,对应视频格式和大小
-    ANativeWindow_setBuffersGeometry(nativeWindow,
-                                     getCropWidth() != 0 ? getCropWidth() : getWidth(),
-                                     getCropHeight() != 0 ? getCropHeight() : getHeight(),
+    ANativeWindow_setBuffersGeometry(nativeWindow, getTargetWidth(), getTargetHeight(),
                                      WINDOW_FORMAT_RGBA_8888);
     if (dstWindowBuffer) {
         //windowBuffer 入参出参,
@@ -344,9 +281,9 @@ void VideoDecoder::surfaceDestroy(JNIEnv *env) {
     nativeWindow = nullptr;
 }
 
-int VideoDecoder::converFrameTo420Frame(AVFrame *srcFrame, AVFrame *dstFrame) {
+int VideoDecoder::convertFrameTo420Frame(AVFrame *srcFrame, AVFrame *dstFrame) {
     if (mTransformContext == nullptr) {
-        LOGI("converFrameTo420Frame %d,%d,%s   %d,%d,%s", srcFrame->width, srcFrame->height,
+        LOGI("convertFrameTo420Frame %d,%d,%s   %d,%d,%s", srcFrame->width, srcFrame->height,
              av_get_pix_fmt_name(AVPixelFormat(srcFrame->format)), dstFrame->width,
              dstFrame->height,
              av_get_pix_fmt_name(AVPixelFormat(dstFrame->format)))
@@ -388,70 +325,73 @@ int VideoDecoder::decode(AVPacket *avPacket, AVFrame *frame) {
     sendRes = avcodec_send_packet(mCodecContext, avPacket);
     mNeedResent = sendRes == AVERROR(EAGAIN) || isEof;
     bool isKeyFrame = avPacket->flags & AV_PKT_FLAG_KEY;
-    LOGI(
-            "[video] avcodec_send_packet...pts: %" PRId64 "(%f), dts: %" PRId64 ", isKeyFrame: %d, res: %d, isEof: %d",
-            avPacket->pts, avPacket->pts * av_q2d(getStream()->time_base) * 1000, avPacket->dts,
-            isKeyFrame, sendRes, isEof)
+    LOGI("[video] avcodec_send_packet...pts: %" PRId64 "(%f), dts: %" PRId64 ", isKeyFrame: %d, res: %d, isEof: %d",
+         avPacket->pts, avPacket->pts * av_q2d(getStream()->time_base) * 1000, avPacket->dts,
+         isKeyFrame, sendRes, isEof)
     // avcodec_receive_frame的-11，表示需要发新帧
     receiveRes = avcodec_receive_frame(mCodecContext, pAvFrame);
 
     LOGI("[video] avcodec_receive_frame %d %s", receiveRes, av_err2str(receiveRes))
 
+    AVFrame *filtered_frame = nullptr;
     if (receiveRes != 0) {
         LOGI("[video] avcodec_receive_frame err: %d, resent: %d", receiveRes, mNeedResent)
         av_frame_free(&pAvFrame);
-        // force EOF
         if (isEof && receiveRes == AVERROR_EOF) {
             receiveRes = AVERROR_EOF;
             mNeedResent = false;
         }
-        return receiveRes;
-    }
-//    if (pAvFrame-) {
-//        av_frame_free(&pAvFrame);
-//        //概率性receiveRes==0，但是获取的数据是eof
-//        receiveRes = AVERROR_EOF;
-//        mNeedResent = false;
-//        return receiveRes;
-//    }
-
-    int64_t pts = pAvFrame->pts;
-    int keyFrame = pAvFrame->key_frame;
-    AVPictureType type = pAvFrame->pict_type;
-    AVFrame *filtered_frame = av_frame_alloc();
-    // 将帧发送到filter图中
-    int frameFlags = av_buffersrc_add_frame_flags(buffersrcContext, pAvFrame,
-                                                  AV_BUFFERSRC_FLAG_PUSH);
-    int buffersinkGetFrame = av_buffersink_get_frame(buffersinkContext, filtered_frame);
-    if (frameFlags < 0 || buffersinkGetFrame < 0) {
-        LOGI("decode filter frame %d %d pts:%ld(%f) %d %d", frameFlags, buffersinkGetFrame,
-             pts, pts * av_q2d(getTimeBase()), keyFrame, type);
-        av_frame_free(&pAvFrame);
-        av_frame_free(&filtered_frame);
-        if (isEof && buffersinkGetFrame == AVERROR_EOF) {
-            buffersinkGetFrame = AVERROR_EOF;
+        if (receiveRes == AVERROR_EOF) {
+            //需要check filter里还有无数据
+            filtered_frame = av_frame_alloc();
+            int frameFlags = av_buffersrc_add_frame_flags(buffersrcContext, nullptr,
+                                                          AV_BUFFERSRC_FLAG_PUSH);
+            int buffersinkGetFrame = av_buffersink_get_frame(buffersinkContext, filtered_frame);
+            LOGI("decode AVERROR_EOF filter frame %d %d ", frameFlags, buffersinkGetFrame)
+            if (buffersinkGetFrame == AVERROR_EOF) {
+                mNeedResent = false;
+                return AVERROR_EOF;
+            }
+            receiveRes = 0;
             mNeedResent = false;
+        } else {
+            return receiveRes;
         }
-        return buffersinkGetFrame;
+    } else {
+        LOGI("decode sendFilter %ld(%f)", pAvFrame->pts, pAvFrame->pts * av_q2d(getTimeBase()))
+        int64_t pts = pAvFrame->pts;
+        int keyFrame = pAvFrame->key_frame;
+        AVPictureType type = pAvFrame->pict_type;
+        filtered_frame = av_frame_alloc();
+        // 将帧发送到filter图中
+        int frameFlags = av_buffersrc_add_frame_flags(buffersrcContext, pAvFrame,
+                                                      AV_BUFFERSRC_FLAG_PUSH);
+        int buffersinkGetFrame = av_buffersink_get_frame(buffersinkContext, filtered_frame);
+        if (frameFlags < 0 || buffersinkGetFrame < 0) {
+            LOGI("decode filter frame %d %d pts:%ld(%f) %d %d", frameFlags, buffersinkGetFrame,
+                 pts, pts * av_q2d(getTimeBase()), keyFrame, type);
+            av_frame_free(&pAvFrame);
+            av_frame_free(&filtered_frame);
+            if (buffersinkGetFrame == AVERROR_EOF) {
+                buffersinkGetFrame = AVERROR_EOF;
+                mNeedResent = false;
+            }
+            return buffersinkGetFrame;
+        }
     }
 
-    AVRational outTimeBase = {1, (int) getOutFps() * TimeBaseDiff};
+    AVRational outTimeBase = {1, (int) getTargetFps() * TimeBaseDiff};
 
     filtered_frame->pts = filtered_frame->pts * TimeBaseDiff;
     filtered_frame->pkt_dts = filtered_frame->pts - TimeBaseDiff;
     filtered_frame->time_base = outTimeBase;
     filtered_frame->pkt_duration = TimeBaseDiff;
     convertFrame(filtered_frame, frame);
-//    av_frame_free(&filtered_frame);
-//    filtered_frame = nullptr;
-//    filtered_frame->time_base = outTimeBase;
 
     LOGI("decode convertFrame %ld(%f)  format:%s %d",
          frame->pts,
          frame->pts * av_q2d(outTimeBase),
          av_get_pix_fmt_name((AVPixelFormat) frame->format), frame->pict_type)
-//    convertFrame(pAvFrame, frame);
-//    frame->time_base = mTimeBase;
 
     return receiveRes;
 }
@@ -462,7 +402,6 @@ void VideoDecoder::convertFrame(AVFrame *srcFrame, AVFrame *dstFrame) {
          srcFrame->pts, ptsMs, av_get_pix_fmt_name((AVPixelFormat) srcFrame->format),
          mNeedResent)
 
-    bool isRotate = mRotate != 0;
     if (srcFrame->format != AV_PIX_FMT_YUV420P) {
         AVFrame *converSrcFrame = av_frame_alloc();
         converSrcFrame->format = AV_PIX_FMT_YUV420P;
@@ -472,40 +411,14 @@ void VideoDecoder::convertFrame(AVFrame *srcFrame, AVFrame *dstFrame) {
         converSrcFrame->pts = srcFrame->pts;
         converSrcFrame->pkt_duration = srcFrame->pkt_duration;
         converSrcFrame->time_base = srcFrame->time_base;
-        int ret = converFrameTo420Frame(srcFrame, converSrcFrame);
+        int ret = convertFrameTo420Frame(srcFrame, converSrcFrame);
+        av_frame_free(&srcFrame);
         srcFrame = nullptr;
         srcFrame = converSrcFrame;
     }
 
-    if (isRotate) {
-        AVFrame *rotateFrame = av_frame_alloc();
-        if (mRotate == 90 || mRotate == 270) {
-            rotateFrame->width = srcFrame->height;
-            rotateFrame->height = srcFrame->width;
-        } else {
-            rotateFrame->width = srcFrame->width;
-            rotateFrame->height = srcFrame->height;
-        }
-        rotateFrame->pts = srcFrame->pts;
-        rotateFrame->pkt_dts = srcFrame->pkt_dts;
-        rotateFrame->pkt_duration = srcFrame->pkt_duration;
-        rotateFrame->pkt_size = srcFrame->pkt_size;
-        rotateFrame->format = srcFrame->format;
-        rotateFrame->time_base = srcFrame->time_base;
-        int ret = av_frame_get_buffer(rotateFrame, 0);
-        LOGI("convertFrame decode av_frame_get_buffer %d", ret)
-        ret = libyuv::I420Rotate(srcFrame->data[0], srcFrame->linesize[0],
-                                 srcFrame->data[1], srcFrame->linesize[1],
-                                 srcFrame->data[2], srcFrame->linesize[2],
-                                 rotateFrame->data[0], rotateFrame->linesize[0],
-                                 rotateFrame->data[1], rotateFrame->linesize[1],
-                                 rotateFrame->data[2], rotateFrame->linesize[2],
-                                 srcFrame->width, srcFrame->height,
-                                 libyuv::RotationMode(mRotate));
-        LOGI("convertFrame I420Rotate %d %d*%d", ret, rotateFrame->width, rotateFrame->height)
-        av_frame_free(&srcFrame);
-        srcFrame = nullptr;
-        srcFrame = rotateFrame;
+    if (mRotate) {
+        srcFrame = VideoFrameUtil::rotate(srcFrame, mRotate);
     }
 
     int dstWidth;
@@ -528,36 +441,7 @@ void VideoDecoder::convertFrame(AVFrame *srcFrame, AVFrame *dstFrame) {
     }
     LOGI("convertFrame needScale:%d %d*%d", needScale, dstWidth, dstHeight)
     if (needScale) {
-        AVFrame *scaleFrame = av_frame_alloc();
-        scaleFrame->width = dstWidth;
-        scaleFrame->height = dstHeight;
-        scaleFrame->format = srcFrame->format;
-
-        scaleFrame->pts = srcFrame->pts;
-        scaleFrame->pkt_dts = srcFrame->pkt_dts;
-        scaleFrame->pkt_duration = srcFrame->pkt_duration;
-        scaleFrame->pkt_size = srcFrame->pkt_size;
-        scaleFrame->time_base = srcFrame->time_base;
-        int ret = av_frame_get_buffer(scaleFrame, 0);
-        if (srcFrame->format == AV_PIX_FMT_BGRA) {
-            ret = libyuv::ARGBScale(srcFrame->data[0], srcFrame->linesize[0],
-                                    srcFrame->width, srcFrame->height,
-                                    scaleFrame->data[0], scaleFrame->linesize[0],
-                                    dstWidth, dstHeight, libyuv::kFilterNone);
-        } else {
-            ret = libyuv::I420Scale(srcFrame->data[0], srcFrame->linesize[0],
-                                    srcFrame->data[1], srcFrame->linesize[1],
-                                    srcFrame->data[2], srcFrame->linesize[2],
-                                    srcFrame->width, srcFrame->height,
-                                    scaleFrame->data[0], scaleFrame->linesize[0],
-                                    scaleFrame->data[1], scaleFrame->linesize[1],
-                                    scaleFrame->data[2], scaleFrame->linesize[2],
-                                    dstWidth, dstHeight, libyuv::kFilterNone);
-        }
-        LOGI("convertFrame Scale:%d", ret)
-        av_frame_free(&srcFrame);
-        srcFrame = nullptr;
-        srcFrame = scaleFrame;
+        srcFrame = VideoFrameUtil::scale(srcFrame, dstWidth, dstHeight);
     }
     bool needCrop = false;
     if (cropWidth != 0 && cropHeight != 0 &&
@@ -565,61 +449,9 @@ void VideoDecoder::convertFrame(AVFrame *srcFrame, AVFrame *dstFrame) {
         needCrop = true;
     }
     if (needCrop) {
-        int srcWidth = srcFrame->width;
-        int srcHeight = srcFrame->height;
-        AVFrame *cropFrame = av_frame_alloc();
-        cropFrame->width = cropWidth;
-        cropFrame->height = cropHeight;
-        cropFrame->format = srcFrame->format;
-
-        cropFrame->pts = srcFrame->pts;
-        cropFrame->pkt_dts = srcFrame->pkt_dts;
-        cropFrame->pkt_duration = srcFrame->pkt_duration;
-        cropFrame->time_base = srcFrame->time_base;
-        int ret = av_frame_get_buffer(cropFrame, 0);
-
-        int diffWidth = srcWidth - cropWidth;
-        int dx = diffWidth / 2 + diffWidth % 2;
-
-        int diffHeight = srcHeight - cropHeight;
-        int dy = diffHeight / 2 + diffHeight % 2;
-        LOGI("convertFrame av_frame_get_buffer:%d src:%d*%d d:%d-%d crop:%d*%d", ret,
-             srcWidth,
-             srcHeight, dx, dy,
-             cropWidth, cropHeight)
-
-        int size = av_image_get_buffer_size((AVPixelFormat) srcFrame->format,
-                                            srcFrame->width, srcFrame->height, 1);
-        auto *buffer = static_cast<uint8_t *>(av_malloc(size * sizeof(uint8_t)));
-
-        ret = av_image_copy_to_buffer(buffer, size, srcFrame->data, srcFrame->linesize,
-                                      (AVPixelFormat) srcFrame->format,
-                                      srcFrame->width, srcFrame->height, 1);
-
-        if (srcFrame->format == AV_PIX_FMT_BGRA) {
-            ret = libyuv::ConvertToARGB(buffer, size,
-                                        cropFrame->data[0], cropFrame->linesize[0],
-                                        dx, dy,
-                                        srcWidth, srcHeight,
-                                        cropWidth, cropHeight,
-                                        libyuv::kRotate0, libyuv::FOURCC_ARGB
-            );
-        } else {
-            ret = libyuv::ConvertToI420(buffer, size,
-                                        cropFrame->data[0], cropFrame->linesize[0],
-                                        cropFrame->data[1], cropFrame->linesize[1],
-                                        cropFrame->data[2], cropFrame->linesize[2],
-                                        dx, dy,
-                                        srcWidth, srcHeight,
-                                        cropWidth, cropHeight,
-                                        libyuv::kRotate0, libyuv::FOURCC_I420
-            );
-        }
-        LOGI("convertFrame Crop:%d", ret)
-        av_free(buffer);
-        av_frame_free(&srcFrame);
-        srcFrame = nullptr;
-        srcFrame = cropFrame;
+        srcFrame = VideoFrameUtil::crop(srcFrame, cropWidth, cropHeight,
+                                        (srcFrame->width - cropWidth) / 2,
+                                        (srcFrame->height - cropHeight) / 2);
     }
     int result = av_frame_ref(dstFrame, srcFrame);
 
@@ -647,14 +479,14 @@ void VideoDecoder::resultCallback(AVFrame *srcFrame) {
     dstFrame->pts = srcFrame->pts;
     dstFrame->pkt_duration = srcFrame->pkt_duration;
     dstFrame->time_base = srcFrame->time_base;
-    if (converToSurface(srcFrame, dstFrame) > 0) {
-        LOGI("resultCallback converToSurface done")
+    if (convertToSurface(srcFrame, dstFrame) > 0) {
+        LOGI("resultCallback convertToSurface done")
         if (mOnFrameArrivedListener) {
             mOnFrameArrivedListener(dstFrame);
         }
-        LOGI("resultCallback converToSurface end")
+        LOGI("resultCallback convertToSurface end")
     } else {
-        LOGE("showFrameToWindow converToSurface fail")
+        LOGE("showFrameToWindow convertToSurface fail")
     }
     LOGI("resultCallback frame:%p", &dstFrame)
     av_frame_free(&dstFrame);
@@ -712,9 +544,9 @@ void VideoDecoder::showFrameToWindow(AVFrame *pFrame) {
     mSurfaceMutexObj->unlock();
 }
 
-int VideoDecoder::converToSurface(AVFrame *srcFrame, AVFrame *dstFrame) {
+int VideoDecoder::convertToSurface(AVFrame *srcFrame, AVFrame *dstFrame) {
     if (mSwsContext == nullptr) {
-        LOGI("converToSurface %d,%d,%s   %d,%d,%s", srcFrame->width, srcFrame->height,
+        LOGI("convertToSurface %d,%d,%s   %d,%d,%s", srcFrame->width, srcFrame->height,
              av_get_pix_fmt_name(AVPixelFormat(srcFrame->format)), dstFrame->width,
              dstFrame->height,
              av_get_pix_fmt_name(AVPixelFormat(dstFrame->format)))
@@ -789,21 +621,65 @@ double VideoDecoder::getFps() const {
     return mFps;
 }
 
-double VideoDecoder::getOutFps() const {
+double VideoDecoder::getConfigOutFps() const {
     if (mOutConfig) {
         return mOutConfig->getFps();
     }
-    return mFps;
+    return 0;
 }
 
-int VideoDecoder::getCropWidth() {
+double VideoDecoder::getTargetFps() const {
+    double fps = getConfigOutFps();
+    if (fps == 0) {
+        fps = getFps();
+    }
+    return fps;
+}
+
+int VideoDecoder::getTargetWidth() {
+    int width = getConfigCropWidth();
+    if (width == 0) {
+        width = getConfigWidth();
+        if (width == 0) {
+            width = getWidth();
+        }
+    }
+    return width;
+}
+
+int VideoDecoder::getTargetHeight() {
+    int width = getConfigCropHeight();
+    if (width == 0) {
+        width = getConfigHeight();
+        if (width == 0) {
+            width = getHeight();
+        }
+    }
+    return width;
+}
+
+int VideoDecoder::getConfigWidth() {
+    if (mOutConfig) {
+        return mOutConfig->getWidth();
+    }
+    return 0;
+}
+
+int VideoDecoder::getConfigHeight() {
+    if (mOutConfig) {
+        return mOutConfig->getHeight();
+    }
+    return 0;
+}
+
+int VideoDecoder::getConfigCropWidth() {
     if (mOutConfig) {
         return mOutConfig->getCropWidth();
     }
     return 0;
 }
 
-int VideoDecoder::getCropHeight() {
+int VideoDecoder::getConfigCropHeight() {
     if (mOutConfig) {
         return mOutConfig->getCropHeight();
     }

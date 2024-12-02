@@ -28,6 +28,8 @@ public:
 
     void checkEmptyWait();
 
+    void checkNotEmptyWait();
+
     bool isEmpty();
 
     void wait(unsigned int timeOutMs = -1);

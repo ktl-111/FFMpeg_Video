@@ -67,6 +67,7 @@ import androidx.constraintlayout.compose.Dimension
 import com.example.play.IPalyListener
 import com.example.play.PlayManager
 import com.example.play.config.OutConfig
+import com.example.play.data.DecodeData
 import com.example.play.utils.FFMpegUtils
 import com.example.play.utils.LogProxy
 import com.example.play.utils.MediaScope
@@ -76,6 +77,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.launch
 import java.io.File
+import java.lang.StringBuilder
 import java.nio.ByteBuffer
 import java.util.concurrent.Executors
 import kotlin.math.roundToInt
@@ -125,6 +127,9 @@ class FFMpegActivity : AppCompatActivity(), LogProxy {
                 "player state:${playManager?.getCurrTimestamp()}",
                 Toast.LENGTH_SHORT
             ).show()
+        })
+        it.add(BtnBean("getDecodeData") {
+            getDecodeData()
         })
     }
 
@@ -224,6 +229,7 @@ class FFMpegActivity : AppCompatActivity(), LogProxy {
 
                 })
                 prepare(path, surface, outConfig)
+                getDecodeData()
 //                prepare(path, surface)
             }
         }
@@ -367,6 +373,26 @@ class FFMpegActivity : AppCompatActivity(), LogProxy {
                 }
             }
         }
+    }
+
+    private fun getDecodeData() {
+        MediaScope.launch(Dispatchers.Default) {
+            mutableListOf<DecodeData>().also {
+                it.add(FFMpegUtils.getDecodeData(path, true))
+                it.add(FFMpegUtils.getDecodeData(path, false))
+            }.also {
+                val builder = StringBuilder()
+                it.forEach {
+                    builder
+                        .append("${it.phoneData}\n")
+                        .append("size:${it.width}*${it.height},duration:${it.duration},fps:${it.fps},rotate:${it.rotate}\n")
+                        .append("code:${it.codeName}").append("\n")
+                        .append(it.frameDatas).append("\n")
+                }
+                Log.i(TAG, "getDecodeData: \n${builder}")
+            }
+        }
+
     }
 
     override fun onDestroy() {

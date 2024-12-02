@@ -3,6 +3,7 @@
 #include "Logger.h"
 #include "../utils/CommonUtils.h"
 #include "../libyuv/libyuv.h"
+#include "../globals.h"
 
 extern "C" {
 #include "../include/libavutil/display.h"
@@ -32,13 +33,15 @@ FFVideoReader::~FFVideoReader() {
     }
 }
 
-bool FFVideoReader::init(std::string &path) {
-    mInit = FFReader::init(path);
-    if (mInit) {
-        mInit = selectTrack(Track_Video);
+std::string FFVideoReader::init(std::string &path, bool useHw) {
+    const std::string &init = FFReader::init(path, useHw);
+    std::string result = init;
+    if (isSuccess(result)) {
+        result = selectTrack(Track_Video, useHw);
     }
-    LOGI("[FFVideoReader], init: %d", mInit);
-    return mInit;
+
+    LOGI("[FFVideoReader], init: %s", result.c_str());
+    return result;
 }
 
 void FFVideoReader::getFrame(int64_t pts, int width, int height, uint8_t *buffer, bool precise) {
@@ -81,7 +84,7 @@ void FFVideoReader::getFrame(int64_t pts, int width, int height, uint8_t *buffer
         int sendRes = avcodec_send_packet(codecContext, pkt);
         int receiveRes = avcodec_receive_frame(codecContext, frame);
         decodeCount++;
-        LOGI("[FFVideoReader], receiveRes: %d, sendRes: %d", receiveRes, sendRes);
+        LOGD("[FFVideoReader], receiveRes: %d, sendRes: %d", receiveRes, sendRes);
         if (receiveRes == AVERROR(EAGAIN)) {
             continue;
         }
@@ -145,7 +148,7 @@ void FFVideoReader::getFrame(int64_t pts, int width, int height, uint8_t *buffer
                                    buffer, width * 4, width, height);
             }
         } else if (frame->format != AV_PIX_FMT_RGBA ||
-                   (frame->format == AV_PIX_FMT_RGBA && needScale)) {
+                (frame->format == AV_PIX_FMT_RGBA && needScale)) {
             AVFrame *swFrame = av_frame_alloc();
             unsigned int size = av_image_get_buffer_size(AV_PIX_FMT_RGBA, width, height, 1);
             auto *rgbaBuffer = static_cast<uint8_t *>(av_malloc(size * sizeof(uint8_t)));
@@ -198,38 +201,54 @@ void FFVideoReader::getFrame(int64_t pts, int width, int height, uint8_t *buffer
 }
 
 
-void FFVideoReader::getNextFrame(const std::function<void(AVFrame *)> &frameArrivedCallback) {
+void FFVideoReader::getNextFrame(
+        const std::function<void(int sendPacketCount, double costMilli,
+                                 AVFrame *, std::string errorMsg)> &frameArrivedCallback) {
     if (mAvFrame == nullptr) {
         mAvFrame = av_frame_alloc();
     }
     AVPacket *pkt = av_packet_alloc();
     AVFrame *frame = nullptr;
+    int sendPacketCount = 0;
+    int maxRetryCount = 20;
+    auto startTime = std::chrono::steady_clock::now();
+    std::string errorMsg = "";
     while (true) {
         int ret = fetchAvPacket(pkt);
         if (ret < 0) {
-            LOGE("[FFVideoReader], getNextFrame fetchAvPacket failed: %d", ret);
+            LOGE("[FFVideoReader], getNextFrame fetchAvPacket failed: %d,%s", ret,
+                 av_err2str(ret))
+            errorMsg = av_err2str(ret);
             break;
         }
 
         int sendRes = avcodec_send_packet(getCodecContext(), pkt);
         int receiveRes = avcodec_receive_frame(getCodecContext(), mAvFrame);
-        LOGI("[FFVideoReader], getNextFrame receiveRes: %d, sendRes: %d, isKeyFrame: %d",
-             receiveRes, sendRes, isKeyFrame(pkt));
+        LOGD("[FFVideoReader], getNextFrame receiveRes: %d(%s), sendRes: %d(%s), isKeyFrame: %d",
+             receiveRes, av_err2str(receiveRes), sendRes, av_err2str(sendRes), isKeyFrame(pkt));
         av_packet_unref(pkt);
 
+        sendPacketCount++;
         if (receiveRes == AVERROR(EAGAIN)) {
+            if (sendPacketCount >= maxRetryCount) {
+                break;
+            }
             continue;
         }
 
         if (receiveRes == 0) {
             frame = mAvFrame;
+            errorMsg = RESULT_SUCCESS;
+        } else {
+            errorMsg = av_err2str(receiveRes);
         }
         break;
     }
     av_packet_free(&pkt);
-
+    auto endTime = std::chrono::steady_clock::now();
+    auto costMilli = std::chrono::duration<double, std::milli>(endTime - startTime).count();
     if (frameArrivedCallback) {
-        frameArrivedCallback(frame);
+        frameArrivedCallback(sendPacketCount, costMilli, frame, errorMsg);
     }
     av_frame_unref(mAvFrame);
 }
@@ -269,4 +288,8 @@ int FFVideoReader::getRotate(AVStream *stream) {
 
 int FFVideoReader::getRotate() {
     return getRotate(mFtx->streams[mMediaInfo.videoIndex]);
+}
+
+int FFVideoReader::getFps() {
+    return av_q2d(mFtx->streams[mMediaInfo.videoIndex]->avg_frame_rate);
 }

@@ -1,6 +1,7 @@
 
 #ifndef VIDEOLEARN_GLOBALS_H
 #define VIDEOLEARN_GLOBALS_H
+#include "string"
 const int TimeBaseDiff = 1500;
 
 const int ERRORCODE_COMMON = 1;
@@ -18,4 +19,5 @@ const int ERRORCODE_ALLOC_OUTPUT_CONTEXT = 12;
 const int ERRORCODE_NOT_FIND_ENCODE = 13;
 const int ERRORCODE_OPEN_FILE = 14;
 const int ERRORCODE_PREPARE_FILE = 15;
+const std::string RESULT_SUCCESS = "success";
 #endif //VIDEOLEARN_GLOBALS_H
