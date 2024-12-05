@@ -296,10 +296,24 @@ Java_com_example_play_utils_FFMpegUtils_nativeCutting(JNIEnv *env, jobject thiz,
     encodeContext->max_b_frames = 0;//不需要B帧
     encodeContext->gop_size = outStream->avg_frame_rate.num;//多少帧一个I帧
 
-    //ultrafast,superfast,veryfast
+    encodeContext->qmax = 35;
+    encodeContext->qmin = 10;
+    encodeContext->bit_rate = 300*1000;
+
+    //x264 ,设置编译速度,ultrafast,superfast,veryfast
     result = av_opt_set(encodeContext->priv_data, "preset", "veryfast", 0);
     if (result != 0) {
-        LOGI("cutting priv_data set fail,%d %s", result, av_err2str(result))
+        LOGI("cutting preset set fail,%d %s", result, av_err2str(result))
+    }
+
+    //openh264,使用比特率模式
+    result = av_opt_set(encodeContext->priv_data, "rc_mode", "bitrate", 0);
+    if (result != 0) {
+        LOGI("cutting rc_mode set fail,%d %s", result, av_err2str(result))
+    }
+    result = av_opt_set(encodeContext->priv_data, "profile", "high", 0);
+    if (result != 0) {
+        LOGI("cutting profile set fail,%d %s", result, av_err2str(result))
     }
 
     result = avcodec_open2(encodeContext, encoder, NULL);
