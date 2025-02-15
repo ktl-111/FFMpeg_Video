@@ -2,6 +2,8 @@ package com.example.videolearn.ffmpegcompose
 
 import android.graphics.Bitmap
 import android.graphics.Matrix
+import android.media.MediaCodecInfo.CodecProfileLevel
+import android.media.MediaCodecList
 import android.os.Bundle
 import android.util.Log
 import android.view.Surface
@@ -77,10 +79,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.launch
 import java.io.File
-import java.lang.StringBuilder
 import java.nio.ByteBuffer
 import java.util.concurrent.Executors
-import kotlin.math.roundToInt
 
 
 class FFMpegActivity : AppCompatActivity(), LogProxy {
@@ -137,6 +137,23 @@ class FFMpegActivity : AppCompatActivity(), LogProxy {
         super.onCreate(savedInstanceState)
         FFMpegUtils.addLogProxy(this)
         FFMpegUtils.setNativeLogLevel(Log.DEBUG)
+        val codecList = MediaCodecList(MediaCodecList.REGULAR_CODECS)
+        for (info in codecList.codecInfos) {
+            if (info.isEncoder) continue
+            val supportedTypes = info.getSupportedTypes()
+            for (type in supportedTypes) {
+                if (type == "video/hevc") {
+                    // 检查HEVC ProfileLevel
+                    val levels = info.getCapabilitiesForType(type).profileLevels
+                    for (l in levels) {
+                        Log.i(TAG, "prepare levels:${l.profile}")
+                        if (l.profile == CodecProfileLevel.HEVCProfileMain10) {
+                            Log.i(TAG, "prepare 支持HEVC 10bit硬解")
+                        }
+                    }
+                }
+            }
+        }
         //直播地址
         //         path = "http://zhibo.hkstv.tv/livestream/mutfysrq/playlist.m3u8"
         //         path = "http://39.135.138.58:18890/PLTV/88888888/224/3221225630/index.m3u8"
@@ -210,7 +227,7 @@ class FFMpegActivity : AppCompatActivity(), LogProxy {
                         initGetVideoFrames()
                     }
 
-                    override fun onPalyProgress(time: Double) {
+                    override fun onPalyProgress(frame: ByteBuffer?, time: Double) {
                         updateUi(time / 1000)
                     }
 
@@ -235,7 +252,8 @@ class FFMpegActivity : AppCompatActivity(), LogProxy {
         }
     }
 
-    private val outConfig = OutConfig(960, 540, 378, 496, fps = 24.toDouble())
+    private val outConfig = OutConfig(0, 0, 0, 0, fps = 24.toDouble())
+//    private val outConfig = OutConfig(960, 540, 378, 496, fps = 24.toDouble())
 //    private val outConfig = OutConfig(1920, 1080, 0, 0, fps = 24.toDouble())
 
     private fun surfaceReCreate(surface: Surface) {

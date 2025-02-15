@@ -119,6 +119,7 @@ private:
     int convertToSurface(AVFrame *srcFrame, AVFrame *dstFrame);
 
     int convertFrameTo420Frame(AVFrame *srcFrame, AVFrame *dstFrame);
+
 };
 
 

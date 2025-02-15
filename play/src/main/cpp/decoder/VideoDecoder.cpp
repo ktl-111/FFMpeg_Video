@@ -104,13 +104,87 @@ void VideoDecoder::setOutConfig(const std::shared_ptr<OutConfig> outConfig) {
     mOutConfig = outConfig;
 }
 
+static enum AVPixelFormat hw_pix_fmt = AV_PIX_FMT_NONE;
+
+enum AVPixelFormat get_hw_format(AVCodecContext *ctx,
+                                 const enum AVPixelFormat *pix_fmts) {
+    const enum AVPixelFormat *p;
+
+    for (p = pix_fmts; *p != -1; p++) {
+        if (*p == hw_pix_fmt) {
+            LOGE("get HW surface format: %d", *p);
+            return *p;
+        }
+    }
+
+    LOGE("Failed to get HW surface format");
+    return AV_PIX_FMT_NONE;
+}
+
 bool VideoDecoder::prepare(JNIEnv *env) {
     AVStream *stream = getStream();
-
+    AVBufferRef *mHwDeviceCtx = nullptr;
     AVCodecParameters *params = stream->codecpar;
+    bool useHw = true;
+    AVCodecID codecId = params->codec_id;
+    std::string mediacodecName;
+    if (useHw) {
+        switch (codecId) {
+            case AV_CODEC_ID_H264:
+                mediacodecName = "h264_mediacodec";
+                break;
+            case AV_CODEC_ID_HEVC:
+                mediacodecName = "hevc_mediacodec";
+                break;
+            default:
+                useHw = false;
+                LOGE("prepare format(%d) not support hw decode, maybe rebuild ffmpeg so",
+                     codecId)
+                break;
+        }
+    }
+    if (useHw) {
+        AVHWDeviceType type = av_hwdevice_find_type_by_name("mediacodec");
+        const AVCodec *mediacodec = avcodec_find_decoder_by_name(mediacodecName.c_str());
+        if (mediacodec) {
+            LOGE("prepare find %s", mediacodecName.c_str())
+            for (int i = 0;; ++i) {
+                const AVCodecHWConfig *config = avcodec_get_hw_config(mediacodec, i);
+                if (!config) {
+                    LOGE("prepare Decoder: %s does not support device type: %s",
+                         mediacodec->name,
+                         av_hwdevice_get_type_name(type))
+                    break;
+                }
+                if (config->methods & AV_CODEC_HW_CONFIG_METHOD_HW_DEVICE_CTX) {
+                    LOGI("prepare decoder fmt:%d", config->pix_fmt)
+                    if (config->device_type == type) {
+                        // AV_PIX_FMT_MEDIACODEC(165)
+                        hw_pix_fmt = config->pix_fmt;
+                        LOGI("prepare Decoder: %s support device type: %s, hw_pix_fmt: %d, AV_PIX_FMT_MEDIACODEC: %d",
+                             mediacodec->name, av_hwdevice_get_type_name(type), hw_pix_fmt,
+                             AV_PIX_FMT_MEDIACODEC);
+                        break;
+                    }
+                }
+            }
 
-    mVideoCodec = CodecUtils::findDecodec(params->codec_id, false);
+            if (hw_pix_fmt != AV_PIX_FMT_NONE) {
+                mVideoCodec = mediacodec;
 
+                int ret = av_hwdevice_ctx_create(&mHwDeviceCtx, type, nullptr, nullptr, 0);
+                if (ret != 0) {
+                    LOGE("prepare av_hwdevice_ctx_create err: %d", ret)
+                }
+            }
+        }
+    }
+    if (mVideoCodec == nullptr) {
+        mVideoCodec = avcodec_find_decoder(codecId);
+    }
+    if (mVideoCodec) {
+        LOGI("prepare findDecodec:%s", mVideoCodec->name)
+    }
     if (mVideoCodec == nullptr) {
         std::string msg = "not find decoder";
         if (mErrorMsgListener) {
@@ -129,13 +203,24 @@ bool VideoDecoder::prepare(JNIEnv *env) {
         return false;
     }
     avcodec_parameters_to_context(mCodecContext, params);
-    if (mSurface) {
-        //创建nativewindow
-        nativeWindow = ANativeWindow_fromSurface(env, mSurface);
-        //修改缓冲区格式和大小,对应视频格式和大小
+    if (useHw) {
+        mCodecContext->get_format = get_hw_format;
+        mCodecContext->hw_device_ctx = av_buffer_ref(mHwDeviceCtx);
 
-        ANativeWindow_setBuffersGeometry(nativeWindow, getTargetWidth(), getTargetHeight(),
-                                         WINDOW_FORMAT_RGBA_8888);
+        AVMediaCodecContext *mMediaCodecContext = nullptr;
+        if (mSurface != nullptr) {
+            mMediaCodecContext = av_mediacodec_alloc_context();
+            av_mediacodec_default_init(mCodecContext, mMediaCodecContext, mSurface);
+        }
+    } else {
+        if (mSurface) {
+            //创建nativewindow
+            nativeWindow = ANativeWindow_fromSurface(env, mSurface);
+            //修改缓冲区格式和大小,对应视频格式和大小
+
+            ANativeWindow_setBuffersGeometry(nativeWindow, getTargetWidth(), getTargetHeight(),
+                                             WINDOW_FORMAT_RGBA_8888);
+        }
     }
     // 根据设备核心数设置线程数
     long threadCount = sysconf(_SC_NPROCESSORS_ONLN);
@@ -310,6 +395,11 @@ int VideoDecoder::convertFrameTo420Frame(AVFrame *srcFrame, AVFrame *dstFrame) {
     return ret;
 }
 
+bool isHwDecoder(AVFrame *frame) {
+    LOGI("isHwDecoder %d", frame->format)
+    return frame->format == hw_pix_fmt;
+}
+
 int VideoDecoder::decode(AVPacket *avPacket, AVFrame *frame) {
     // 主动塞到队列中的flush帧
     LOGI("decode start pts:%ld(%f) dts:%ld", avPacket->pts,
@@ -386,7 +476,12 @@ int VideoDecoder::decode(AVPacket *avPacket, AVFrame *frame) {
     filtered_frame->pkt_dts = filtered_frame->pts - TimeBaseDiff;
     filtered_frame->time_base = outTimeBase;
     filtered_frame->pkt_duration = TimeBaseDiff;
-    convertFrame(filtered_frame, frame);
+    if (isHwDecoder(filtered_frame)) {
+        av_frame_ref(frame, filtered_frame);
+        av_frame_free(&filtered_frame);
+    } else {
+        convertFrame(filtered_frame, frame);
+    }
 
     LOGI("decode convertFrame %ld(%f)  format:%s %d",
          frame->pts,
@@ -463,8 +558,15 @@ void VideoDecoder::convertFrame(AVFrame *srcFrame, AVFrame *dstFrame) {
     srcFrame = nullptr;
 }
 
+
 void VideoDecoder::resultCallback(AVFrame *srcFrame) {
     updateTimestamp(srcFrame);
+    if (isHwDecoder(srcFrame)) {
+        if (mOnFrameArrivedListener) {
+            mOnFrameArrivedListener(srcFrame);
+        }
+        return;
+    }
     int dstWidth = srcFrame->width;
     int dstHeight = srcFrame->height;
     LOGI("resultCallback pts:%ld(%lf) format:%s %d*%d", srcFrame->pts,
@@ -493,7 +595,17 @@ void VideoDecoder::resultCallback(AVFrame *srcFrame) {
     dstFrame = nullptr;
 }
 
+
 void VideoDecoder::showFrameToWindow(AVFrame *pFrame) {
+    if (isHwDecoder(pFrame)) {
+        auto startTime = std::chrono::steady_clock::now();
+        //直接渲染到surface
+        int result = av_mediacodec_release_buffer((AVMediaCodecBuffer *) (pFrame)->data[3], 1);
+        auto endTime = std::chrono::steady_clock::now();
+        auto diffMilli = std::chrono::duration<double, std::milli>(endTime - startTime).count();
+        LOGI("video av_mediacodec_release_buffer 耗时:%f毫秒 result:%d", diffMilli, result);
+        return;
+    }
     if (!nativeWindow) {
         LOGE("showFrameToWindow nativeWindow is null")
         return;

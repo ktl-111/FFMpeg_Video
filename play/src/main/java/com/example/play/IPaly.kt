@@ -6,7 +6,7 @@ import com.example.play.utils.FFMpegUtils
 
 interface IPaly {
     fun init(iPalyListener: IPalyListener?)
-    fun prepare(path: String, surface: Surface, outConfig: OutConfig? = null)
+    fun prepare(path: String, surface: Surface?, outConfig: OutConfig? = null)
     fun start()
     fun stop()
     fun resume()
@@ -28,4 +28,6 @@ interface IPaly {
     fun getCurrTimestamp(): Long
 
     fun cutting(srcPath: String, destPath: String, startTime: Long, endTime: Long, outConfig: OutConfig?, cb: FFMpegUtils.VideoCuttingInterface)
+
+    fun startShowFrame()
 }

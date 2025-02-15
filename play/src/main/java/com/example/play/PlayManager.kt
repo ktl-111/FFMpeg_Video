@@ -55,7 +55,12 @@ class PlayManager : IPaly {
         this.iPalyListener = iPalyListener
     }
 
-    override fun prepare(path: String, surface: Surface, outConfig: OutConfig?) {
+    var init = false
+    override fun prepare(path: String, surface: Surface?, outConfig: OutConfig?) {
+        if (init) {
+            LogHelper.i(TAG, "alert init")
+            return
+        }
         if (path.isEmpty()) {
             LogHelper.i(TAG, "prepare path is empty")
             return
@@ -63,6 +68,7 @@ class PlayManager : IPaly {
         mProxy = FFMpegProxy()
         mProxy.init(iPalyListener)
         mProxy.prepare(path, surface, outConfig)
+        init = true
     }
 
     override fun start() {
@@ -158,5 +164,9 @@ class PlayManager : IPaly {
             mProxy.cutting(srcPath, destPath, startTime, endTime, outConfig, cb)
             callCutting = false
         }
+    }
+
+    override fun startShowFrame() {
+        mProxy.startShowFrame()
     }
 }

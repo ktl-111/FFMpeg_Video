@@ -12,6 +12,7 @@ import android.provider.DocumentsContract
 import android.provider.MediaStore
 import android.util.Log
 import androidx.activity.compose.setContent
+import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
@@ -32,6 +33,8 @@ import com.example.videolearn.test.TestActivity
 import com.example.videolearn.utils.ResultUtils
 import com.example.videolearn.videocall.VideoCallActivity
 import com.example.videolearn.videoplay.VideoPlayActiivty
+import com.norman.android.hdrsample.HDRPlayActivity
+import java.io.File
 
 
 class MainActivity : AppCompatActivity() {
@@ -67,13 +70,16 @@ class MainActivity : AppCompatActivity() {
                 startService(Intent(this@MainActivity, MediaService::class.java))
                 live()
             }
+            button("HDR") {
+                ffmpeg(mHdrPickLauncher)
+            }
             button("ffmpeg") {
-                ffmpeg()
+                ffmpeg(mMediaPickLauncher)
             }
         }
     }
 
-    private fun ffmpeg() {
+    private fun ffmpeg(launch: ActivityResultLauncher<PickVisualMediaRequest>) {
         val permission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             Manifest.permission.READ_MEDIA_VIDEO
         } else {
@@ -88,7 +94,7 @@ class MainActivity : AppCompatActivity() {
             val alertBuilder: AlertDialog.Builder = AlertDialog.Builder(this)
             alertBuilder.setTitle("select type")
             alertBuilder.setSingleChoiceItems(items, -1) { dialog, index ->
-                mMediaPickLauncher.launch(
+                launch.launch(
                     PickVisualMediaRequest(
                         ActivityResultContracts.PickVisualMedia.SingleMimeType(
                             items[index]
@@ -101,6 +107,20 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private val mHdrPickLauncher =
+        registerForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+            uri?.let { uri ->
+                val uriToFileApiQ = uri2Path(this, uri)
+                val file = File(cacheDir, "test.mp4")
+                if (file.exists()) {
+                    file.delete()
+                }
+                val copyTo = File(uriToFileApiQ).copyTo(File(cacheDir, "test.mp4"))
+                Log.i(TAG, "onActivityResult: ${uriToFileApiQ} ${uri.path} ${copyTo}")
+                startActivity(Intent(this, HDRPlayActivity::class.java)
+                    .also { it.putExtra("filepath", copyTo.absolutePath) })
+            }
+        }
     private val mMediaPickLauncher =
         registerForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
             uri?.let { uri ->

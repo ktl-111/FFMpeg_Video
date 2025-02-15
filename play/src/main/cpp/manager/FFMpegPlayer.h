@@ -29,6 +29,7 @@ extern "C" {
 //定义context,调用java接口
 typedef struct PlayerJniContext {
     jobject instance;
+    jmethodID onAllocateFrame;
     jmethodID onVideoConfig;
     jmethodID onPlayProgress;
     jmethodID onPlayCompleted;
@@ -40,6 +41,7 @@ typedef struct PlayerJniContext {
         onPlayProgress = nullptr;
         onPlayCompleted = nullptr;
         onPlayError = nullptr;
+        onAllocateFrame = nullptr;
     }
 
     bool isValid() {
@@ -47,6 +49,7 @@ typedef struct PlayerJniContext {
                 onPlayCompleted != nullptr &&
                 onPlayProgress != nullptr
                         && onVideoConfig != nullptr
+                && onAllocateFrame != nullptr
                 && onPlayError != nullptr;
     }
 
@@ -95,8 +98,11 @@ public:
 
     int64_t getCurrTimestamp();
 
-    void cutting(JNIEnv *env,const char *srcPath, const char *destPath, jlong startTime, jlong endTime,
-                 jobject out_config, jobject cb);
+    void
+    cutting(JNIEnv *env, const char *srcPath, const char *destPath, jlong startTime, jlong endTime,
+            jobject out_config, jobject cb);
+
+    void startShowFrame();
 
 private:
     bool mHasAbort = false;
@@ -104,7 +110,7 @@ private:
     bool mIsSeek = false;
     bool mIsBackSeek = false;
     int64_t mCurrSeekTime = -1;
-    bool mShowFirstFrame = true;
+    bool mShowFirstFrame = false;
 
     JavaVM *mJvm = nullptr;
     PlayerJniContext mPlayerJni{};

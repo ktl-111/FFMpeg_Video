@@ -3,6 +3,7 @@ package com.example.videolearn
 import android.app.Application
 import android.os.Handler
 import android.os.Looper
+import com.norman.android.hdrsample.util.AppUtil
 
 class App : Application() {
     companion object {
@@ -15,6 +16,7 @@ class App : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        AppUtil.init(this)
         application = this
     }
 }

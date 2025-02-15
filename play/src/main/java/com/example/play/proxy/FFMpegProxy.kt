@@ -8,6 +8,8 @@ import com.example.play.Step
 import com.example.play.config.OutConfig
 import com.example.play.utils.FFMpegUtils
 import com.example.play.utils.LogHelper
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 
 internal class FFMpegProxy : IPaly {
     init {
@@ -23,7 +25,7 @@ internal class FFMpegProxy : IPaly {
         nativeManager = nativeInit()
     }
 
-    override fun prepare(path: String, surface: Surface, outConfig: OutConfig?) {
+    override fun prepare(path: String, surface: Surface?, outConfig: OutConfig?) {
         if (path.isEmpty()) {
             LogHelper.e(TAG, "prepare path is empty")
             return
@@ -74,12 +76,17 @@ internal class FFMpegProxy : IPaly {
         nativeCutting(nativeManager, srcPath, destPath, startTime, endTime, outConfig, cb)
     }
 
+    override fun startShowFrame() {
+        nativeStartShowFrame(nativeManager)
+    }
+
     private external fun nativeInit(): Long
     private external fun nativePrepare(
-        nativeManager: Long, path: String, surface: Surface, outConfig: OutConfig?
+        nativeManager: Long, path: String, surface: Surface?, outConfig: OutConfig?
     ): Boolean
 
     private external fun nativeStart(nativeManager: Long)
+    private external fun nativeStartShowFrame(nativeManager: Long)
     private external fun nativeStop(nativeManager: Long)
     private external fun nativeResume(nativeManager: Long)
     private external fun nativePause(nativeManager: Long)
@@ -100,6 +107,10 @@ internal class FFMpegProxy : IPaly {
         cb: FFMpegUtils.VideoCuttingInterface
     )
 
+    private fun onAllocateFrame(size: Int): ByteBuffer {
+        return ByteBuffer.allocateDirect(size).order(ByteOrder.LITTLE_ENDIAN)
+    }
+
     private fun onNativeVideoConfig(width: Int, height: Int, duration: Double, fps: Double, codecName: String) {
         LogHelper.i(
             TAG,
@@ -108,9 +119,9 @@ internal class FFMpegProxy : IPaly {
         palyListener?.onVideoConfig(width, height, duration, fps)
     }
 
-    private fun onNativePalyProgress(time: Double) {
+    private fun onNativePalyProgress(frame: ByteBuffer?, time: Double) {
         LogHelper.d(TAG, "onNativePalyProgress: ${time}")
-        palyListener?.onPalyProgress(time)
+        palyListener?.onPalyProgress(frame, time)
     }
 
     private fun onNativePalyComplete() {
