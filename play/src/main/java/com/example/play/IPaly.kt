@@ -28,6 +28,4 @@ interface IPaly {
     fun getCurrTimestamp(): Long
 
     fun cutting(srcPath: String, destPath: String, startTime: Long, endTime: Long, outConfig: OutConfig?, cb: FFMpegUtils.VideoCuttingInterface)
-
-    fun startShowFrame()
 }

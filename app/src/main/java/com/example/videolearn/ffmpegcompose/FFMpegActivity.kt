@@ -246,13 +246,12 @@ class FFMpegActivity : AppCompatActivity(), LogProxy {
 
                 })
                 prepare(path, surface, outConfig)
-                getDecodeData()
 //                prepare(path, surface)
             }
         }
     }
 
-    private val outConfig = OutConfig(0, 0, 0, 0, fps = 24.toDouble())
+    private val outConfig = OutConfig(0, 0, 0, 0, 0.0)
 //    private val outConfig = OutConfig(960, 540, 378, 496, fps = 24.toDouble())
 //    private val outConfig = OutConfig(1920, 1080, 0, 0, fps = 24.toDouble())
 

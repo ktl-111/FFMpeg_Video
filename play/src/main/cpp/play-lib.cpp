@@ -71,17 +71,6 @@ Java_com_example_play_proxy_FFMpegProxy_nativeResume(JNIEnv *env, jobject thiz,
         pPlayer->resume();
     }
 }
-
-extern "C"
-JNIEXPORT void JNICALL
-Java_com_example_play_proxy_FFMpegProxy_nativeStartShowFrame(JNIEnv *env, jobject thiz,
-                                                             jlong native_manager) {
-    FFMpegPlayer *pPlayer = reinterpret_cast<FFMpegPlayer *>(native_manager);
-    if (pPlayer != nullptr) {
-        pPlayer->startShowFrame();
-    }
-
-}
 extern "C"
 JNIEXPORT void JNICALL
 Java_com_example_play_proxy_FFMpegProxy_nativePause(JNIEnv *env, jobject thiz,

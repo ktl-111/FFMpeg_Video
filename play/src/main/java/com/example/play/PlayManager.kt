@@ -165,8 +165,4 @@ class PlayManager : IPaly {
             callCutting = false
         }
     }
-
-    override fun startShowFrame() {
-        mProxy.startShowFrame()
-    }
 }

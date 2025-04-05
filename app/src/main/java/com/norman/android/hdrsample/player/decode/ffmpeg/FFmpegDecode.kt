@@ -2,12 +2,10 @@ package com.norman.android.hdrsample.player.decode.ffmpeg
 
 import android.media.MediaExtractor
 import android.media.MediaFormat
-import android.util.JsonWriter
 import android.util.Log
 import android.view.Surface
 import com.example.play.IPalyListener
 import com.example.play.PlayManager
-import com.google.gson.Gson
 import com.norman.android.hdrsample.handler.MessageHandler
 import com.norman.android.hdrsample.handler.MessageHandler.LifeCycleCallback
 import com.norman.android.hdrsample.player.VideoPlayerImpl
@@ -15,7 +13,6 @@ import com.norman.android.hdrsample.player.decode.MediaCodecAsyncAdapter
 import com.norman.android.hdrsample.player.decode.base.DecodecApi
 import com.norman.android.hdrsample.player.source.FileSource
 import com.norman.android.hdrsample.util.LogUtils
-import org.json.JSONObject
 import java.io.IOException
 import java.nio.ByteBuffer
 
@@ -29,13 +26,6 @@ class FFmpegDecode(private val mimeType: String, private val fileSource: FileSou
     private var callback: MediaCodecAsyncAdapter.CallBack? = null
     private var surface: Surface? = null
 
-    private fun startLoopShowFrame() {
-        postDelayed({
-            LogUtils.i(TAG, "startLoopShowFrame")
-            playManager.startShowFrame()
-            startLoopShowFrame()
-        }, 1000)
-    }
 
     private val messageHandler: MessageHandler by lazy {
         MessageHandler.obtain(VideoPlayerImpl.VIDEO_PLAYER_NAME,
@@ -80,7 +70,6 @@ class FFmpegDecode(private val mimeType: String, private val fileSource: FileSou
                 callback?.onOutputFormatChanged(mediaFormat) ?: kotlin.run {
                     LogUtils.i(TAG, "not call format change")
                 }
-                startLoopShowFrame()
             }
         }
     }

@@ -86,6 +86,8 @@ public:
 
     void surfaceDestroy(JNIEnv *env);
 
+    bool isHwDecoder(AVFrame *frame);
+
 private:
     int mWidth = -1;
     int mHeight = -1;

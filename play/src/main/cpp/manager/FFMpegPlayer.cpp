@@ -116,8 +116,8 @@ bool FFMpegPlayer::prepare(JNIEnv *env, std::string &path, jobject surface, jobj
     if (prepared) {
         updatePlayerState(PlayerState::PREPARE);
     }
-    mVideoPacketQueue = std::make_shared<AVPacketQueue>(1);
-    mVideoFrameQueue = std::make_shared<AVFrameQueue>(1,
+    mVideoPacketQueue = std::make_shared<AVPacketQueue>(3);
+    mVideoFrameQueue = std::make_shared<AVFrameQueue>(3,
                                                       "cache");
     mVideoThread = new std::thread(&FFMpegPlayer::VideoDecodeLoop, this);
     mReadPacketThread = new std::thread(&FFMpegPlayer::ReadPacketLoop, this);
@@ -321,22 +321,6 @@ void FFMpegPlayer::pause() {
     updatePlayerState(PlayerState::PAUSE);
 }
 
-
-void FFMpegPlayer::startShowFrame() {
-    AVFrame *frame = mVideoFrameQueue->getFrame(false, false);
-    if (frame == nullptr) {
-        return;
-    }
-    if (frame->pkt_size == 0) {
-        LOGI("[video] VideoDecodeLoop AVERROR_EOF wait start")
-        return;
-    } else {
-        LOGI("[video] VideoDecodeLoop pts:%ld(%lf)", frame->pts,
-             frame->pts * av_q2d(frame->time_base))
-        mVideoDecoder->resultCallback(frame);
-    }
-}
-
 void FFMpegPlayer::VideoDecodeLoop() {
     if (mVideoDecoder == nullptr || mVideoPacketQueue == nullptr) {
         return;
@@ -373,12 +357,6 @@ void FFMpegPlayer::VideoDecodeLoop() {
             LOGI("async done")
             if (!mIsSeek && !mAudioDecoder && mPlayerJni.isValid()) { // no audio track
                 double timestamp = mVideoDecoder->getTimestamp();
-//                int size = av_image_get_buffer_size((AVPixelFormat) frame->format, frame->width,
-//                                                    frame->height, 1);
-//                jobject frameBuffer = env->CallObjectMethod(mPlayerJni.instance,
-//                                                            mPlayerJni.onAllocateFrame, size);
-//                uint8_t *buffer = (uint8_t *) env->GetDirectBufferAddress(frameBuffer);
-//                memset(buffer, 0, size);
                 env->CallVoidMethod(mPlayerJni.instance, mPlayerJni.onPlayProgress, nullptr,
                                     timestamp);
             }
@@ -406,27 +384,23 @@ void FFMpegPlayer::VideoDecodeLoop() {
             LOGI("[video] VideoDecodeLoop has abort...")
             break;
         }
-        if (mVideoFrameQueue->isFull()) {
-            LOGI("[video] VideoDecodeLoop decode is full")
-            mMutexObj->wait();
+
+        AVFrame *frame = mVideoFrameQueue->getFrame(false, false);
+        if (frame == nullptr) {
+            mVideoFrameQueue->wait();
+            LOGI("[video] VideoDecodeLoop getFrame is null")
+            continue;
         }
-//
-//        AVFrame *frame = mVideoFrameQueue->getFrame(false, false);
-//        if (frame == nullptr) {
-//            mVideoFrameQueue->wait();
-//            LOGI("[video] VideoDecodeLoop getFrame is null")
-//            continue;
-//        }
-//        if (frame->pkt_size == 0) {
-//            onPlayCompleted(env);
-//            LOGI("[video] VideoDecodeLoop AVERROR_EOF wait start")
-//            mVideoFrameQueue->wait();
-//            LOGI("[video] VideoDecodeLoop AVERROR_EOF wait end")
-//        } else {
-//            LOGI("[video] VideoDecodeLoop pts:%ld(%lf)", frame->pts,
-//                 frame->pts * av_q2d(frame->time_base))
-//            mVideoDecoder->resultCallback(frame);
-//        }
+        if (frame->pkt_size == 0) {
+            onPlayCompleted(env);
+            LOGI("[video] VideoDecodeLoop AVERROR_EOF wait start")
+            mVideoFrameQueue->wait();
+            LOGI("[video] VideoDecodeLoop AVERROR_EOF wait end")
+        } else {
+            LOGI("[video] VideoDecodeLoop pts:%ld(%lf)", frame->pts,
+                 frame->pts * av_q2d(frame->time_base))
+            mVideoDecoder->resultCallback(frame);
+        }
     }
     if (needAttach) {
         mJvm->DetachCurrentThread();

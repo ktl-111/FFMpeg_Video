@@ -3,12 +3,17 @@
 #include "Logger.h"
 
 extern "C" {
+#include "libavutil/pixdesc.h"
 #include "libavutil/time.h"
+#include "../include/libavcodec/mediacodec.h"
 }
 
 AVFrameQueue::AVFrameQueue(int64_t maxSize, std::string tag) {
     pthread_mutex_init(&mMutex, nullptr);
     pthread_cond_init(&mCond, nullptr);
+    if (maxSize < 3) {
+        maxSize = 3;
+    }
     mMaxSize = maxSize;
     if (mTag) {
         free(mTag);
@@ -33,9 +38,9 @@ void AVFrameQueue::resetIndex() {
 
 void AVFrameQueue::pushBack(AVFrame *frame, bool noti) {
     pthread_mutex_lock(&mMutex);
-    LOGI("[AVFrameQueue(%s)] pushBack pts:%ld(%f) size:%ld index:%d", mTag, frame->pts,
-         frame->pts * av_q2d(frame->time_base), mQueue.size(),
-         currIndex)
+    LOGI("[AVFrameQueue(%s)] pushBack pts:%ld(%f) size:%ld index:%d format:%s %d*%d", mTag,
+         frame->pts, frame->pts * av_q2d(frame->time_base), mQueue.size(),
+         currIndex, av_get_pix_fmt_name((AVPixelFormat) frame->format), frame->width, frame->height)
     mQueue.push_back(frame);
     pthread_mutex_unlock(&mMutex);
     if (noti) {
@@ -79,13 +84,16 @@ AVFrame *AVFrameQueue::getFrameUnlock(bool pop, bool findBack) {
         }
     }
     AVFrame *frame = mQueue.at(currIndex);
-
     if (!pop && (isFull && currIndex > mMaxSize / 2)) {
         pop = true;
     }
     if (pop) {
         if (!tempPop) {
             AVFrame *pFrame = mQueue.front();
+            if (pFrame->format == AV_PIX_FMT_MEDIACODEC) {
+                LOGI("[AVFrameQueue(%s)], getFrame queue AV_PIX_FMT_MEDIACODEC", mTag)
+                av_mediacodec_release_buffer((AVMediaCodecBuffer *) (pFrame)->data[3], 0);
+            }
             av_frame_free(&pFrame);
         }
         mQueue.pop_front();
@@ -215,6 +223,10 @@ void AVFrameQueue::clear(bool noti) {
     while (!mQueue.empty() && size > 0) {
         AVFrame *frame = mQueue.front();
         if (frame != nullptr) {
+            if (frame->format == AV_PIX_FMT_MEDIACODEC) {
+                LOGI("[AVFrameQueue(%s)], clear queue AV_PIX_FMT_MEDIACODEC", mTag)
+                av_mediacodec_release_buffer((AVMediaCodecBuffer *) (frame)->data[3], 0);
+            }
             av_frame_free(&frame);
         }
         mQueue.pop_front();

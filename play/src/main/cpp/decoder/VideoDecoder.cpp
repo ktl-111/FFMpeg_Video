@@ -395,7 +395,7 @@ int VideoDecoder::convertFrameTo420Frame(AVFrame *srcFrame, AVFrame *dstFrame) {
     return ret;
 }
 
-bool isHwDecoder(AVFrame *frame) {
+bool VideoDecoder::isHwDecoder(AVFrame *frame) {
     LOGI("isHwDecoder %d", frame->format)
     return frame->format == hw_pix_fmt;
 }
@@ -561,17 +561,17 @@ void VideoDecoder::convertFrame(AVFrame *srcFrame, AVFrame *dstFrame) {
 
 void VideoDecoder::resultCallback(AVFrame *srcFrame) {
     updateTimestamp(srcFrame);
+    int dstHeight = srcFrame->height;
+    int dstWidth = srcFrame->width;
+    LOGI("resultCallback pts:%ld(%lf) format:%s %d*%d", srcFrame->pts,
+         srcFrame->pts * av_q2d(srcFrame->time_base),
+         av_get_pix_fmt_name((AVPixelFormat) srcFrame->format), dstWidth, dstHeight)
     if (isHwDecoder(srcFrame)) {
         if (mOnFrameArrivedListener) {
             mOnFrameArrivedListener(srcFrame);
         }
         return;
     }
-    int dstWidth = srcFrame->width;
-    int dstHeight = srcFrame->height;
-    LOGI("resultCallback pts:%ld(%lf) format:%s %d*%d", srcFrame->pts,
-         srcFrame->pts * av_q2d(srcFrame->time_base),
-         av_get_pix_fmt_name((AVPixelFormat) srcFrame->format), dstWidth, dstHeight)
     // mAvFrame->format == AV_PIX_FMT_YUV420P10LE先转为RGBA进行渲染
     AVFrame *dstFrame = av_frame_alloc();
     dstFrame->format = AV_PIX_FMT_RGBA;
@@ -818,7 +818,8 @@ int VideoDecoder::seek(int64_t pos) {
                                  INT64_MIN, seekPos, INT64_MAX,
                                  0);
     flush();
-    LOGI("[video] seek to: %ld, seekPos: %" PRId64 ", ret: %d", pos, seekPos, ret)
+    LOGI("[video] seek to: %ld, seekPos: %" PRId64 ", ret: %d(%s)", pos, seekPos, ret,
+         av_err2str(ret))
     // seek后需要恢复起始时间
     mFixStartTime = true;
     releaseFilter();

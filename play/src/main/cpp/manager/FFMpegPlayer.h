@@ -102,15 +102,13 @@ public:
     cutting(JNIEnv *env, const char *srcPath, const char *destPath, jlong startTime, jlong endTime,
             jobject out_config, jobject cb);
 
-    void startShowFrame();
-
 private:
     bool mHasAbort = false;
     bool mIsMute = false;
     bool mIsSeek = false;
     bool mIsBackSeek = false;
     int64_t mCurrSeekTime = -1;
-    bool mShowFirstFrame = false;
+    bool mShowFirstFrame = true;
 
     JavaVM *mJvm = nullptr;
     PlayerJniContext mPlayerJni{};

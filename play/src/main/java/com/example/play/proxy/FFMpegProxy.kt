@@ -76,17 +76,12 @@ internal class FFMpegProxy : IPaly {
         nativeCutting(nativeManager, srcPath, destPath, startTime, endTime, outConfig, cb)
     }
 
-    override fun startShowFrame() {
-        nativeStartShowFrame(nativeManager)
-    }
-
     private external fun nativeInit(): Long
     private external fun nativePrepare(
         nativeManager: Long, path: String, surface: Surface?, outConfig: OutConfig?
     ): Boolean
 
     private external fun nativeStart(nativeManager: Long)
-    private external fun nativeStartShowFrame(nativeManager: Long)
     private external fun nativeStop(nativeManager: Long)
     private external fun nativeResume(nativeManager: Long)
     private external fun nativePause(nativeManager: Long)
