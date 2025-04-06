@@ -341,6 +341,9 @@ void VideoDecoder::surfaceReCreate(JNIEnv *env, jobject surface) {
     LOGI("[video] surfaceReCreate")
     mSurface = surface;
     //创建nativewindow
+    if (nativeWindow) {
+        ANativeWindow_release(nativeWindow);
+    }
     nativeWindow = ANativeWindow_fromSurface(env, mSurface);
     //修改缓冲区格式和大小,对应视频格式和大小
     ANativeWindow_setBuffersGeometry(nativeWindow, getTargetWidth(), getTargetHeight(),
@@ -362,7 +365,9 @@ void VideoDecoder::surfaceReCreate(JNIEnv *env, jobject surface) {
 void VideoDecoder::surfaceDestroy(JNIEnv *env) {
     LOGI("[video] surfaceDestroy")
     mSurface = nullptr;
-    ANativeWindow_release(nativeWindow);
+    if (nativeWindow) {
+        ANativeWindow_release(nativeWindow);
+    }
     nativeWindow = nullptr;
 }
 
@@ -845,8 +850,8 @@ void VideoDecoder::release() {
     if (nativeWindow) {
         ANativeWindow_release(nativeWindow);
         nativeWindow = nullptr;
-        mSurface = nullptr;
     }
+    mSurface = nullptr;
     if (dstWindowBuffer) {
         free(dstWindowBuffer);
         dstWindowBuffer = nullptr;
