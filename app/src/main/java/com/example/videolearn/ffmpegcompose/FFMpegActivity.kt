@@ -4,6 +4,7 @@ import android.graphics.Bitmap
 import android.graphics.Matrix
 import android.media.MediaCodecInfo.CodecProfileLevel
 import android.media.MediaCodecList
+import android.opengl.GLSurfaceView
 import android.os.Bundle
 import android.util.Log
 import android.view.Surface

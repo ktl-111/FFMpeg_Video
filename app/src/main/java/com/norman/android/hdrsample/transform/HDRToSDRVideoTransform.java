@@ -127,7 +127,8 @@ public class HDRToSDRVideoTransform extends GLVideoTransform {
     @Override
     protected synchronized void onTransform() {
         setOutputColorSpace(ColorSpace.VIDEO_SDR);
-        clearColor();
+        //如果只用一个fbo,无需清理另一个
+//        clearColor();
         positionCoordinateBuffer.clear();
         textureCoordinateBuffer.clear();
         GLES20.glEnableVertexAttribArray(positionCoordinateAttribute);

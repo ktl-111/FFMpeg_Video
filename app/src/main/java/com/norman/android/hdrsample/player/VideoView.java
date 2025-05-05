@@ -1,7 +1,12 @@
 package com.norman.android.hdrsample.player;
 
 import android.content.Context;
+import android.graphics.ImageFormat;
 import android.graphics.SurfaceTexture;
+import android.media.Image;
+import android.media.ImageReader;
+import android.os.Handler;
+import android.os.HandlerThread;
 import android.os.Looper;
 import android.util.AttributeSet;
 import android.util.Log;
@@ -16,6 +21,8 @@ import android.widget.FrameLayout;
 import androidx.annotation.IntDef;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+
+import com.norman.android.hdrsample.util.LogUtils;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
@@ -207,6 +214,18 @@ public class VideoView extends FrameLayout {
         @Override
         public void onSurfaceTextureAvailable(@NonNull SurfaceTexture surfaceTexture, int width, int height) {
             Log.i(TAG, "onSurfaceTextureAvailable: ");
+//            HandlerThread imagereader = new HandlerThread("imagereader");
+//            imagereader.start();
+//            ImageReader imageReader = ImageReader.newInstance(width, height, ImageFormat.YUV_420_888, 1);
+//            imageReader.setOnImageAvailableListener(new ImageReader.OnImageAvailableListener() {
+//                @Override
+//                public void onImageAvailable(ImageReader reader) {
+//                    Image image = reader.acquireLatestImage();
+//                    LogUtils.i(TAG, "onImageAvailable image " + image.getWidth() + " " + image.getHeight());
+//                    image.close();
+//                }
+//            }, new Handler(imagereader.getLooper()));
+//            surface = imageReader.getSurface();
             surface = new Surface(surfaceTexture);
             onSurfaceAvailable(surface, width, height);
         }

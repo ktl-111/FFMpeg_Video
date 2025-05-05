@@ -38,6 +38,7 @@ import com.norman.android.hdrsample.util.GLESUtil;
 import com.norman.android.hdrsample.util.MediaFormatUtil;
 
 import java.io.File;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
@@ -71,8 +72,7 @@ public class HDRPlayActivity extends AppCompatActivity implements View.OnClickLi
             new Item("BT709", GammaOETF.BT709)
     });
 
-    VideoPlayer videoPlayer;
-    VideoView videoView;
+    List<VideoPlayer> mVideoPlayers = new ArrayList<>();
     CubeLutVideoTransform cubeLutVideoTransform;
 
 
@@ -125,7 +125,25 @@ public class HDRPlayActivity extends AppCompatActivity implements View.OnClickLi
         textViewVideoInfo = findViewById(R.id.TextViewVideoInfo);
         textViewScreenInfo = findViewById(R.id.TextViewScreenInfo);
         textViewOpenGLSupportInfo = findViewById(R.id.TextViewOpenGLSupportInfo);
-        videoView = findViewById(R.id.VideoPlayerView);
+        initView(R.id.VideoPlayerView2, "2");
+        initView(R.id.VideoPlayerView, "1");
+
+        findViewById(R.id.ButtonCubeLut).setOnClickListener(this);
+        findViewById(R.id.ButtonVideoList).setOnClickListener(this);
+        findViewById(R.id.ButtonViewMode).setOnClickListener(this);
+        findViewById(R.id.ButtonTextureSource).setOnClickListener(this);
+        findViewById(R.id.ButtonBitDepth).setOnClickListener(this);
+        findViewById(R.id.ButtonVideoOutput).setOnClickListener(this);
+        findViewById(R.id.ButtonTransformMode).setOnClickListener(this);
+        findViewById(R.id.ButtonGamutMap).setOnClickListener(this);
+        findViewById(R.id.ButtonToneMap).setOnClickListener(this);
+        findViewById(R.id.ButtonGammaEncode).setOnClickListener(this);
+        findViewById(R.id.ButtonChromaCorrection).setOnClickListener(this);
+        findViewById(R.id.ButtonToneReference).setOnClickListener(this);
+    }
+
+    private void initView(int id, String tag) {
+        VideoView videoView = findViewById(id);
         videoView.setViewType(viewType);
         directVideoOutput = DirectVideoOutput.create();
         directVideoOutput.setOutputVideoView(videoView);
@@ -137,7 +155,8 @@ public class HDRPlayActivity extends AppCompatActivity implements View.OnClickLi
         glVideoOutput.subscribe(outputFormatSubscriber);
 
 
-        videoPlayer = VideoPlayer.create();
+        VideoPlayer videoPlayer = VideoPlayer.create();
+        mVideoPlayers.add(videoPlayer);
         videoPlayer.setVideoOutput(glVideoOutput);
         videoPlayer.setCallback(new Player.Callback() {
             @Override
@@ -166,27 +185,16 @@ public class HDRPlayActivity extends AppCompatActivity implements View.OnClickLi
 //        videoPlayer.setSource(AssetFileSource.create(videoList.get(8)));
         cubeLutVideoTransform = new CubeLutVideoTransform();
         hdrToSDRShaderTransform = new HDRToSDRVideoTransform();
-        glVideoOutput.addVideoTransform(cubeLutVideoTransform);
+//        glVideoOutput.addVideoTransform(cubeLutVideoTransform);
         glVideoOutput.addVideoTransform(hdrToSDRShaderTransform);
 
         initTransform();
+
         showTransformLayout(transformModeId);
         showHdrToSdrLayout(videoPlayer.getVideoOutput());
         showScreenInfo();
         showOpenGLSupportInfo();
-
-        findViewById(R.id.ButtonCubeLut).setOnClickListener(this);
-        findViewById(R.id.ButtonVideoList).setOnClickListener(this);
-        findViewById(R.id.ButtonViewMode).setOnClickListener(this);
-        findViewById(R.id.ButtonTextureSource).setOnClickListener(this);
-        findViewById(R.id.ButtonBitDepth).setOnClickListener(this);
-        findViewById(R.id.ButtonVideoOutput).setOnClickListener(this);
-        findViewById(R.id.ButtonTransformMode).setOnClickListener(this);
-        findViewById(R.id.ButtonGamutMap).setOnClickListener(this);
-        findViewById(R.id.ButtonToneMap).setOnClickListener(this);
-        findViewById(R.id.ButtonGammaEncode).setOnClickListener(this);
-        findViewById(R.id.ButtonChromaCorrection).setOnClickListener(this);
-        findViewById(R.id.ButtonToneReference).setOnClickListener(this);
+        videoPlayer.start();
     }
 
     private void initTransform() {
@@ -201,19 +209,25 @@ public class HDRPlayActivity extends AppCompatActivity implements View.OnClickLi
     @Override
     protected void onResume() {
         super.onResume();
-        videoPlayer.start();
+        for (VideoPlayer videoPlayer : mVideoPlayers) {
+            videoPlayer.start();
+        }
     }
 
     @Override
     protected void onPause() {
         super.onPause();
-        videoPlayer.pause();
+        for (VideoPlayer videoPlayer : mVideoPlayers) {
+            videoPlayer.pause();
+        }
     }
 
     @Override
     protected void onDestroy() {
         super.onDestroy();
-        videoPlayer.release();
+        for (VideoPlayer videoPlayer : mVideoPlayers) {
+            videoPlayer.release();
+        }
     }
 
 
@@ -352,15 +366,17 @@ public class HDRPlayActivity extends AppCompatActivity implements View.OnClickLi
         for (int i = 0; i < menu.size(); i++) {
             menu.findItem(i).setCheckable(true);
         }
-        FileSource fileSource = videoPlayer.getSource();
+        FileSource fileSource = mVideoPlayers.get(0).getSource();
         int index = videoList.indexOf(fileSource.getPath());
         menu.findItem(index).setChecked(true);
         pum.setOnMenuItemClickListener(new PopupMenu.OnMenuItemClickListener() {
             @Override
             public boolean onMenuItemClick(MenuItem item) {
-                videoPlayer.stop();
-                videoPlayer.setSource(AssetFileSource.create(videoList.get(item.getItemId())));
-                videoPlayer.start();
+                for (VideoPlayer videoPlayer : mVideoPlayers) {
+                    videoPlayer.stop();
+                    videoPlayer.setSource(AssetFileSource.create(videoList.get(item.getItemId())));
+                    videoPlayer.start();
+                }
                 return true;
             }
         });
@@ -371,7 +387,7 @@ public class HDRPlayActivity extends AppCompatActivity implements View.OnClickLi
         PopupMenu pum = new PopupMenu(this, v);
         pum.inflate(R.menu.video_output_menu);
         Menu menu = pum.getMenu();
-        VideoOutput currentVideOutput = videoPlayer.getVideoOutput();
+        VideoOutput currentVideOutput = mVideoPlayers.get(0).getVideoOutput();
         if (currentVideOutput instanceof DirectVideoOutput) {
             menu.findItem(R.id.direct_video_output).setChecked(true);
         } else if (currentVideOutput instanceof GLVideoOutput) {
@@ -390,9 +406,12 @@ public class HDRPlayActivity extends AppCompatActivity implements View.OnClickLi
                     return true;
                 }
                 showHdrToSdrLayout(selectOutput);
-                videoPlayer.stop();
-                videoPlayer.setVideoOutput(selectOutput);
-                videoPlayer.start();
+
+                for (VideoPlayer videoPlayer : mVideoPlayers) {
+                    videoPlayer.stop();
+                    videoPlayer.setVideoOutput(selectOutput);
+                    videoPlayer.start();
+                }
                 return true;
             }
         });
@@ -416,7 +435,6 @@ public class HDRPlayActivity extends AppCompatActivity implements View.OnClickLi
                 } else if (item.getItemId() == R.id.textureView) {
                     viewType = VideoView.ViewType.TEXTURE_VIEW;
                 }
-                videoView.setViewType(viewType);
                 return true;
             }
         });
@@ -453,9 +471,12 @@ public class HDRPlayActivity extends AppCompatActivity implements View.OnClickLi
                 } else if (item.getItemId() == R.id.textureSourceOES) {
                     textureSource = GLVideoOutput.TextureSource.OES;
                 }
-                videoPlayer.stop();
-                glVideoOutput.setTextureSource(textureSource);
-                videoPlayer.start();
+
+                for (VideoPlayer videoPlayer : mVideoPlayers) {
+                    videoPlayer.stop();
+                    glVideoOutput.setTextureSource(textureSource);
+                    videoPlayer.start();
+                }
                 return true;
             }
         });
@@ -484,9 +505,12 @@ public class HDRPlayActivity extends AppCompatActivity implements View.OnClickLi
                 } else if (item.getItemId() == R.id.hdr_bit_depth_16) {
                     hdrBitDepth = GLVideoOutput.HdrBitDepth.BIT_DEPTH_16;
                 }
-                videoPlayer.stop();
-                glVideoOutput.setHdrBitDepth(hdrBitDepth);
-                videoPlayer.start();
+
+                for (VideoPlayer videoPlayer : mVideoPlayers) {
+                    videoPlayer.stop();
+                    glVideoOutput.setHdrBitDepth(hdrBitDepth);
+                    videoPlayer.start();
+                }
                 return true;
             }
         });

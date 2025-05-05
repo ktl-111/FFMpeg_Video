@@ -703,23 +703,252 @@ sdk:丢帧,只留IP
 ## open系列
 * OpenGL（OpenGraphics Library）
 OpenGL是业界最广泛采用的二维和三维图形API，将成千上万的应用程序应用到各种各样的计算机平台上。它是独立于窗口系统和操作系统以及网络透明。OpenGL使软件开发人员为PC，工作站和超级计算机硬件创造高性能，视觉上引人注目的图形软件应用程序，在市场，如CAD，内容创作，能源，娱乐，游戏开发，制造，医疗和虚拟现实。OpenGL公开了最新图形硬件的所有功能。
-
 * OpenCL（OpenComputing Language）
 开放运算语言opencl并行计算，面向异构系统通用目的并行编程的开放式、免费标准，也是一个统一的编程环境，便于软件开发人员为高性能计算服务器、桌面计算系统、手持设备编写高效轻便的代码，而且广泛适用于多核心处理器(CPU)、图形处理器(GPU)、Cell类型架构以及数字信号处理器(DSP)等其他并行处理器，在游戏、娱乐、科研、医疗等各种领域都有广阔的发展前景。
-
 * OpenAL（Open AudioLibrary）
 是自由软件界的跨平台音效API。它设计给多通道三维位置音效的特效表现。其 API 风格模仿自OpenGL。 
-
 * OpenGL ES (OpenGL for EmbeddedSystems)
 嵌入式系统采用的OpenGL集，是 OpenGL 三维图形 API 的子集，针对手机、PDA和游戏主机等嵌入式设备而设计。该API由Khronos集团定义推广，Khronos是一个图形软硬件行业协会，该协会主要关注图形和多媒体方面的开放标准。 
-
 * OpenVG（Vector GraphicsAcceleration）
 矢量图形设备加速器，OpenVG是免费的，跨平台的API，提供了一个低级别的硬件加速接口的矢量图形库如Flash和SVG。OpenVG是主要针对手持设备，需要移动加速引人注目的用户界面和小屏幕设备上的文本高质量的矢量图形，使硬件加速，在非常低的功率水平提供流畅的交互性能。
-
 * OpenSL ES (Open Sound Library for Embedded Systems)
-OpenSL ES 是无授权费、跨平台、针对嵌入式系统精心优化的硬件音频加速API。它为嵌入式移动多媒体设备上的本地应用程序开发者提供标准化, 高性能,低响应时间的音频功能实现方法，并实现软/硬件音频性能的直接跨平台部署，降低执行难度，促进高级音频市场的发展。
+  OpenSL ES 是无授权费、跨平台、针对嵌入式系统精心优化的硬件音频加速API。它为嵌入式移动多媒体设备上的本地应用程序开发者提供标准化, 高性能,低响应时间的音频功能实现方法，并实现软/硬件音频性能的直接跨平台部署，降低执行难度，促进高级音频市场的发展。
+
+### opengl es(视频渲染)
+
+Q:传递坐标系后形状是怎么采样的?具体采样流程是怎样的,怎么确定形状,是确定形状后然后彩颜色么
+
+
+
+
+
+Q:着色器代码是只执行一次,还是每个像素对应一个着色器代码?
+
+A:隐式同步屏障,阶段间自动同步（如所有顶点处理完才进行光栅化）
+
+![](img\image-20250504201725478.png)
+
+
+
+Q:查看gl线程初始化代码,为什么初始化后就可以使用,是不是用了全局变量绑定线程
+
+
+
+
+
+Q:glthread是多少个线程,自己创建的会不会阻塞原有的glthread
+
+
+
+#### EGL和GLES
+
+EG:窗口系统交互（创建上下文、Surface、交换缓冲区等）
+
+GLES:图形渲染（着色器、纹理、顶点操作等）
+
+
+
+#### 着色器
+
+- 顶点着色器(确定位置,每个顶点独立执行)
+- 片元着色器(上色,每个像素独立执行)
+
+#### opengl代码流程
+
+##### 着色器代码
+
+顶点着色器
+
+```glsl
+//gpu 的变量,attribute获取传值的意思
+attribute  vec4 vPosition;
+//纹理坐标系
+attribute vec4 vCoord;
+
+//varying 传值给片元着色器,片元着色器变量,名字需一致
+varying  vec2 aCoord;
+void main() {
+//    opengl  形状确定
+    gl_Position=vPosition;
+    aCoord = vCoord.xy;
+}
+```
+
+片元着色器
+
+```glsl
+#extension GL_OES_EGL_image_external : require//oes拓展
+#extension GL_OES_EGL_image_external_essl3 : require//3.0版本的oes拓展
+//声明精度
+precision lowp float;
+//纹理坐标值
+varying vec2 aCoord;
+//oes纹理采样
+uniform samplerExternalOES  vTexture;
+
+//2D采样器
+uniform sampler2D vTexture;
+
+//y2y采样器,采集yuv的外部类型,如摄像头,surface的yuv数据流,获取到的纹理数据格式是YUV420 10位格式
+uniform __samplerExternal2DY2YEXT vTexture;
+
+out vec4 outColor; // 声明自定义输出变量,3.0版本需要该声明,gl_FragColor是2.0的输出变量
+
+void main() {
+    // 1.采样器  2.坐标
+    vec4 rgba =  texture2D(vTexture,aCoord);
+	//着色器基础变量,最终显示的color
+    gl_FragColor=rgba;
+}
+```
+
+##### java层代码
+
+1. 创建对应着色器id
+
+   ```
+    int vShader/fShader = GLES20.glCreateShader(GLES20.GL_VERTEX_SHADER/GLES20.GL_FRAGMENT_SHADER)
+   ```
+
+2. 加载着色器代码
+
+   ```
+   GLES20.glShaderSource(vShader/fShader, vSource/fSource)//vSource/fSource着色器字符串代码
+   ```
+
+3. 编译(配置)
+
+   ```
+   GLES20.glCompileShader(vShader/fShader);
+   ```
+
+4. 查看是否成功
+
+   ```
+   GLES20.glGetShaderiv(vShader/fShader, GLES20.GL_COMPILE_STATUS, status, 0);
+   if (status[0] != GLES20.GL_TRUE)
+   ```
+
+5. 创建着色器总程序
+
+   ```
+   //创建着色器程序
+   int program = GLES20.glCreateProgram();//获取程序id值,后续传值都需要使用该id
+   //绑定顶点和片元
+   GLES20.glAttachShader(program, vShader);
+   GLES20.glAttachShader(program, fShader);
+   //链接着色器程序
+   GLES20.glLinkProgram(program);
+   
+   
+   //获得状态
+   GLES20.glGetProgramiv(program, GLES20.GL_LINK_STATUS, status, 0);
+   if (status[0] != GLES20.GL_TRUE) {
+       throw new IllegalStateException("link program:" + GLES20.glGetProgramInfoLog(program));
+   }
+   //释放着色器代码
+   GLES20.glDeleteShader(vShader);
+   GLES20.glDeleteShader(fShader);
+   ```
+
+6. 定位着色器变量值(获取变量值id),并初始化坐标系为native数据
+
+   ```java
+   //世界坐标系
+   float[] VERTEX = {
+               -1.0f, -1.0f,
+               1.0f, -1.0f,
+               -1.0f, 1.0f,
+               1.0f, 1.0f
+       };
+   
+   //纹理坐标系(android坐标系,左上角为0,0)
+   float[] TEXTURE = {
+               0.0f, 0.0f,
+               1.0f, 0.0f,
+               0.0f, 1.0f,
+               1.0f, 1.0f
+       };
+   //建立通道
+           vertexBuffer =  ByteBuffer.allocateDirect(4 * 4 * 2).order(ByteOrder.nativeOrder()).asFloatBuffer();
+           vertexBuffer.clear();
+           vertexBuffer.put(VERTEX);
+   
+           textureBuffer = ByteBuffer.allocateDirect(4 * 4 * 2).order(ByteOrder.nativeOrder())
+                   .asFloatBuffer();
+           textureBuffer.clear();
+           textureBuffer.put(TEXTURE);
+   
+   //定位着色器代码变量的位置(获取变量id)
+   vPosition = GLES20.glGetAttribLocation(program, "vPosition");
+   //接收纹理坐标，接收采样器采样图片的坐标
+   vCoord = GLES20.glGetAttribLocation(program, "vCoord");
+   //采样点的坐标
+   vTexture = GLES20.glGetUniformLocation(program, "vTexture");
+   ```
+
+7. 绘制
+
+   ```
+   //设置显示窗口
+   GLES20.glViewport(0, 0, mWidth, mHeight);
+   //使用程序
+   GLES20.glUseProgram(program);
+   //reset
+   vertexBuffer.position(0);
+   textureBuffer.position(0);
+   
+   //将cpu的数据 传给GPU vPosition
+   //1:GPU的坐标变量地址,2:每个坐标几个值组成
+   GLES20.glVertexAttribPointer(vPosition, 2, GLES20.GL_FLOAT, false, 0, vertexBuffer);
+   //启动变量
+   GLES20.glEnableVertexAttribArray(vPosition);
+   
+   //
+   GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
+   //        绑定一个采样器  摄像头的内容  textures
+   GLES20.glBindTexture(GLES20.GL_TEXTURE0, textures);
+   
+   //        传值    片元  变量    不需要
+   //        定位到  片元的变量 第一次  懵 opengl  输出视频
+   //        GPU  摄像头 采集数据    现在第几个图层
+   GLES20.glUniform1i(vTexture, 0);
+   
+   //        通知GPU渲染
+   GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4);
+   ```
+
+
+
+
+#### FBO(离屏渲染)
+
+述求:模糊效果
+
+原理:需要基于当前像素周围的像素值计算模糊值
+
+实现:由于正常的着色器渲染,从纹理读取时无法知道其他的像素值(opengl从纹理中读取时并行的,着色器代码main方法会执行N次,虽然从oes读取纹理能访问所有纹理数据,但实际并没有渲染出来,所以无法感知周围像素值),所以需要一个中间着色器,等oes读取完整个纹理后,再在中间着色器中处理,这中间着色器就是FBO
+
+如作画
+
+画板上的颜色是一笔一笔画上去的,只有等所有颜色都画好后,才能做模糊处理
+
+可以先打个草稿,等作画完后,再在画板上模糊处理
+
+脑子想的画面:原始纹理,OES,2D
+
+画板:最终着色器
+
+草稿:FBO
+
+
+
+#### 参考
+
+https://zhuanlan.zhihu.com/p/579826795
 
 ### opensl es(音频播放)
+
 #### 为什么用opensl es播放视频
 java层提供了AudioTrack,但是只支持部分封装格式的音频,并且如果是使用ffmpeg进行解码的话,还得从C回调到java,如果用opensl es可以直接在C操作
 
@@ -786,4 +1015,3 @@ Object 处于 UNREALIZED （不可用）状态时，系统不会为其分配资�
 [opensl es播放音频](https://www.jianshu.com/p/5ab9a339346f)
 [opensl es播放与采集](https://mp.weixin.qq.com/s/BSCmvkVVTEh2UuPcZhk3dA)
 
-### opengl es(视频播放)

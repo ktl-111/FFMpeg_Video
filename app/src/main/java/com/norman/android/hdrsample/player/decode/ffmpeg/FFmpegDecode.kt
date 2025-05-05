@@ -1,5 +1,6 @@
 package com.norman.android.hdrsample.player.decode.ffmpeg
 
+import android.media.MediaCodec
 import android.media.MediaExtractor
 import android.media.MediaFormat
 import android.util.Log
@@ -8,6 +9,7 @@ import com.example.play.IPalyListener
 import com.example.play.PlayManager
 import com.norman.android.hdrsample.handler.MessageHandler
 import com.norman.android.hdrsample.handler.MessageHandler.LifeCycleCallback
+import com.norman.android.hdrsample.opengl.GLTextureSurface
 import com.norman.android.hdrsample.player.VideoPlayerImpl
 import com.norman.android.hdrsample.player.decode.MediaCodecAsyncAdapter
 import com.norman.android.hdrsample.player.decode.base.DecodecApi
@@ -60,8 +62,20 @@ class FFmpegDecode(private val mimeType: String, private val fileSource: FileSou
 
     fun startPlay() {
         post {
+            LogUtils.i(TAG, "startPlay ${prepare}")
             if (prepare.surface != null) {
                 playManager.prepare(fileSource.path, surface, null)
+                if (surface is GLTextureSurface) {
+                    (surface as GLTextureSurface).setOnFrameAvailableListener { surface ->
+                        LogUtils.i(TAG, "onFrameAvailable $surface")
+                        try {
+                            callback?.onOutputBufferComplete(0)
+                        } catch (e: Exception) {
+                            LogUtils.i(TAG, "onOutputBufferRender faile " + e.message)
+                            e.printStackTrace()
+                        }
+                    }
+                }
             }
             if (prepare.start) {
                 playManager.start()
@@ -121,7 +135,7 @@ class FFmpegDecode(private val mimeType: String, private val fileSource: FileSou
     }
 
     override fun onVideoConfig(witdh: Int, height: Int, duration: Double, fps: Double) {
-
+        LogUtils.i(TAG, "onVideoConfig ${witdh}*${height}")
     }
 
     private fun getMediaFormat(filePath: String): MediaFormat? {

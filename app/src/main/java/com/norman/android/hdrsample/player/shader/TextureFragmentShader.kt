@@ -27,6 +27,7 @@ class TextureFragmentShader(@TextureType textureType: Int) : GLShaderCode() {
         get() = """
             |#version 300 es
             |${if (textureType != TYPE_TEXTURE_2D) "#extension GL_OES_EGL_image_external : require" else ""}
+            |${if (textureType != TYPE_TEXTURE_2D) "#extension GL_OES_EGL_image_external_essl3 : require" else ""}
             |${if (textureType == TYPE_TEXTURE_Y2Y) "#extension GL_EXT_YUV_target : require" else ""}
             |precision highp float;
             |in vec2 textureCoordinate;
@@ -46,6 +47,25 @@ class TextureFragmentShader(@TextureType textureType: Int) : GLShaderCode() {
             |    outColor.a= color.a;
             |}
             """.trimMargin()
+//        get() = """
+//            |#version 300 es
+//            |${if (textureType != TYPE_TEXTURE_2D) "#extension GL_OES_EGL_image_external : require" else ""}
+//            |${if (textureType != TYPE_TEXTURE_2D) "#extension GL_OES_EGL_image_external_essl3 : require" else ""}
+//            |${if (textureType == TYPE_TEXTURE_Y2Y) "#extension GL_EXT_YUV_target : require" else ""}
+//            |precision highp float;
+//            |in vec2 textureCoordinate;
+//            |out vec4 outColor;
+//            |uniform ${
+//            if (textureType == TYPE_TEXTURE_2D) "sampler2D"
+//            else if (textureType == TYPE_TEXTURE_OES) "samplerExternalOES"
+//            else "__samplerExternal2DY2YEXT"
+//        } $INPUT_IMAGE_TEXTURE;
+//            |${if (textureType == TYPE_TEXTURE_Y2Y) "uniform mat4 $Y2Y_TO_RGB_MATRIX;" else ""}
+//            |void main()
+//            |{
+//            |    outColor = texture($INPUT_IMAGE_TEXTURE, textureCoordinate);
+//            |}
+//            """.trimMargin()
 
     companion object {
         const val TYPE_TEXTURE_2D = 1

@@ -12,11 +12,26 @@ package com.norman.android.hdrsample.player;
 import android.opengl.GLES20;
 import android.opengl.GLES30;
 
+import androidx.annotation.NonNull;
+import androidx.compose.ui.state.ToggleableState;
+
 import com.norman.android.hdrsample.player.color.ColorSpace;
 import com.norman.android.hdrsample.util.GLESUtil;
+import com.norman.android.hdrsample.util.LogUtils;
 
 
 class GLRenderTextureTarget extends GLRenderTarget {
+    private String mTAG;
+
+    public GLRenderTextureTarget(String tag) {
+        mTAG = tag;
+    }
+
+    @NonNull
+    @Override
+    public String toString() {
+        return "GLRenderTextureTarget(" + mTAG + ")";
+    }
 
     int frameBufferId;
     int textureId;
@@ -37,7 +52,10 @@ class GLRenderTextureTarget extends GLRenderTarget {
         }
     }
 
+    private String TAG = "GLRender";
+
     void setColorSpace(@ColorSpace int colorSpace) {
+        LogUtils.i(TAG, "setColorSpace " + colorSpace);
         this.colorSpace = colorSpace;
     }
 

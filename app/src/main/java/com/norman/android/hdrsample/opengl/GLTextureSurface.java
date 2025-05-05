@@ -113,6 +113,7 @@ public class GLTextureSurface extends Surface {
         public SurfaceTexturePlus(int texName) {
             super(texName);
             textureId = texName;
+            LogUtils.i(TAG, "SurfaceTexturePlus " + textureId);
         }
 
         @Override

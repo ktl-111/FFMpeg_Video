@@ -80,14 +80,28 @@
 
     </LinearLayout>
 
-    <com.norman.android.hdrsample.player.VideoView
-        android:id="@+id/VideoPlayerView"
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_weight="1">
+        android:layout_weight="1"
+        android:orientation="horizontal">
 
-    </com.norman.android.hdrsample.player.VideoView>
+        <com.norman.android.hdrsample.player.VideoView
+            android:id="@+id/VideoPlayerView"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1">
 
+        </com.norman.android.hdrsample.player.VideoView>
+
+        <com.norman.android.hdrsample.player.VideoView
+            android:id="@+id/VideoPlayerView2"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1">
+
+        </com.norman.android.hdrsample.player.VideoView>
+    </LinearLayout>
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -259,7 +273,6 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:orientation="horizontal">
-
 
 
                     <Button

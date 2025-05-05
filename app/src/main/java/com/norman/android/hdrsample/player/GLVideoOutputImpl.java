@@ -3,7 +3,6 @@ package com.norman.android.hdrsample.player;
 import android.graphics.Rect;
 import android.media.MediaFormat;
 import android.os.Build;
-import android.util.Log;
 import android.view.Surface;
 
 import com.norman.android.hdrsample.opengl.GLEnvColorSpace;
@@ -75,7 +74,7 @@ class GLVideoOutputImpl extends GLVideoOutput {
     /**
      * 如果是Buffer模式，Buffer转成后的纹理
      */
-    private final GLRenderTextureTarget yuv420TextureTarget = new GLRenderTextureTarget();
+    private final GLRenderTextureTarget yuv420TextureTarget = new GLRenderTextureTarget("yuv420TextureTarget");
 
     /**
      * 纹理处理转换器
@@ -92,9 +91,9 @@ class GLVideoOutputImpl extends GLVideoOutput {
     /**
      * Transform转换时用frontTarget和backTarget交替做为中转
      */
-    private GLRenderTextureTarget frontTarget = new GLRenderTextureTarget();
+    private GLRenderTextureTarget frontTarget = new GLRenderTextureTarget("frontTarget");
 
-    private GLRenderTextureTarget backTarget = new GLRenderTextureTarget();
+    private GLRenderTextureTarget backTarget = new GLRenderTextureTarget("backTarget");
 
     /**
      * buffer转纹理模式
@@ -125,7 +124,6 @@ class GLVideoOutputImpl extends GLVideoOutput {
 
 
     public GLVideoOutputImpl() {
-
     }
 
     @Override
@@ -212,18 +210,6 @@ class GLVideoOutputImpl extends GLVideoOutput {
             videoDecoder.setOutputMode(VideoDecoder.OutputMode.SURFACE_MODE);
             videoSurface = new GLTextureSurface(GLESUtil.createExternalTextureId());
             videoDecoder.setOutputSurface(videoSurface);// 视频解码到videoSurface的纹理上
-            videoSurface.setOnFrameAvailableListener(new GLTextureSurface.OnFrameAvailableListener() {
-                @Override
-                public void onFrameAvailable(GLTextureSurface surface) {
-                    LogUtils.i(TAG, "onFrameAvailable " + surface);
-                    try {
-                        onOutputBufferRender(0);
-                    } catch (Exception e) {
-                        LogUtils.i(TAG, "onOutputBufferRender faile " + e.getMessage());
-                        e.printStackTrace();
-                    }
-                }
-            });
             externalTextureRenderer.setTextureId(videoSurface.getTextureId());
             y2yExtTextureRenderer.setTextureId(videoSurface.getTextureId());
         }
@@ -340,6 +326,29 @@ class GLVideoOutputImpl extends GLVideoOutput {
         }
     }
 
+    /**
+     * videoSurface 渲染
+     * textureRenderer 着色器
+     * renderToTarget
+     * --frontTarget fbo,画面切到这里
+     * --textureRenderer.onRenderTarget 切换了fbo,此时画面在fbo,在target里
+     * HDRToSDRVideoTransform 坐转换
+     * --传入frontTarget和backTarget
+     * --切换至backTarget fbo,读取frontTarget的纹理绘制
+     * --此时纹理在backTarget
+     * --交换front和back,此时front等于当前的back
+     * texture2DRenderer.setTextureId(frontTarget.textureId) 设置texture2DRenderer纹理id为fbo 纹理id
+     * screenRenderer=texture2DRenderer
+     * GLEnvWindowSurface windowSurface = outputSurface.getWindowSurface(finalColorSpace); 最终显示的surface里获取gl窗口
+     * envContext.makeCurrent(windowSurface) 切换当前的gl窗口
+     * screenRenderer.renderToTarget(screenTarget)
+     * --screenTarget,断开fbo
+     * --screenRenderer获取fbo的2d纹理,由于此时切换了gl窗口,此时绘制在新的gl窗口里
+     * windowSurface.swapBuffers 将当前纹理交换到outputSurface
+     *
+     * @param presentationTimeUs
+     * @return
+     */
     @Override
     protected synchronized boolean onOutputBufferRender(long presentationTimeUs) {
         if (!outputSurface.isValid()) {
@@ -387,14 +396,20 @@ class GLVideoOutputImpl extends GLVideoOutput {
             frontTarget.setMaxContentLuminance(maxContentLuminance);
             frontTarget.setMaxFrameAverageLuminance(maxFrameAverageLuminance);
             frontTarget.setMaxMasteringLuminance(maxMasteringLuminance);
+            //textureRenderer关联了surface的纹理id
+            //target(fbo)
             //把前面的数据渲染到新的纹理上面
             textureRenderer.renderToTarget(frontTarget);
 
             //用frontTarget和backTarget做中转做Transform的处理
+            //这里单fbo也能处理,如果存在多层后处理的话,就需要用到双fbo
             for (GLVideoTransform videoTransform : transformList) {
-                LogUtils.i(TAG, "transformList for " + videoTransform);
+                //HDRToSDRVideoTransform
+                //HDR->SDR
                 videoTransform.renderToTarget(frontTarget, backTarget);
-                if (videoTransform.renderSuccess) {//如果绘制成功了，才中转纹理
+                boolean renderSuccess = videoTransform.renderSuccess;
+                LogUtils.i(TAG, " transformList for " + videoTransform.getClass().getSimpleName() + " frontTarget:" + frontTarget + " backTarget:" + backTarget + " success:" + renderSuccess);
+                if (renderSuccess) {//如果绘制成功了，才中转纹理
                     LogUtils.i(TAG, "transformList for " + videoTransform + "  success");
                     GLRenderTextureTarget temp = frontTarget;
                     frontTarget = backTarget;
@@ -406,7 +421,7 @@ class GLVideoOutputImpl extends GLVideoOutput {
             finalColorSpace = frontTarget.colorSpace;//
             screenRenderer = texture2DRenderer;
 
-            LogUtils.i(TAG, "onOutputBufferRender: transformList.notEmpty");
+            LogUtils.i(TAG, "onOutputBufferRender: transformList.notEmpty " + finalColorSpace);
         }
         GLEnvWindowSurface windowSurface = outputSurface.getWindowSurface(finalColorSpace);
         if (windowSurface == null) {

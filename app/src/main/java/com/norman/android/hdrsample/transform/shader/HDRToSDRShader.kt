@@ -8,6 +8,7 @@ import com.norman.android.hdrsample.transform.shader.gamma.GammaEOTF
 import com.norman.android.hdrsample.transform.shader.gamma.GammaOETF
 import com.norman.android.hdrsample.transform.shader.gamutmap.GamutMap
 import com.norman.android.hdrsample.transform.shader.tonemap.ToneMap
+import com.norman.android.hdrsample.util.LogUtils
 
 /**
  * HDR转SDR的Shader，
@@ -58,7 +59,7 @@ class HDRToSDRShader(
      * 把输入的HDR视频内容转换线性
      */
     val gammaEOTF: GammaEOTF
-
+    private val TAG = "HDR2SDR"
 
     init {
         this.chromaCorrection = chromaCorrection
@@ -74,6 +75,7 @@ class HDRToSDRShader(
         } else {
             GammaEOTF.NONE
         }
+        LogUtils.i(TAG, "gammaEOTF:${gammaEOTF::class.java} colorSpace:${colorSpace} referenceDisplay:${referenceDisplay}")
     }
 
     override val code: String
