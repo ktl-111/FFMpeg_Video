@@ -25,6 +25,7 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.ShortBuffer;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -94,6 +95,8 @@ class GLVideoOutputImpl extends GLVideoOutput {
     private GLRenderTextureTarget frontTarget = new GLRenderTextureTarget("frontTarget");
 
     private GLRenderTextureTarget backTarget = new GLRenderTextureTarget("backTarget");
+
+    private final GLRenderPboTarget pboTarget = new GLRenderPboTarget();
 
     /**
      * buffer转纹理模式
@@ -259,6 +262,7 @@ class GLVideoOutputImpl extends GLVideoOutput {
     protected void onOutputFormatChanged(MediaFormat outputFormat) {
         super.onOutputFormatChanged(outputFormat);
         LogUtils.i(TAG, "onOutputFormatChanged " + outputFormat);
+        int rotation = MediaFormatUtil.getRotation(outputFormat);
         colorRange = MediaFormatUtil.getColorRange(outputFormat);
         colorSpace = MediaFormatUtil.getColorSpace(outputFormat);
         LogUtils.i(TAG, "onOutputFormatChanged colorRange:" + colorRange + " colorSpace:" + colorSpace);
@@ -310,6 +314,10 @@ class GLVideoOutputImpl extends GLVideoOutput {
                 y2yExtTextureRenderer.setBitDepth(profile10Bit ? 10 : 8);
                 y2yExtTextureRenderer.setColorRange(colorRange);
             }
+            y2yExtTextureRenderer.setRotation(rotation);
+            externalTextureRenderer.setRotation(rotation);
+//            externalTextureRenderer.setScale(scale);
+//            y2yExtTextureRenderer.setScale(scale);
         }
     }
 
@@ -367,7 +375,9 @@ class GLVideoOutputImpl extends GLVideoOutput {
         } else {//两种扩展纹理 OES或Y2Y
             textureRenderer = textureY2YMode ? y2yExtTextureRenderer : externalTextureRenderer;
             videoSurface.updateTexImage();
-            videoSurface.getTransformMatrix(textureRenderer.getTextureMatrix());//纹理矩阵能解决绿边问题
+            float[] textureMatrix = textureRenderer.getTextureMatrix();
+            videoSurface.getTransformMatrix(textureMatrix);//纹理矩阵能解决绿边问题
+            LogUtils.i(TAG, "textureMatrix " + Arrays.toString(textureMatrix));
         }
         GLTextureRenderer screenRenderer;
         int finalColorSpace = colorSpace;
@@ -390,6 +400,7 @@ class GLVideoOutputImpl extends GLVideoOutput {
             backTarget.setBitDepth(targetBitDepth);
             frontTarget.setRenderSize(videoWidth, videoHeight);
             backTarget.setRenderSize(videoWidth, videoHeight);
+            pboTarget.setRenderSize(videoWidth, videoHeight);
 
             // 标记frontTarget的属性，方便后续处理
             frontTarget.setColorSpace(colorSpace);
@@ -415,6 +426,18 @@ class GLVideoOutputImpl extends GLVideoOutput {
                     frontTarget = backTarget;
                     backTarget = temp;
                 }
+            }
+            if (saveBitmap) {
+                LogUtils.i(TAG, "saveBitmap");
+                try {
+                    frontTarget.startRender();
+                    pboTarget.startRender();
+                    pboTarget.finishRender();
+                    frontTarget.finishRender();
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+                return true;
             }
             // 获得最终纹理
             texture2DRenderer.setTextureId(frontTarget.textureId);

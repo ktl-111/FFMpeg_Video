@@ -189,9 +189,7 @@ class FFMpegActivity : AppCompatActivity(), LogProxy {
             PlayManager().apply {
                 playManager = this
                 init(object : IPalyListener {
-                    override fun onVideoConfig(
-                        witdh: Int, height: Int, duration: Double, fps: Double
-                    ) {
+                    override fun onVideoConfig(witdh: Int, height: Int, duration: Double, fps: Double, rotation: Int) {
                         val ratio = witdh.toFloat() / height
                         Log.i(
                             TAG,

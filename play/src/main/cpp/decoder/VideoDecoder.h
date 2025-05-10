@@ -52,6 +52,8 @@ public:
 
     double getFps() const;
 
+    int getRotation() const;
+
     void setSurface(jobject surface);
 
     void setOutConfig(const std::shared_ptr<OutConfig> outConfig);

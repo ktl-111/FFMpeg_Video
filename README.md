@@ -746,7 +746,7 @@ EG:窗口系统交互（创建上下文、Surface、交换缓冲区等）
 
 GLES:图形渲染（着色器、纹理、顶点操作等）
 
-
+https://blog.csdn.net/wuqingsen1/article/details/126246676)
 
 #### 着色器
 
@@ -918,7 +918,42 @@ void main() {
    GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4);
    ```
 
+#### 坐标系
 
+- ##### OPENGL NDC(归一化/规范化设备坐标系--normalized device coordinate)
+
+![Snipaste_2025-05-10_19-05-39](img\Snipaste_2025-05-10_19-05-39.png)
+
+- ##### 纹理坐标
+
+![Snipaste_2025-05-10_19-05-46](img\Snipaste_2025-05-10_19-05-46.png)
+
+- ##### android坐标系
+
+![Snipaste_2025-05-10_19-04-29](img\Snipaste_2025-05-10_19-04-29.png)
+
+
+
+如果在android中使用opengl绘制,需要将顶点或者纹理的坐标系上下翻转
+
+```kotlin
+private val vertices = floatArrayOf(
+    // 顶点坐标 (x,y) + 纹理坐标 (s,t)
+    -1f, -1f, 0f, 1f,  //顶点(左下)->纹理(左上)
+    -1f, 1f, 0f, 0f,  //顶点(左上)->纹理(左下)
+    1f, -1f, 1f, 1f,   //顶点(右下)->纹理(右上)
+    1f, 1f, 1f, 0f, //顶点(右上)->纹理(右下)
+    //z/N字记发
+    //顶点画N->纹理画镜像N,正常画面
+    //左旋转90度==纹理左转(逆时针)90==纹理画Z
+    //右旋转90度==纹理右转(顺时针)90==纹理画镜像Z
+    //旋转180度==纹理画N
+)
+```
+
+##### 参考
+
+[坐标系](https://blog.csdn.net/wuqingsen1/article/details/126246676)
 
 
 #### FBO(离屏渲染)
@@ -940,6 +975,10 @@ void main() {
 画板:最终着色器
 
 草稿:FBO
+
+
+
+#### PBO
 
 
 

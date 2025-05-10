@@ -32,6 +32,7 @@ import com.norman.android.hdrsample.transform.shader.chromacorrect.ChromaCorrect
 import com.norman.android.hdrsample.transform.shader.gamma.GammaOETF;
 import com.norman.android.hdrsample.transform.shader.gamutmap.GamutMap;
 import com.norman.android.hdrsample.transform.shader.tonemap.ToneMap;
+import com.norman.android.hdrsample.util.AppUtil;
 import com.norman.android.hdrsample.util.AssetUtil;
 import com.norman.android.hdrsample.util.DisplayUtil;
 import com.norman.android.hdrsample.util.GLESUtil;
@@ -120,13 +121,17 @@ public class HDRPlayActivity extends AppCompatActivity implements View.OnClickLi
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        File externalCacheDir = AppUtil.getAppContext().getExternalCacheDir();
+        if (externalCacheDir.exists()) {
+            externalCacheDir.delete();
+        }
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         setContentView(R.layout.activity_hdr_player);
         textViewVideoInfo = findViewById(R.id.TextViewVideoInfo);
         textViewScreenInfo = findViewById(R.id.TextViewScreenInfo);
         textViewOpenGLSupportInfo = findViewById(R.id.TextViewOpenGLSupportInfo);
-        initView(R.id.VideoPlayerView2, "2");
-        initView(R.id.VideoPlayerView, "1");
+        initView(R.id.VideoPlayerView2, 1.0f, false);
+        initView(R.id.VideoPlayerView, 0.1f, true);
 
         findViewById(R.id.ButtonCubeLut).setOnClickListener(this);
         findViewById(R.id.ButtonVideoList).setOnClickListener(this);
@@ -142,7 +147,7 @@ public class HDRPlayActivity extends AppCompatActivity implements View.OnClickLi
         findViewById(R.id.ButtonToneReference).setOnClickListener(this);
     }
 
-    private void initView(int id, String tag) {
+    private void initView(int id, float scale, boolean saveBitmap) {
         VideoView videoView = findViewById(id);
         videoView.setViewType(viewType);
         directVideoOutput = DirectVideoOutput.create();
@@ -150,8 +155,10 @@ public class HDRPlayActivity extends AppCompatActivity implements View.OnClickLi
         directVideoOutput.subscribe(outputFormatSubscriber);
         glVideoOutput = GLVideoOutput.create();
         glVideoOutput.setTextureSource(textureSource);
+        glVideoOutput.setSaveBitmap(saveBitmap);
         glVideoOutput.setHdrBitDepth(hdrBitDepth);
         glVideoOutput.setOutputVideoView(videoView);
+        glVideoOutput.setScale(scale);
         glVideoOutput.subscribe(outputFormatSubscriber);
 
 

@@ -27,10 +27,10 @@ public class GLESUtil {
 
     //顶点坐标
     private static final float[] POSITION_COORDINATES = {
-            -1.0f, -1.0f,//left bottom
-            1.0f, -1.0f,//right bottom
-            -1.0f, 1.0f,//left top
-            1.0f, 1.0f,//right top
+            -1.0f, -1.0f,  //left bottom
+            1.0f, -1.0f,   //right bottom
+            -1.0f, 1.0f,  //left top
+            1.0f, 1.0f,   //right top
     };
 
     // 纹理坐标，注意纹理坐标本身是从下往上的也就是说相对图像文件本身是颠倒的
@@ -47,6 +47,19 @@ public class GLESUtil {
             1.0f, 1.0f,//right bottom
             0.0f, 0.0f,//left top
             1.0f, 0.0f,//right  top
+    };
+
+    private static final float[] TEXTURE_COORDINATES_LEFT90 = {
+            0.0f, 0.0f,//left top
+            0.0f, 1.0f,//left bottom
+            1.0f, 0.0f,//right  top
+            1.0f, 1.0f,//right bottom
+    };
+    private static final float[] TEXTURE_COORDINATES_RIGHT90 = {
+            1.0f, 1.0f,//right bottom
+            1.0f, 0.0f,//right  top
+            0.0f, 1.0f,//left bottom
+            0.0f, 0.0f,//left top
     };
 
 
@@ -98,6 +111,14 @@ public class GLESUtil {
      */
     public static FloatBuffer createTextureFlatBufferUpsideDown() {
         return BufferUtil.createDirectFloatBuffer(TEXTURE_COORDINATES_UPSIDE_DOWN);
+    }
+
+    public static FloatBuffer createTextureFlatBufferLeft90() {
+        return BufferUtil.createDirectFloatBuffer(TEXTURE_COORDINATES_LEFT90);
+    }
+
+    public static FloatBuffer createTextureFlatBufferRight90() {
+        return BufferUtil.createDirectFloatBuffer(TEXTURE_COORDINATES_RIGHT90);
     }
 
     /**
@@ -403,6 +424,7 @@ public class GLESUtil {
 
     /**
      * OpenGL硬件是否支持BT2020PQ
+     *
      * @return
      */
     public static boolean isSupportBT2020PQ() {
@@ -412,6 +434,7 @@ public class GLESUtil {
 
     /**
      * OpenGL硬件是否支持BT2020HLG
+     *
      * @return
      */
     public static boolean isSupportBT2020HLG() {
@@ -420,9 +443,9 @@ public class GLESUtil {
     }
 
 
-
     /**
      * OpenGL硬件是否支持BT2020Linear
+     *
      * @return
      */
     public static boolean isSupportBT2020Linear() {
@@ -432,7 +455,7 @@ public class GLESUtil {
 
 
     private static synchronized void loadEGLColorSpace() {
-        if (EGL_COLOR_SPACE_LOADED){
+        if (EGL_COLOR_SPACE_LOADED) {
             return;
         }
         GLEnvDisplay envDisplay = GLEnvDisplay.createDisplay();

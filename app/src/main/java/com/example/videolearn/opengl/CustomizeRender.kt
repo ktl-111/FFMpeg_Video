@@ -9,22 +9,30 @@ import javax.microedition.khronos.opengles.GL10
 
 class CustomizeRender : GLSurfaceView.Renderer {
     private val vertexShaderCode =
-        "attribute vec4 vPosition;" +
-                "void main() {" +
-                "  gl_Position = vPosition;" +
+        "attribute vec2 a_Position;  // 仅需XY坐标\n" +
+                "attribute vec2 a_TexCoord;\n" +
+                "varying vec2 v_TexCoord;\n" +
+                "uniform mat4 u_MVPMatrix;   // 仍需要4x4矩阵\n" +
+                "\n" +
+                "void main() {\n" +
+                "    v_TexCoord = a_TexCoord;\n" +
+                "    gl_Position = u_MVPMatrix * vec4(a_Position, 0.0, 1.0); // Z固定为0\n" +
                 "}"
 
     private val fragmentShaderCode =
-        "precision mediump float;" +
-                "uniform vec4 vColor;" +
-                "void main() {" +
-                "  gl_FragColor = vColor;" +
+        "precision mediump float;\n" +
+                "uniform sampler2D u_Texture;\n" +
+                "varying vec2 v_TexCoord;\n" +
+                "\n" +
+                "void main() {\n" +
+                "    gl_FragColor = texture2D(u_Texture, v_TexCoord);\n" +
                 "}"
 
     private val triangleCoords = floatArrayOf(
-        0.0f, 0.5f, 0.0f,  // 顶部顶点（NDC坐标系）
-        -0.5f, -0.5f, 0.0f, // 左下
-        0.5f, -0.5f, 0.0f   // 右下
+        -1f,  1f,
+        -1f, -1f,
+        1f, -1f,
+        1f,  1f
     )
 
     private val color = floatArrayOf(1.0f, 0.0f, 0.0f, 1.0f) // RGBA红色

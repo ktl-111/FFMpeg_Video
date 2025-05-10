@@ -17,14 +17,16 @@ import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.Button
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.example.videolearn.compose.ComposeActivity
 import com.example.videolearn.ffmpegcompose.FFMpegActivity
 import com.example.videolearn.live.LiveActivity
 import com.example.videolearn.shotscreen.ShotScreenActivity
@@ -46,35 +48,50 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    data class Items(val name: String, val click: () -> Unit)
+
     @Composable
     private fun rootView() {
-        Column {
-            button("test") {
-                test()
-            }
-            button("投屏") {
-                startService(Intent(this@MainActivity, MediaService::class.java))
-                shotScreen()
-            }
-            button("视频通话") {
-                startService(Intent(this@MainActivity, MediaService::class.java))
-                video()
-            }
-            button("读取流显示") {
-                parsedata()
-            }
-            button("videoplay") {
-                videoplay()
-            }
-            button("直播") {
-                startService(Intent(this@MainActivity, MediaService::class.java))
-                live()
-            }
-            button("HDR") {
-                ffmpeg(mHdrPickLauncher)
-            }
-            button("ffmpeg") {
-                ffmpeg(mMediaPickLauncher)
+        LazyColumn {
+            val items = mutableListOf(
+                Items("compose test") {
+                    startActivity(android.content.Intent(this@MainActivity, ComposeActivity::class.java))
+                },
+                Items("opengl") {
+                    startActivity(android.content.Intent(this@MainActivity, com.example.videolearn.opengl.OpenglActivity::class.java))
+                },
+                Items("HDR") {
+                    ffmpeg(mHdrPickLauncher)
+                },
+                Items("ffmpeg") {
+                    ffmpeg(mMediaPickLauncher)
+                },
+                Items("test") {
+                    test()
+                },
+                Items("投屏") {
+                    startService(android.content.Intent(this@MainActivity, com.example.videolearn.MediaService::class.java))
+                    shotScreen()
+                },
+                Items("视频通话") {
+                    startService(android.content.Intent(this@MainActivity, com.example.videolearn.MediaService::class.java))
+                    video()
+                },
+                Items("读取流显示") {
+                    parsedata()
+                },
+                Items("videoplay") {
+                    videoplay()
+                },
+                Items("直播") {
+                    startService(android.content.Intent(this@MainActivity, com.example.videolearn.MediaService::class.java))
+                    live()
+                },
+            )
+
+
+            itemsIndexed(items) { index: Int, item: Items ->
+                button(item.name, item.click)
             }
         }
     }

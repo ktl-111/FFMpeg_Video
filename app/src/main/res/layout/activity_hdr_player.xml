@@ -86,21 +86,31 @@
         android:layout_weight="1"
         android:orientation="horizontal">
 
-        <com.norman.android.hdrsample.player.VideoView
-            android:id="@+id/VideoPlayerView"
+
+        <RelativeLayout
             android:layout_width="0dp"
             android:layout_height="match_parent"
-            android:layout_weight="1">
+            android:layout_weight="1"
+            android:gravity="center">
 
-        </com.norman.android.hdrsample.player.VideoView>
+            <com.norman.android.hdrsample.player.VideoView
+                android:id="@+id/VideoPlayerView"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content" />
+        </RelativeLayout>
 
-        <com.norman.android.hdrsample.player.VideoView
-            android:id="@+id/VideoPlayerView2"
+        <RelativeLayout
             android:layout_width="0dp"
             android:layout_height="match_parent"
-            android:layout_weight="1">
+            android:layout_weight="1"
+            android:gravity="center">
 
-        </com.norman.android.hdrsample.player.VideoView>
+            <com.norman.android.hdrsample.player.VideoView
+                android:id="@+id/VideoPlayerView2"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content" />
+        </RelativeLayout>
+
     </LinearLayout>
 
     <LinearLayout

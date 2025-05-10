@@ -3,7 +3,7 @@ package com.example.play
 import java.nio.ByteBuffer
 
 interface IPalyListener {
-    fun onVideoConfig(witdh: Int, height: Int, duration: Double, fps: Double)
+    fun onVideoConfig(witdh: Int, height: Int, duration: Double, fps: Double,rotation:Int)
 
     /**
      * On paly progress

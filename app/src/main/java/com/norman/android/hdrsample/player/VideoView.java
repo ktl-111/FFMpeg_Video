@@ -1,12 +1,7 @@
 package com.norman.android.hdrsample.player;
 
 import android.content.Context;
-import android.graphics.ImageFormat;
 import android.graphics.SurfaceTexture;
-import android.media.Image;
-import android.media.ImageReader;
-import android.os.Handler;
-import android.os.HandlerThread;
 import android.os.Looper;
 import android.util.AttributeSet;
 import android.util.Log;
@@ -102,7 +97,7 @@ public class VideoView extends FrameLayout {
             postDelayed(() -> removeView(oldView), DELAY_REMOVE_VIEW_TIME_MS);
         }
         LayoutParams layoutParams = new LayoutParams(
-                LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT);
+                LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT);
         layoutParams.gravity = Gravity.CENTER;
         currentView = this.viewType == ViewType.SURFACE_VIEW ?
                 new AspectRatioSurfaceView(getContext()) :
@@ -117,13 +112,25 @@ public class VideoView extends FrameLayout {
     public void setAspectRatio(float aspectRatio) {
         if (aspectRatio <= 0) return;
         this.aspectRatio = aspectRatio;
+        LogUtils.i(TAG, "setAspectRatio " + aspectRatio);
         View view = currentView;
         //注意这里要用当前的View去requestLayout，不能用VideoView去requestLayout
         if (Looper.getMainLooper() == Looper.myLooper()) {
             view.requestLayout();
         } else {
-            post(view::requestLayout);
+            post(new Runnable() {
+                @Override
+                public void run() {
+                    view.requestLayout();
+                }
+            });
         }
+        postDelayed(new Runnable() {
+            @Override
+            public void run() {
+                requestLayout();
+            }
+        }, 100);
     }
 
     synchronized void onSurfaceAvailable(Surface surface, int width, int height) {
@@ -208,6 +215,7 @@ public class VideoView extends FrameLayout {
                 width = originalMeasuredWidth;
                 height = (int) (originalMeasuredWidth / viewAspectRatio);
             }
+            LogUtils.i(TAG, "onMeasure " + width + "*" + height);
             super.onMeasure(MeasureSpec.makeMeasureSpec(width, MeasureSpec.EXACTLY), MeasureSpec.makeMeasureSpec(height, MeasureSpec.EXACTLY));
         }
 

@@ -1,6 +1,5 @@
-package com.norman.android.hdrsample.player.decode.ffmpeg
+package com.norman.android.hdrsample.player.decode.base
 
-import android.media.MediaCodec
 import android.media.MediaExtractor
 import android.media.MediaFormat
 import android.util.Log
@@ -11,8 +10,6 @@ import com.norman.android.hdrsample.handler.MessageHandler
 import com.norman.android.hdrsample.handler.MessageHandler.LifeCycleCallback
 import com.norman.android.hdrsample.opengl.GLTextureSurface
 import com.norman.android.hdrsample.player.VideoPlayerImpl
-import com.norman.android.hdrsample.player.decode.MediaCodecAsyncAdapter
-import com.norman.android.hdrsample.player.decode.base.DecodecApi
 import com.norman.android.hdrsample.player.source.FileSource
 import com.norman.android.hdrsample.util.LogUtils
 import java.io.IOException
@@ -79,11 +76,6 @@ class FFmpegDecode(private val mimeType: String, private val fileSource: FileSou
             }
             if (prepare.start) {
                 playManager.start()
-                val mediaFormat = getMediaFormat(fileSource.path)
-                LogUtils.i(TAG, "onVideoConfig: ${mediaFormat}")
-                callback?.onOutputFormatChanged(mediaFormat) ?: kotlin.run {
-                    LogUtils.i(TAG, "not call format change")
-                }
             }
         }
     }
@@ -94,7 +86,7 @@ class FFmpegDecode(private val mimeType: String, private val fileSource: FileSou
                            callback: MediaCodecAsyncAdapter.CallBack) {
         LogUtils.i(TAG, "configure")
         this.callback = callback
-//        val holderSurface = HolderSurface()
+
     }
 
     override fun start() {
@@ -134,8 +126,17 @@ class FFmpegDecode(private val mimeType: String, private val fileSource: FileSou
         messageHandler.removeAllMessage()
     }
 
-    override fun onVideoConfig(witdh: Int, height: Int, duration: Double, fps: Double) {
-        LogUtils.i(TAG, "onVideoConfig ${witdh}*${height}")
+    override fun onVideoConfig(width: Int, height: Int, duration: Double, fps: Double, rotation: Int) {
+        LogUtils.i(TAG, "onVideoConfig ${width}*${height} rotation:${rotation}")
+        val mediaFormat = getMediaFormat(fileSource.path)?.also {
+            it.setInteger(MediaFormat.KEY_WIDTH, width)
+            it.setInteger(MediaFormat.KEY_HEIGHT, height)
+            it.setInteger(MediaFormat.KEY_ROTATION, rotation)
+        }
+        LogUtils.i(TAG, "onVideoConfig: ${mediaFormat}")
+        callback?.onOutputFormatChanged(mediaFormat) ?: kotlin.run {
+            LogUtils.i(TAG, "not call format change")
+        }
     }
 
     private fun getMediaFormat(filePath: String): MediaFormat? {

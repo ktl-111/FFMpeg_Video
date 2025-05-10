@@ -109,7 +109,7 @@ public class HDRToSDRVideoTransform extends GLVideoTransform {
 
             );
             setFrameShader(hdrToSDRShader);
-            shaderChange  =false;
+            shaderChange = false;
         }
         return true;
     }
@@ -182,8 +182,8 @@ public class HDRToSDRVideoTransform extends GLVideoTransform {
         }
     }
 
-    public synchronized void setToneReference(int type){
-        if (this.toneReference != type){
+    public synchronized void setToneReference(int type) {
+        if (this.toneReference != type) {
             this.toneReference = type;
             shaderChange = true;
         }

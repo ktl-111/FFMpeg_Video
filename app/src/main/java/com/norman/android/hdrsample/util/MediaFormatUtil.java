@@ -110,6 +110,7 @@ public class MediaFormatUtil {
 
     /**
      * 根据profile判断视频是否是10位
+     *
      * @param mediaFormat
      * @return
      */
@@ -132,27 +133,34 @@ public class MediaFormatUtil {
      */
     @ColorStandard
     public static int getColorStandard(MediaFormat mediaFormat) {
-      return  MediaFormatUtil.getInteger(mediaFormat, MediaFormat.KEY_COLOR_STANDARD, ColorStandard.BT709);
+        return MediaFormatUtil.getInteger(mediaFormat, MediaFormat.KEY_COLOR_STANDARD, ColorStandard.BT709);
     }
 
     /**
      * 获取颜色范围
+     *
      * @param mediaFormat
      * @return
      */
     @ColorRange
     public static int getColorRange(MediaFormat mediaFormat) {
-        return  MediaFormatUtil.getInteger(mediaFormat, MediaFormat.KEY_COLOR_RANGE, ColorRange.LIMITED);
+        return MediaFormatUtil.getInteger(mediaFormat, MediaFormat.KEY_COLOR_RANGE, ColorRange.LIMITED);
+    }
+
+    @ColorRange
+    public static int getRotation(MediaFormat mediaFormat) {
+        return MediaFormatUtil.getInteger(mediaFormat, MediaFormat.KEY_ROTATION, 0);
     }
 
     /**
      * 获取颜色传递函数
+     *
      * @param mediaFormat
      * @return
      */
     @ColorTransfer
     public static int getColorTransfer(MediaFormat mediaFormat) {
-        return  MediaFormatUtil.getInteger(mediaFormat, MediaFormat.KEY_COLOR_TRANSFER, ColorTransfer.SDR_VIDEO);
+        return MediaFormatUtil.getInteger(mediaFormat, MediaFormat.KEY_COLOR_TRANSFER, ColorTransfer.SDR_VIDEO);
     }
 
     /***
@@ -161,8 +169,8 @@ public class MediaFormatUtil {
      * @return
      */
 
-    public static void setColorStandard(MediaFormat mediaFormat,@ColorStandard int colorStandard) {
-          MediaFormatUtil.setInteger(mediaFormat, MediaFormat.KEY_COLOR_STANDARD, colorStandard);
+    public static void setColorStandard(MediaFormat mediaFormat, @ColorStandard int colorStandard) {
+        MediaFormatUtil.setInteger(mediaFormat, MediaFormat.KEY_COLOR_STANDARD, colorStandard);
     }
 
     /***
@@ -171,7 +179,7 @@ public class MediaFormatUtil {
      * @return
      */
 
-    public static void setColorRange(MediaFormat mediaFormat,@ColorRange int colorRange) {
+    public static void setColorRange(MediaFormat mediaFormat, @ColorRange int colorRange) {
         MediaFormatUtil.setInteger(mediaFormat, MediaFormat.KEY_COLOR_RANGE, colorRange);
     }
 
@@ -181,7 +189,7 @@ public class MediaFormatUtil {
      * @return
      */
 
-    public static void setColorTransfer(MediaFormat mediaFormat,@ColorTransfer int colorTransfer) {
+    public static void setColorTransfer(MediaFormat mediaFormat, @ColorTransfer int colorTransfer) {
         MediaFormatUtil.setInteger(mediaFormat, MediaFormat.KEY_COLOR_TRANSFER, colorTransfer);
     }
 
@@ -191,7 +199,7 @@ public class MediaFormatUtil {
      * @return
      */
 
-    public static void setYUV420Type(MediaFormat mediaFormat,@YUV420Type int yuv420Type) {
+    public static void setYUV420Type(MediaFormat mediaFormat, @YUV420Type int yuv420Type) {
         MediaFormatUtil.setInteger(mediaFormat, KEY_YUV420_TYPE, yuv420Type);
     }
 
@@ -203,7 +211,7 @@ public class MediaFormatUtil {
 
     @YUV420Type
     public static int getYUV420Type(MediaFormat mediaFormat) {
-       return MediaFormatUtil.getInteger(mediaFormat, KEY_YUV420_TYPE, 0);
+        return MediaFormatUtil.getInteger(mediaFormat, KEY_YUV420_TYPE, 0);
     }
 
 
@@ -213,7 +221,7 @@ public class MediaFormatUtil {
      * @return
      */
 
-    public static void setColorSpace(MediaFormat mediaFormat,@ColorSpace int colorSpace) {
+    public static void setColorSpace(MediaFormat mediaFormat, @ColorSpace int colorSpace) {
         MediaFormatUtil.setInteger(mediaFormat, KEY_COLOR_SPACE, colorSpace);
     }
 

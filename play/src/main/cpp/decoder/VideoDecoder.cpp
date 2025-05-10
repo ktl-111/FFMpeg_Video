@@ -738,6 +738,10 @@ double VideoDecoder::getFps() const {
     return mFps;
 }
 
+int VideoDecoder::getRotation() const {
+    return mRotate;
+}
+
 double VideoDecoder::getConfigOutFps() const {
     if (mOutConfig) {
         return mOutConfig->getFps();

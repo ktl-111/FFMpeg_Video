@@ -26,7 +26,7 @@ void FFMpegPlayer::init(JNIEnv *env, jobject thiz) {
     mPlayerJni.onAllocateFrame = env->GetMethodID(jclazz, "onAllocateFrame",
                                                   "(I)Ljava/nio/ByteBuffer;");
     mPlayerJni.onVideoConfig = env->GetMethodID(jclazz, "onNativeVideoConfig",
-                                                "(IIDDLjava/lang/String;)V");
+                                                "(IIDDILjava/lang/String;)V");
     mPlayerJni.onPlayProgress = env->GetMethodID(jclazz, "onNativePalyProgress",
                                                  "(Ljava/nio/ByteBuffer;D)V");
     mPlayerJni.onPlayCompleted = env->GetMethodID(jclazz, "onNativePalyComplete", "()V");
@@ -79,6 +79,7 @@ bool FFMpegPlayer::prepare(JNIEnv *env, std::string &path, jobject surface, jobj
             if (mPlayerJni.isValid()) {
                 int surfaceWidth = mVideoDecoder->getWidth();
                 int surfaceHeight = mVideoDecoder->getHeight();
+                int videoRotation = mVideoDecoder->getRotation();
                 if (mVideoDecoder->getConfigCropWidth() != 0 &&
                         mVideoDecoder->getConfigCropHeight() != 0) {
                     surfaceWidth = mVideoDecoder->getConfigCropWidth();
@@ -88,7 +89,7 @@ bool FFMpegPlayer::prepare(JNIEnv *env, std::string &path, jobject surface, jobj
 
                 env->CallVoidMethod(mPlayerJni.instance, mPlayerJni.onVideoConfig,
                                     surfaceWidth, surfaceHeight,
-                                    mVideoDecoder->getDuration(), mVideoDecoder->getFps(),
+                                    mVideoDecoder->getDuration(), mVideoDecoder->getFps(),videoRotation,
                                     env->NewStringUTF(codecName));
             }
         } else if (codecpar->codec_type == AVMEDIA_TYPE_AUDIO) {

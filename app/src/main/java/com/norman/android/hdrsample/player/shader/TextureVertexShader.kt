@@ -1,6 +1,5 @@
 package com.norman.android.hdrsample.player.shader
 
-import androidx.annotation.IntDef
 import com.norman.android.hdrsample.opengl.GLShaderCode
 
 /**
@@ -15,9 +14,10 @@ class TextureVertexShader : GLShaderCode() {
             in vec4 $POSITION;
             in vec4 $INPUT_TEXTURE_COORDINATE;
             uniform mat4 $TEXTURE_MATRIX;
+            uniform mat4 $POSITION_MATRIX_SCALE;
             out vec2 textureCoordinate;
             void main() {
-                gl_Position =position;
+                gl_Position =$POSITION_MATRIX_SCALE*position;
                 textureCoordinate =($TEXTURE_MATRIX*$INPUT_TEXTURE_COORDINATE).xy;
             }
             """.trimIndent()
@@ -31,6 +31,8 @@ class TextureVertexShader : GLShaderCode() {
 
         @JvmField
         val TEXTURE_MATRIX = "textureMatrix"
+        @JvmField
+        val POSITION_MATRIX_SCALE = "positionMatrixScale"
 
     }
 

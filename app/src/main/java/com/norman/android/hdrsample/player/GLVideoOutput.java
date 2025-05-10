@@ -9,7 +9,11 @@ import java.lang.annotation.RetentionPolicy;
  * 经过OpenGL中转
  */
 public abstract class GLVideoOutput extends VideoOutput {
+    protected boolean saveBitmap;
 
+    public void setSaveBitmap(boolean saveBitmap) {
+        this.saveBitmap = saveBitmap;
+    }
 
     /**
      * 视频的纹理来源
@@ -72,7 +76,6 @@ public abstract class GLVideoOutput extends VideoOutput {
     }
 
 
-
     public abstract void setTextureSource(@TextureSource int textureSource);
 
     public abstract @TextureSource int getTextureSource();
@@ -83,8 +86,5 @@ public abstract class GLVideoOutput extends VideoOutput {
     public abstract @HdrBitDepth int getHdrDisplayBitDepth();
 
     public abstract void addVideoTransform(GLVideoTransform videoTransform);
-
-
-
 
 }

@@ -1,4 +1,4 @@
-package com.norman.android.hdrsample.player.decode;
+package com.norman.android.hdrsample.player.decode.base;
 
 import android.media.MediaCodec;
 import android.media.MediaCodecInfo;
@@ -14,7 +14,7 @@ import androidx.annotation.NonNull;
 import com.norman.android.hdrsample.exception.IORuntimeException;
 import com.norman.android.hdrsample.opengl.GLEnvThreadManager;
 import com.norman.android.hdrsample.opengl.GLTextureSurface;
-import com.norman.android.hdrsample.player.decode.base.DecodecApi;
+import com.norman.android.hdrsample.player.decode.ColorFormatHelper;
 import com.norman.android.hdrsample.util.GLESUtil;
 import com.norman.android.hdrsample.util.LogUtil;
 import com.norman.android.hdrsample.util.LogUtils;

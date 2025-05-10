@@ -106,12 +106,12 @@ internal class FFMpegProxy : IPaly {
         return ByteBuffer.allocateDirect(size).order(ByteOrder.LITTLE_ENDIAN)
     }
 
-    private fun onNativeVideoConfig(width: Int, height: Int, duration: Double, fps: Double, codecName: String) {
+    private fun onNativeVideoConfig(width: Int, height: Int, duration: Double, fps: Double, rotation: Int, codecName: String) {
         LogHelper.i(
             TAG,
-            "onNativeVideoConfig: ${width}*${height} duration:${duration} fps:${fps} codecName:${codecName}"
+            "onNativeVideoConfig: ${width}*${height} duration:${duration} fps:${fps} rotation:${rotation} codecName:${codecName}"
         )
-        palyListener?.onVideoConfig(width, height, duration, fps)
+        palyListener?.onVideoConfig(width, height, duration, fps, rotation)
     }
 
     private fun onNativePalyProgress(frame: ByteBuffer?, time: Double) {

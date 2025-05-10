@@ -12,7 +12,7 @@ import java.util.List;
  * 功能1:根据colorFormat判断是哪种YUV420
  * 功能2:判断colorFormat判断表示编解码器是否支持10位YUV420解码，当前只测试了几款手机，其他手机逻辑不一定正确
  */
-class ColorFormatHelper {
+public class ColorFormatHelper {
 
     //四种YUV420
 

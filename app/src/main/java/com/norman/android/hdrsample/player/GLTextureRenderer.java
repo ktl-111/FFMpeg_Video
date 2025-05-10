@@ -9,6 +9,7 @@ import com.norman.android.hdrsample.opengl.GLMatrix;
 import com.norman.android.hdrsample.player.shader.TextureFragmentShader;
 import com.norman.android.hdrsample.player.shader.TextureVertexShader;
 import com.norman.android.hdrsample.util.GLESUtil;
+import com.norman.android.hdrsample.util.LogUtils;
 
 import java.nio.FloatBuffer;
 
@@ -19,16 +20,19 @@ class GLTextureRenderer extends GLRenderer {
 
 
     private final float[] textureMatrix = new GLMatrix().get();
+    private float[] positionMatrixScale = new GLMatrix().get();
 
-    private final FloatBuffer textureCoordinateBuffer;
+    protected FloatBuffer textureCoordinateBuffer;
     private final FloatBuffer positionCoordinateBuffer;
 
     private int positionCoordinateAttribute;
     private int textureCoordinateAttribute;
     private int textureUnitUniform;
     private int textureMatrixUniform;
+    private int positionMatrixUniformScale;
 
-
+    private int rotation = -1;
+    private float scale = 1.0f;
     private int textureId;
 
     private final @TextureFragmentShader.TextureType int textureType;
@@ -37,11 +41,31 @@ class GLTextureRenderer extends GLRenderer {
     public GLTextureRenderer(@TextureFragmentShader.TextureType int type) {
         textureType = type;
         positionCoordinateBuffer = GLESUtil.createPositionFlatBuffer();//平面的顶点坐标
-        textureCoordinateBuffer = GLESUtil.createTextureFlatBuffer();//纹理坐标
+        textureCoordinateBuffer = GLESUtil.createTextureFlatBufferUpsideDown();//纹理坐标
+        positionMatrixScale = getPositionMatrix(scale);
         setVertexShader(new TextureVertexShader());
         setFrameShader(new TextureFragmentShader(textureType));
     }
 
+    public void setRotation(int rotation) {
+        this.rotation = rotation;
+    }
+
+    public void setScale(float scale) {
+        if (this.scale != scale) {
+            this.scale = scale;
+            positionMatrixScale = getPositionMatrix(scale);
+        }
+    }
+
+    private float[] getPositionMatrix(float scale) {
+        return new float[]{
+                scale, 0f, 0f, 0f,
+                0f, scale, 0f, 0f,
+                0f, 0f, 1f, 0f,
+                0f, 0f, 0f, 1f,
+        };
+    }
 
     public void setTextureId(int textureId) {
         this.textureId = textureId;
@@ -57,6 +81,7 @@ class GLTextureRenderer extends GLRenderer {
     protected void onProgramChange(int programId) {
         positionCoordinateAttribute = GLES20.glGetAttribLocation(programId, TextureVertexShader.POSITION);
         textureMatrixUniform = GLES20.glGetUniformLocation(programId, TextureVertexShader.TEXTURE_MATRIX);
+        positionMatrixUniformScale = GLES20.glGetUniformLocation(programId, TextureVertexShader.POSITION_MATRIX_SCALE);
         textureCoordinateAttribute = GLES20.glGetAttribLocation(programId, TextureVertexShader.INPUT_TEXTURE_COORDINATE);
         textureUnitUniform = GLES20.glGetUniformLocation(programId, TextureFragmentShader.INPUT_IMAGE_TEXTURE);
     }
@@ -66,11 +91,26 @@ class GLTextureRenderer extends GLRenderer {
         return textureId > 0;
     }
 
+    private int preRotation = -1;
+    private String mTag = "GLTexture";
+
     @Override
     protected void onRender() {
-
         positionCoordinateBuffer.clear();
         textureCoordinateBuffer.clear();
+        if (preRotation != rotation) {
+            LogUtils.i(mTag, "onRender rotation:" + rotation + " preRotation:" + preRotation);
+            if (rotation == 90) {
+                textureCoordinateBuffer = GLESUtil.createTextureFlatBufferLeft90();
+            } else if (rotation == 270) {
+                textureCoordinateBuffer = GLESUtil.createTextureFlatBufferRight90();
+            } else if (rotation == 180) {
+                textureCoordinateBuffer = GLESUtil.createTextureFlatBuffer();
+            } else if (rotation == 0) {
+                textureCoordinateBuffer = GLESUtil.createTextureFlatBufferUpsideDown();
+            }
+            preRotation = rotation;
+        }
         GLES20.glEnableVertexAttribArray(positionCoordinateAttribute);
         GLES20.glVertexAttribPointer(positionCoordinateAttribute,
                 GLESUtil.FLAT_VERTEX_LENGTH,
@@ -89,6 +129,7 @@ class GLTextureRenderer extends GLRenderer {
         }
         GLES20.glUniform1i(textureUnitUniform, 0);
         GLES20.glUniformMatrix4fv(textureMatrixUniform, 1, false, textureMatrix, 0);
+        GLES20.glUniformMatrix4fv(positionMatrixUniformScale, 1, false, positionMatrixScale, 0);
         onTextureRender();
         GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4);
         GLES20.glDisableVertexAttribArray(positionCoordinateAttribute);

@@ -2,7 +2,6 @@ package com.norman.android.hdrsample.player.decode.base
 
 import android.media.MediaFormat
 import android.view.Surface
-import com.norman.android.hdrsample.player.decode.MediaCodecAsyncAdapter
 
 interface DecodecApi {
 

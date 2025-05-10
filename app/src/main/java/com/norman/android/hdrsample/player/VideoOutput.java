@@ -6,6 +6,7 @@ import android.view.Surface;
 
 import com.norman.android.hdrsample.player.decode.VideoDecoder;
 import com.norman.android.hdrsample.player.extract.VideoExtractor;
+import com.norman.android.hdrsample.util.LogUtils;
 import com.norman.android.hdrsample.util.MediaFormatUtil;
 import com.norman.android.hdrsample.util.TimeUtil;
 
@@ -81,9 +82,9 @@ public abstract class VideoOutput {
     private final OutputSizeSubscriber outputSizeSubscriber = new OutputSizeSubscriber() {
         @Override
         public void onOutputSizeChange(int width, int height) {
-            synchronized (VideoOutput.this){
-                if (currentVideoView != null){
-                    currentVideoView.setAspectRatio(width*1.0f/height);//保证视频比例和Surface比例一样
+            synchronized (VideoOutput.this) {
+                if (currentVideoView != null) {
+                    currentVideoView.setAspectRatio(width * 1.0f / height);//保证视频比例和Surface比例一样
                 }
             }
         }
@@ -105,9 +106,9 @@ public abstract class VideoOutput {
      *
      * @param view
      */
-    public final  synchronized void setOutputVideoView(VideoView view) {
+    public final synchronized void setOutputVideoView(VideoView view) {
         requestVideoView = view;
-        if (isPlayerPrepared()){
+        if (isPlayerPrepared()) {
             attachVideoView();
         }
     }
@@ -120,7 +121,7 @@ public abstract class VideoOutput {
         if (this.videoPlayer != null) {
             throw new IllegalStateException("VideoOutput and VidePlayer only one to one");
         }
-        if (release){
+        if (release) {
             throw new IllegalStateException("VideoOutput is released");
         }
         this.videoPlayer = videoPlayer;
@@ -153,9 +154,12 @@ public abstract class VideoOutput {
         MediaFormatUtil.setColorStandard(inputFormat, videoExtractor.getColorStandard());
         MediaFormatUtil.setColorRange(inputFormat, videoExtractor.getColorRange());
         MediaFormatUtil.setColorTransfer(inputFormat, videoExtractor.getColorTransfer());
-        inputFormat.setInteger(MediaFormat.KEY_WIDTH, videoExtractor.getWidth());
-        inputFormat.setInteger(MediaFormat.KEY_HEIGHT, videoExtractor.getHeight());
-        setVideoSize(videoExtractor.getWidth(), videoExtractor.getHeight());
+        int width = videoExtractor.getWidth();
+        inputFormat.setInteger(MediaFormat.KEY_WIDTH, width);
+        int height = videoExtractor.getHeight();
+        inputFormat.setInteger(MediaFormat.KEY_HEIGHT, height);
+        LogUtils.i(mTag, "prepare width:" + width + " height:" + height);
+        setVideoSize(width, height);
         attachVideoView();
         onOutputPrepare(inputFormat);
     }
@@ -205,29 +209,29 @@ public abstract class VideoOutput {
     }
 
 
-    synchronized void attachVideoView(){
+    synchronized void attachVideoView() {
         if (currentVideoView == requestVideoView) {
             return;
         }
         detachVideoView();
-        currentVideoView  = requestVideoView;
-        if (currentVideoView != null){
+        currentVideoView = requestVideoView;
+        if (currentVideoView != null) {
             subscribe(outputSizeSubscriber);
             currentVideoView.subscribe(surfaceSubscriber);
         }
     }
 
-   synchronized void detachVideoView(){
-       VideoView oldView = currentVideoView;
-       if (oldView != null){//取消上一次绑定
-           oldView.unsubscribe(surfaceSubscriber);
-           unsubscribe(outputSizeSubscriber);
-       }
-       currentVideoView = null;
+    synchronized void detachVideoView() {
+        VideoView oldView = currentVideoView;
+        if (oldView != null) {//取消上一次绑定
+            oldView.unsubscribe(surfaceSubscriber);
+            unsubscribe(outputSizeSubscriber);
+        }
+        currentVideoView = null;
     }
 
     synchronized boolean isPlayerPrepared() {
-        return videoPlayer != null &&videoPlayer.isPrepared();
+        return videoPlayer != null && videoPlayer.isPrepared();
     }
 
     /**
@@ -268,12 +272,21 @@ public abstract class VideoOutput {
             width = cropRight - cropLeft;
             height = cropBottom - cropTop;
         }
+        LogUtils.i(mTag, "onDecodeMediaFormatChanged width:" + width + " height:" + height);
         setVideoSize(width, height);
         this.outputFormat = outputFormat;
         onOutputFormatChanged(outputFormat);
         for (OutputFormatSubscriber outputFormatSubscriber : outputFormatSubscribers) {
             outputFormatSubscriber.onOutputFormatChange(outputFormat);
         }
+    }
+
+    private String mTag = "VideoOutput";
+
+    protected float scale = 1.0f;
+
+    public void setScale(float scale) {
+        this.scale = scale;
     }
 
     /**
@@ -287,10 +300,11 @@ public abstract class VideoOutput {
         if (videoWidth == width && videoHeight == height) {
             return;
         }
-        videoWidth = width;
-        videoHeight = height;
+        videoWidth = (int) (width * scale);
+        videoHeight = (int) (height * scale);
+        LogUtils.i(mTag, "setVideoSize " + videoWidth + "*" + videoHeight);
         for (OutputSizeSubscriber outputSizeSubscriber : outputSizeSubscribers) {
-            outputSizeSubscriber.onOutputSizeChange(width, height);
+            outputSizeSubscriber.onOutputSizeChange(videoWidth, videoHeight);
         }
     }
 
@@ -307,16 +321,15 @@ public abstract class VideoOutput {
     }
 
 
-    synchronized void setInternalOutputSurface(Surface surface){
-        if (outputSurface != surface){
+    synchronized void setInternalOutputSurface(Surface surface) {
+        if (outputSurface != surface) {
             outputSurface = surface;
             onOutputSurfaceChange(outputSurface);
         }
     }
 
 
-
-    protected void onOutputCreate(){
+    protected void onOutputCreate() {
 
     }
 
@@ -341,7 +354,7 @@ public abstract class VideoOutput {
 
     }
 
-    protected void onOutputRelease(){
+    protected void onOutputRelease() {
 
     }
 
@@ -444,7 +457,7 @@ public abstract class VideoOutput {
                 boolean needWait = remainTime > 0 && //超时不需要等待
                         videoPlayer != null && videoPlayer.isPlaying() &&//没有播放不需要等待
                         oldFrameIndex == frameIndex; //下一帧没有渲染完成不需要等待
-                if (!needWait || skipFrameWait.getAndSet(false)){
+                if (!needWait || skipFrameWait.getAndSet(false)) {
                     skipFrameWait.getAndSet(false);
                     return;
                 }
