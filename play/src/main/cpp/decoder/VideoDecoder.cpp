@@ -54,6 +54,9 @@ void VideoDecoder::initConfig(JNIEnv *env, jobject out_config) {
         jfieldID outFpsId = env->GetFieldID(outConfigClass, "fps", "D");
         jdouble outFps = env->GetDoubleField(out_config, outFpsId);
 
+        jfieldID outScaleId = env->GetFieldID(outConfigClass, "scale", "D");
+        jdouble outScale = env->GetDoubleField(out_config, outScaleId);
+
         int videoWidth = getWidth();
         int videoHeight = getHeight();
 
@@ -80,6 +83,10 @@ void VideoDecoder::initConfig(JNIEnv *env, jobject out_config) {
             }
 
         }
+        if (outScale != 1.0) {
+            outWidth = videoWidth * outScale;
+            outHeight = videoHeight * outScale;
+        }
 
         outWidth += outWidth % 2;
         outHeight += outHeight % 2;
@@ -87,9 +94,9 @@ void VideoDecoder::initConfig(JNIEnv *env, jobject out_config) {
         outConfig = std::make_shared<OutConfig>(outWidth, outHeight, cropWidth, cropHeight,
                                                 outFps);
 
-        LOGI("set out config,video:%d*%d,out:%d*%d,crop:%d*%d,fps:%f",
+        LOGI("set out config,video:%d*%d,out:%d*%d,crop:%d*%d,fps:%f,outScale:%f",
              videoWidth, videoHeight,
-             outWidth, outHeight, cropWidth, cropHeight, outFps)
+             outWidth, outHeight, cropWidth, cropHeight, outFps,outScale)
     } else {
         LOGI("not out config")
     }
@@ -517,9 +524,9 @@ void VideoDecoder::convertFrame(AVFrame *srcFrame, AVFrame *dstFrame) {
         srcFrame = converSrcFrame;
     }
 
-    if (mRotate) {
-        srcFrame = VideoFrameUtil::rotate(srcFrame, mRotate);
-    }
+//    if (mRotate) {
+//        srcFrame = VideoFrameUtil::rotate(srcFrame, mRotate);
+//    }
 
     int dstWidth;
     int dstHeight;

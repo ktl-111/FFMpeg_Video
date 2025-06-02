@@ -2,6 +2,8 @@ package com.norman.android.hdrsample.player.decode.base
 
 import android.media.MediaExtractor
 import android.media.MediaFormat
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import android.view.Surface
 import com.example.play.IPalyListener
@@ -12,8 +14,11 @@ import com.norman.android.hdrsample.opengl.GLTextureSurface
 import com.norman.android.hdrsample.player.VideoPlayerImpl
 import com.norman.android.hdrsample.player.source.FileSource
 import com.norman.android.hdrsample.util.LogUtils
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.suspendCancellableCoroutine
 import java.io.IOException
 import java.nio.ByteBuffer
+import kotlin.coroutines.resume
 
 //new LocalFileSource("/storage/emulated/0/test/VID20241218191908_HDR.mp4")
 
@@ -22,6 +27,7 @@ class FFmpegDecode(private val mimeType: String, private val fileSource: FileSou
     private val playManager = PlayManager().also {
         it.init(this)
     }
+    private var createLooper: Looper? = null
     private var callback: MediaCodecAsyncAdapter.CallBack? = null
     private var surface: Surface? = null
 
@@ -54,6 +60,7 @@ class FFmpegDecode(private val mimeType: String, private val fileSource: FileSou
         LogUtils.i(TAG, "setOutputSurface: file:${fileSource.path} ${prepare}")
         this.surface = surface
         prepare.surface = this.surface
+        createLooper = Looper.myLooper()
         startPlay()
     }
 
@@ -62,20 +69,24 @@ class FFmpegDecode(private val mimeType: String, private val fileSource: FileSou
             LogUtils.i(TAG, "startPlay ${prepare}")
             if (prepare.surface != null) {
                 playManager.prepare(fileSource.path, surface, null)
-                if (surface is GLTextureSurface) {
-                    (surface as GLTextureSurface).setOnFrameAvailableListener { surface ->
-                        LogUtils.i(TAG, "onFrameAvailable $surface")
-                        try {
-                            callback?.onOutputBufferComplete(0)
-                        } catch (e: Exception) {
-                            LogUtils.i(TAG, "onOutputBufferRender faile " + e.message)
-                            e.printStackTrace()
-                        }
-                    }
-                }
+//                callbackSurface()
             }
             if (prepare.start) {
                 playManager.start()
+            }
+        }
+    }
+
+    private fun callbackSurface() {
+        if (surface is GLTextureSurface) {
+            (surface as GLTextureSurface).setOnFrameAvailableListener { surface ->
+                LogUtils.i(TAG, "onFrameAvailable $surface ${Looper.myLooper()}")
+                try {
+                    callback?.onOutputBufferComplete(0)
+                } catch (e: Exception) {
+                    LogUtils.i(TAG, "onOutputBufferRender faile " + e.message)
+                    e.printStackTrace()
+                }
             }
         }
     }
@@ -171,14 +182,22 @@ class FFmpegDecode(private val mimeType: String, private val fileSource: FileSou
     }
 
     override fun onPalyProgress(frame: ByteBuffer?, time: Double) {
-        LogUtils.i(TAG, "onPalyProgress: ${frame?.hashCode()} time:${time}")
-//        callback?.onOutputBufferAvailable(frame, 0L)
-//        kotlin.runCatching {
-//            callback?.onOutputBufferComplete(0)
-//        }.onFailure {
-//            LogUtils.i(TAG, "onOutputBufferComplete faile ${it.message}")
-//            it.printStackTrace()
-//        }
+        runBlocking {
+            suspendCancellableCoroutine<Boolean> { continuation ->
+                createLooper?.also {
+                    Handler(it).post {
+                        kotlin.runCatching {
+                            LogUtils.i(TAG, "onPalyProgress time $time")
+                            callback?.onOutputBufferComplete(time.toLong())
+                        }.onFailure {
+                            LogUtils.i(TAG, "onPalyProgress fail ${it.message}")
+                            it.printStackTrace()
+                        }
+                        continuation.resume(true)
+                    }
+                }
+            }
+        }
     }
 
     override fun onPalyComplete() {

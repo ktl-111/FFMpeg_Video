@@ -75,7 +75,7 @@ class HDRToSDRShader(
         } else {
             GammaEOTF.NONE
         }
-        LogUtils.i(TAG, "gammaEOTF:${gammaEOTF::class.java} colorSpace:${colorSpace} referenceDisplay:${referenceDisplay}")
+        LogUtils.i(TAG, "gammaEOTF:${gammaEOTF::class.java.simpleName} gammaOETF:${gammaOETF::class.java.simpleName} colorSpace:${colorSpace} referenceDisplay:${referenceDisplay}")
     }
 
     override val code: String

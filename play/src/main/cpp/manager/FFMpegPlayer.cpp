@@ -345,15 +345,15 @@ void FFMpegPlayer::VideoDecodeLoop() {
                 auto diff = mAudioDecoder->getTimestamp() - mVideoDecoder->getTimestamp();
                 LOGW("[video] frame arrived, AV time diff: %ld,mIsSeek: %d", diff, mIsSeek)
             }
-            if (!mIsSeek) {
-                int64_t timestamp = mVideoDecoder->getTimestamp();
-                LOGI("avSync start %ld,mIsSeek: %d", timestamp, mIsSeek)
-                mVideoDecoder->avSync(frame);
-                LOGI("avSync end %ld,mIsSeek: %d", timestamp, mIsSeek)
-                if (mIsSeek) {
-                    return;
-                }
-            }
+//            if (!mIsSeek) {
+//                int64_t timestamp = mVideoDecoder->getTimestamp();
+//                LOGI("avSync start %ld,mIsSeek: %d", timestamp, mIsSeek)
+//                mVideoDecoder->avSync(frame);
+//                LOGI("avSync end %ld,mIsSeek: %d", timestamp, mIsSeek)
+//                if (mIsSeek) {
+//                    return;
+//                }
+//            }
             mVideoDecoder->showFrameToWindow(frame);
             LOGI("async done")
             if (!mIsSeek && !mAudioDecoder && mPlayerJni.isValid()) { // no audio track

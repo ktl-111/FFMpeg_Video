@@ -108,7 +108,7 @@ private:
     bool mIsSeek = false;
     bool mIsBackSeek = false;
     int64_t mCurrSeekTime = -1;
-    bool mShowFirstFrame = true;
+    bool mShowFirstFrame = false;
 
     JavaVM *mJvm = nullptr;
     PlayerJniContext mPlayerJni{};

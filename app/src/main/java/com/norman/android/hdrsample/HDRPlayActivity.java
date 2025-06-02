@@ -12,6 +12,9 @@ import android.widget.Toast;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.PopupMenu;
 
+import com.example.play.config.OutConfig;
+import com.example.play.utils.DecodeUtils;
+import com.example.play.utils.FFMpegUtils;
 import com.example.videolearn.R;
 import com.norman.android.hdrsample.player.DirectVideoOutput;
 import com.norman.android.hdrsample.player.GLVideoOutput;
@@ -36,9 +39,11 @@ import com.norman.android.hdrsample.util.AppUtil;
 import com.norman.android.hdrsample.util.AssetUtil;
 import com.norman.android.hdrsample.util.DisplayUtil;
 import com.norman.android.hdrsample.util.GLESUtil;
+import com.norman.android.hdrsample.util.LogUtils;
 import com.norman.android.hdrsample.util.MediaFormatUtil;
 
 import java.io.File;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -117,6 +122,8 @@ public class HDRPlayActivity extends AppCompatActivity implements View.OnClickLi
             showVideoInfo(outputFormat);
         }
     };
+    private String TAG = "hdrplay";
+    String filepath;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -125,13 +132,55 @@ public class HDRPlayActivity extends AppCompatActivity implements View.OnClickLi
         if (externalCacheDir.exists()) {
             externalCacheDir.delete();
         }
+
+        filepath = getIntent().getStringExtra("filepath");
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         setContentView(R.layout.activity_hdr_player);
         textViewVideoInfo = findViewById(R.id.TextViewVideoInfo);
         textViewScreenInfo = findViewById(R.id.TextViewScreenInfo);
         textViewOpenGLSupportInfo = findViewById(R.id.TextViewOpenGLSupportInfo);
-        initView(R.id.VideoPlayerView2, 1.0f, false);
-        initView(R.id.VideoPlayerView, 0.1f, true);
+//        initView(R.id.VideoPlayerView2, 1.0f, false);
+        File outFile = new File(getExternalFilesDir(""), "testout.mp4");
+        if (!outFile.exists()) {
+            try {
+                outFile.createNewFile();
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
+        } else {
+            outFile.delete();
+        }
+        String destPath = outFile.getAbsolutePath();
+        long startTime = 0;
+        long allTime = 5_000;
+        OutConfig config = new OutConfig(0, 0, 0, 0, 0);
+        config.setScale(0.3);
+        DecodeUtils.INSTANCE.startDecode(filepath, destPath, startTime, startTime + allTime, config,
+                new FFMpegUtils.VideoCuttingInterface() {
+                    @Override
+                    public void onStart() {
+                        LogUtils.i(TAG, "onstart");
+                    }
+
+                    @Override
+                    public void onProgress(double progress) {
+                        LogUtils.i(TAG, "onProgress " + progress);
+
+                    }
+
+                    @Override
+                    public void onFail(int resultCode) {
+                        LogUtils.i(TAG, "onFail " + resultCode);
+
+                    }
+
+                    @Override
+                    public void onDone() {
+                        LogUtils.i(TAG, "onDone");
+
+                    }
+                });
+        initView(R.id.VideoPlayerView, 0.3f, true);
 
         findViewById(R.id.ButtonCubeLut).setOnClickListener(this);
         findViewById(R.id.ButtonVideoList).setOnClickListener(this);
@@ -185,7 +234,6 @@ public class HDRPlayActivity extends AppCompatActivity implements View.OnClickLi
             }
         });
 
-        String filepath = getIntent().getStringExtra("filepath");
         videoPlayer.setSource(new LocalFileSource(filepath));
 //        videoPlayer.setSource(new LocalFileSource("/storage/emulated/0/test/VID20241218191908_HDR.mp4"));
 //        videoPlayer.setSource(new LocalFileSource("/storage/emulated/0/DCIM/Camera/TG-2025-03-10-203007066.mp4"));

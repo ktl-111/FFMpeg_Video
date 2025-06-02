@@ -18,4 +18,7 @@ data class OutConfig(
     val cropWidth: Int = 0,
     val cropHeight: Int = 0,
     val fps: Double
-)
+) {
+
+    var scale: Double = 1.0
+}

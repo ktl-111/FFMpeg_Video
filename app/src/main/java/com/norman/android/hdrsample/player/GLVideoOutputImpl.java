@@ -428,8 +428,9 @@ class GLVideoOutputImpl extends GLVideoOutput {
                 }
             }
             if (saveBitmap) {
-                LogUtils.i(TAG, "saveBitmap");
+                LogUtils.i(TAG, "saveBitmap " + presentationTimeUs);
                 try {
+                    pboTarget.setTime(presentationTimeUs);
                     frontTarget.startRender();
                     pboTarget.startRender();
                     pboTarget.finishRender();

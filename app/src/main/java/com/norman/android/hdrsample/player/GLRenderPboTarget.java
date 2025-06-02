@@ -16,13 +16,13 @@ import static android.opengl.GLES30.GL_STREAM_READ;
 import android.graphics.Bitmap;
 import android.opengl.GLES30;
 
+import com.example.play.utils.DecodeUtils;
 import com.norman.android.hdrsample.util.AppUtil;
 import com.norman.android.hdrsample.util.LogUtils;
 
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
-import java.nio.Buffer;
 import java.nio.ByteBuffer;
 
 
@@ -31,7 +31,7 @@ class GLRenderPboTarget extends GLRenderTarget {
     private String TAG = "PboTarget";
 
     int currentPBOIndex = 0;
-
+    private long time = 0;
     int[] pboIds = new int[2];
 
     /**
@@ -53,6 +53,8 @@ class GLRenderPboTarget extends GLRenderTarget {
         GLES30.glDeleteBuffers(pboIds.length, pboIds, 0);
     }
 
+    private boolean writeDone = false;
+
     @Override
     void onStart() {
         LogUtils.i(TAG, "onStart " + width + "*" + height);
@@ -63,17 +65,26 @@ class GLRenderPboTarget extends GLRenderTarget {
 
         // 处理前一帧的PBO数据
         GLES30.glBindBuffer(GL_PIXEL_PACK_BUFFER, pboIds[nextPBOIndex]);
-        Buffer buffer = GLES30.glMapBufferRange(
+        ByteBuffer buffer = (ByteBuffer) GLES30.glMapBufferRange(
                 GL_PIXEL_PACK_BUFFER, 0, width * height * 4,
                 GL_MAP_READ_BIT);
         if (buffer != null) {
-            LogUtils.i(TAG, "glMapBufferRange " + buffer.getClass().getSimpleName());
-            // 创建并保存Bitmap（建议在工作线程执行）
-            Bitmap bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
             buffer.rewind();
-            bitmap.copyPixelsFromBuffer(buffer);
-            saveBitmap(bitmap);        // 保存到本地
-            bitmap.recycle();
+            if (!writeDone) {
+                int result = DecodeUtils.INSTANCE.writeData(buffer, time);
+                LogUtils.i(TAG, "glMapBufferRange " + buffer.getClass().getSimpleName() + " time:" + time + " result:" + result);
+                if (result == 10000) {
+                    DecodeUtils.INSTANCE.endDecode();
+                    writeDone = true;
+                }
+
+            }
+//            // 创建并保存Bitmap（建议在工作线程执行）
+//            Bitmap bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
+//            buffer.rewind();
+//            bitmap.copyPixelsFromBuffer(buffer);
+//            saveBitmap(bitmap);        // 保存到本地
+//            bitmap.recycle();
         }
 
         currentPBOIndex = nextPBOIndex;
@@ -97,5 +108,9 @@ class GLRenderPboTarget extends GLRenderTarget {
 
     @Override
     void onClearColor() {
+    }
+
+    public void setTime(long time) {
+        this.time = time;
     }
 }
