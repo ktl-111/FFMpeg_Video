@@ -89,7 +89,8 @@ bool FFMpegPlayer::prepare(JNIEnv *env, std::string &path, jobject surface, jobj
 
                 env->CallVoidMethod(mPlayerJni.instance, mPlayerJni.onVideoConfig,
                                     surfaceWidth, surfaceHeight,
-                                    mVideoDecoder->getDuration(), mVideoDecoder->getFps(),videoRotation,
+                                    mVideoDecoder->getDuration(), mVideoDecoder->getFps(),
+                                    videoRotation,
                                     env->NewStringUTF(codecName));
             }
         } else if (codecpar->codec_type == AVMEDIA_TYPE_AUDIO) {
@@ -345,17 +346,25 @@ void FFMpegPlayer::VideoDecodeLoop() {
                 auto diff = mAudioDecoder->getTimestamp() - mVideoDecoder->getTimestamp();
                 LOGW("[video] frame arrived, AV time diff: %ld,mIsSeek: %d", diff, mIsSeek)
             }
-//            if (!mIsSeek) {
-//                int64_t timestamp = mVideoDecoder->getTimestamp();
-//                LOGI("avSync start %ld,mIsSeek: %d", timestamp, mIsSeek)
-//                mVideoDecoder->avSync(frame);
-//                LOGI("avSync end %ld,mIsSeek: %d", timestamp, mIsSeek)
-//                if (mIsSeek) {
-//                    return;
-//                }
-//            }
+            if (!mIsSeek && mVideoDecoder->getScale() == 1.0f) {
+                int64_t timestamp = mVideoDecoder->getTimestamp();
+                LOGI("avSync start %ld,mIsSeek: %d", timestamp, mIsSeek)
+                int64_t diff = mVideoDecoder->avSync(frame);
+                LOGI("avSync end %ld,mIsSeek: %d", timestamp, mIsSeek)
+                if (diff < 0) {
+                    mVideoDecoder->fixStartTime();
+//                    mVideoDecoder->updateTimestamp(frame);
+                    if (needAttach) {
+                        mJvm->DetachCurrentThread();
+                    }
+                    return;
+                }
+                if (mIsSeek) {
+                    return;
+                }
+            }
             mVideoDecoder->showFrameToWindow(frame);
-            LOGI("async done")
+            LOGI("avSync done")
             if (!mIsSeek && !mAudioDecoder && mPlayerJni.isValid()) { // no audio track
                 double timestamp = mVideoDecoder->getTimestamp();
                 env->CallVoidMethod(mPlayerJni.instance, mPlayerJni.onPlayProgress, nullptr,
@@ -492,7 +501,7 @@ void FFMpegPlayer::ReadVideoFrameLoop() {
             mVideoDecoder->seekLock();
             decodeResult = -1;
             AVPacket *packet = mVideoPacketQueue->pop();
-            std::shared_ptr<AVFrameQueue> tempFrameQueue = std::make_shared<AVFrameQueue>(50,
+            std::shared_ptr<AVFrameQueue> tempFrameQueue = std::make_shared<AVFrameQueue>(1,
                                                                                           "temp");
             if (packet != nullptr) {
                 LOGI("ReadVideoFrameLoop popto pts:%ld size:%ld", packet->pts,

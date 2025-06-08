@@ -139,48 +139,9 @@ public class HDRPlayActivity extends AppCompatActivity implements View.OnClickLi
         textViewVideoInfo = findViewById(R.id.TextViewVideoInfo);
         textViewScreenInfo = findViewById(R.id.TextViewScreenInfo);
         textViewOpenGLSupportInfo = findViewById(R.id.TextViewOpenGLSupportInfo);
-//        initView(R.id.VideoPlayerView2, 1.0f, false);
-        File outFile = new File(getExternalFilesDir(""), "testout.mp4");
-        if (!outFile.exists()) {
-            try {
-                outFile.createNewFile();
-            } catch (IOException e) {
-                throw new RuntimeException(e);
-            }
-        } else {
-            outFile.delete();
-        }
-        String destPath = outFile.getAbsolutePath();
-        long startTime = 0;
-        long allTime = 5_000;
-        OutConfig config = new OutConfig(0, 0, 0, 0, 0);
-        config.setScale(0.3);
-        DecodeUtils.INSTANCE.startDecode(filepath, destPath, startTime, startTime + allTime, config,
-                new FFMpegUtils.VideoCuttingInterface() {
-                    @Override
-                    public void onStart() {
-                        LogUtils.i(TAG, "onstart");
-                    }
 
-                    @Override
-                    public void onProgress(double progress) {
-                        LogUtils.i(TAG, "onProgress " + progress);
-
-                    }
-
-                    @Override
-                    public void onFail(int resultCode) {
-                        LogUtils.i(TAG, "onFail " + resultCode);
-
-                    }
-
-                    @Override
-                    public void onDone() {
-                        LogUtils.i(TAG, "onDone");
-
-                    }
-                });
-        initView(R.id.VideoPlayerView, 0.3f, true);
+//        initView(R.id.VideoPlayerView, 0.3f, true);
+        initView(R.id.VideoPlayerView2, 1.0f, false);
 
         findViewById(R.id.ButtonCubeLut).setOnClickListener(this);
         findViewById(R.id.ButtonVideoList).setOnClickListener(this);
@@ -197,6 +158,9 @@ public class HDRPlayActivity extends AppCompatActivity implements View.OnClickLi
     }
 
     private void initView(int id, float scale, boolean saveBitmap) {
+        if (saveBitmap) {
+            initEncode();
+        }
         VideoView videoView = findViewById(id);
         videoView.setViewType(viewType);
         directVideoOutput = DirectVideoOutput.create();
@@ -250,6 +214,49 @@ public class HDRPlayActivity extends AppCompatActivity implements View.OnClickLi
         showScreenInfo();
         showOpenGLSupportInfo();
         videoPlayer.start();
+    }
+
+    private void initEncode() {
+        File outFile = new File(getExternalFilesDir(""), "testout.mp4");
+        if (!outFile.exists()) {
+            try {
+                outFile.createNewFile();
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
+        } else {
+            outFile.delete();
+        }
+        String destPath = outFile.getAbsolutePath();
+        long startTime = 5_000;
+        long allTime = 5_000;
+        OutConfig config = new OutConfig(0, 0, 0, 0, 0);
+        config.setScale(0.3);
+        DecodeUtils.INSTANCE.startDecode(filepath, destPath, startTime, startTime + allTime, config,
+                new FFMpegUtils.VideoCuttingInterface() {
+                    @Override
+                    public void onStart() {
+                        LogUtils.i(TAG, "onstart");
+                    }
+
+                    @Override
+                    public void onProgress(double progress) {
+                        LogUtils.i(TAG, "onProgress " + progress);
+
+                    }
+
+                    @Override
+                    public void onFail(int resultCode) {
+                        LogUtils.i(TAG, "onFail " + resultCode);
+
+                    }
+
+                    @Override
+                    public void onDone() {
+                        LogUtils.i(TAG, "onDone");
+
+                    }
+                });
     }
 
     private void initTransform() {

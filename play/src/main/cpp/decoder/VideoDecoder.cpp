@@ -55,7 +55,7 @@ void VideoDecoder::initConfig(JNIEnv *env, jobject out_config) {
         jdouble outFps = env->GetDoubleField(out_config, outFpsId);
 
         jfieldID outScaleId = env->GetFieldID(outConfigClass, "scale", "D");
-        jdouble outScale = env->GetDoubleField(out_config, outScaleId);
+        mScale = env->GetDoubleField(out_config, outScaleId);
 
         int videoWidth = getWidth();
         int videoHeight = getHeight();
@@ -83,9 +83,9 @@ void VideoDecoder::initConfig(JNIEnv *env, jobject out_config) {
             }
 
         }
-        if (outScale != 1.0) {
-            outWidth = videoWidth * outScale;
-            outHeight = videoHeight * outScale;
+        if (mScale != 1.0) {
+            outWidth = videoWidth * mScale;
+            outHeight = videoHeight * mScale;
         }
 
         outWidth += outWidth % 2;
@@ -96,7 +96,7 @@ void VideoDecoder::initConfig(JNIEnv *env, jobject out_config) {
 
         LOGI("set out config,video:%d*%d,out:%d*%d,crop:%d*%d,fps:%f,outScale:%f",
              videoWidth, videoHeight,
-             outWidth, outHeight, cropWidth, cropHeight, outFps,outScale)
+             outWidth, outHeight, cropWidth, cropHeight, outFps, mScale)
     } else {
         LOGI("not out config")
     }
@@ -273,7 +273,15 @@ void VideoDecoder::releaseFilter() {
     }
 }
 
+double VideoDecoder::getScale() {
+    return mScale;
+}
+
 void VideoDecoder::initFilter() {
+    if (!mOutConfig || mOutConfig->getFps() == 0.0) {
+        LOGI("not config,no init filter")
+        return;
+    }
     int result = 0;
     //设置filter
     const AVFilter *buffersrc = avfilter_get_by_name("buffer");
@@ -434,70 +442,84 @@ int VideoDecoder::decode(AVPacket *avPacket, AVFrame *frame) {
     receiveRes = avcodec_receive_frame(mCodecContext, pAvFrame);
 
     LOGI("[video] avcodec_receive_frame %d %s", receiveRes, av_err2str(receiveRes))
-
-    AVFrame *filtered_frame = nullptr;
-    if (receiveRes != 0) {
-        LOGI("[video] avcodec_receive_frame err: %d, resent: %d", receiveRes, mNeedResent)
-        av_frame_free(&pAvFrame);
-        if (isEof && receiveRes == AVERROR_EOF) {
-            receiveRes = AVERROR_EOF;
-            mNeedResent = false;
-        }
-        if (receiveRes == AVERROR_EOF) {
-            //需要check filter里还有无数据
-            filtered_frame = av_frame_alloc();
-            int frameFlags = av_buffersrc_add_frame_flags(buffersrcContext, nullptr,
-                                                          AV_BUFFERSRC_FLAG_PUSH);
-            int buffersinkGetFrame = av_buffersink_get_frame(buffersinkContext, filtered_frame);
-            LOGI("decode AVERROR_EOF filter frame %d %d ", frameFlags, buffersinkGetFrame)
-            if (buffersinkGetFrame == AVERROR_EOF) {
-                mNeedResent = false;
-                return AVERROR_EOF;
-            }
-            receiveRes = 0;
-            mNeedResent = false;
-        } else {
-            return receiveRes;
-        }
-    } else {
-        LOGI("decode sendFilter %ld(%f)", pAvFrame->pts, pAvFrame->pts * av_q2d(getTimeBase()))
-        int64_t pts = pAvFrame->pts;
-        int keyFrame = pAvFrame->key_frame;
-        AVPictureType type = pAvFrame->pict_type;
-        filtered_frame = av_frame_alloc();
-        // 将帧发送到filter图中
-        int frameFlags = av_buffersrc_add_frame_flags(buffersrcContext, pAvFrame,
-                                                      AV_BUFFERSRC_FLAG_PUSH);
-        int buffersinkGetFrame = av_buffersink_get_frame(buffersinkContext, filtered_frame);
-        if (frameFlags < 0 || buffersinkGetFrame < 0) {
-            LOGI("decode filter frame %d %d pts:%ld(%f) %d %d", frameFlags, buffersinkGetFrame,
-                 pts, pts * av_q2d(getTimeBase()), keyFrame, type);
+    AVFrame *outFrame = nullptr;
+    if (buffersrcContext) {
+        if (receiveRes != 0) {
+            LOGI("[video] avcodec_receive_frame err: %d, resent: %d", receiveRes, mNeedResent)
             av_frame_free(&pAvFrame);
-            av_frame_free(&filtered_frame);
-            if (buffersinkGetFrame == AVERROR_EOF) {
-                buffersinkGetFrame = AVERROR_EOF;
+            if (isEof && receiveRes == AVERROR_EOF) {
+                receiveRes = AVERROR_EOF;
                 mNeedResent = false;
             }
-            return buffersinkGetFrame;
+            if (receiveRes == AVERROR_EOF) {
+                //需要check filter里还有无数据
+                outFrame = av_frame_alloc();
+                int frameFlags = av_buffersrc_add_frame_flags(buffersrcContext, nullptr,
+                                                              AV_BUFFERSRC_FLAG_PUSH);
+                int buffersinkGetFrame = av_buffersink_get_frame(buffersinkContext, outFrame);
+                LOGI("decode AVERROR_EOF filter frame %d %d ", frameFlags, buffersinkGetFrame)
+                if (buffersinkGetFrame == AVERROR_EOF) {
+                    mNeedResent = false;
+                    return AVERROR_EOF;
+                }
+                receiveRes = 0;
+                mNeedResent = false;
+            } else {
+                return receiveRes;
+            }
+        } else {
+            LOGI("decode sendFilter %ld(%f)", pAvFrame->pts, pAvFrame->pts * av_q2d(getTimeBase()))
+            int64_t pts = pAvFrame->pts;
+            int keyFrame = pAvFrame->key_frame;
+            AVPictureType type = pAvFrame->pict_type;
+            outFrame = av_frame_alloc();
+            // 将帧发送到filter图中
+            int frameFlags = av_buffersrc_add_frame_flags(buffersrcContext, pAvFrame,
+                                                          AV_BUFFERSRC_FLAG_PUSH);
+            int buffersinkGetFrame = av_buffersink_get_frame(buffersinkContext, outFrame);
+            if (frameFlags < 0 || buffersinkGetFrame < 0) {
+                LOGI("decode filter frame %d %d pts:%ld(%f) %d %d", frameFlags, buffersinkGetFrame,
+                     pts, pts * av_q2d(getTimeBase()), keyFrame, type);
+                av_frame_free(&pAvFrame);
+                av_frame_free(&outFrame);
+                if (buffersinkGetFrame == AVERROR_EOF) {
+                    buffersinkGetFrame = AVERROR_EOF;
+                    mNeedResent = false;
+                }
+                return buffersinkGetFrame;
+            }
+        }
+        AVRational outTimeBase = {1, (int) getTargetFps() * TimeBaseDiff};
+
+        outFrame->pts = outFrame->pts * TimeBaseDiff;
+        outFrame->pkt_dts = outFrame->pts - TimeBaseDiff;
+        outFrame->time_base = outTimeBase;
+        outFrame->pkt_duration = TimeBaseDiff;
+    } else {
+        if (receiveRes != 0) {
+            LOGI("[video] avcodec_receive_frame err: %d, resent: %d", receiveRes, mNeedResent)
+            av_frame_free(&pAvFrame);
+            if (isEof && receiveRes == AVERROR_EOF) {
+                receiveRes = AVERROR_EOF;
+                mNeedResent = false;
+            }
+            return receiveRes;
+        } else {
+            outFrame = pAvFrame;
+            outFrame->time_base = getTimeBase();
         }
     }
 
-    AVRational outTimeBase = {1, (int) getTargetFps() * TimeBaseDiff};
-
-    filtered_frame->pts = filtered_frame->pts * TimeBaseDiff;
-    filtered_frame->pkt_dts = filtered_frame->pts - TimeBaseDiff;
-    filtered_frame->time_base = outTimeBase;
-    filtered_frame->pkt_duration = TimeBaseDiff;
-    if (isHwDecoder(filtered_frame)) {
-        av_frame_ref(frame, filtered_frame);
-        av_frame_free(&filtered_frame);
+    if (isHwDecoder(outFrame)) {
+        av_frame_ref(frame, outFrame);
+        av_frame_free(&outFrame);
     } else {
-        convertFrame(filtered_frame, frame);
+        convertFrame(outFrame, frame);
     }
 
     LOGI("decode convertFrame %ld(%f)  format:%s %d",
          frame->pts,
-         frame->pts * av_q2d(outTimeBase),
+         frame->pts * av_q2d(getTimeBase()),
          av_get_pix_fmt_name((AVPixelFormat) frame->format), frame->pict_type)
 
     return receiveRes;
@@ -710,6 +732,10 @@ void VideoDecoder::seekUnlock() {
     mSeekMutexObj->unlock();
 }
 
+void VideoDecoder::fixStartTime() {
+    mFixStartTime = true;
+}
+
 void VideoDecoder::updateTimestamp(AVFrame *frame) {
     if (mStartTimeMsForSync < 0) {
         LOGI("update video start time")
@@ -818,7 +844,7 @@ double VideoDecoder::getDuration() {
     return mDuration;
 }
 
-void VideoDecoder::avSync(AVFrame *frame) {
+int64_t VideoDecoder::avSync(AVFrame *frame) {
     int64_t elapsedTimeMs = getCurrentTimeMs() - mStartTimeMsForSync;
     int64_t diff = mCurTimeMs - elapsedTimeMs;
     diff = FFMIN(diff, DELAY_THRESHOLD);
@@ -826,6 +852,7 @@ void VideoDecoder::avSync(AVFrame *frame) {
     if (diff > 0) {
         av_usleep(diff * 1000);
     }
+    return diff;
 }
 
 int VideoDecoder::seek(int64_t pos) {

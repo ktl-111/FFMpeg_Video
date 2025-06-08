@@ -970,15 +970,15 @@ private val vertices = floatArrayOf(
 
 可以先打个草稿,等作画完后,再在画板上模糊处理
 
-脑子想的画面:原始纹理,OES,2D
+脑子想的画面&rarr;原始纹理,OES,2D
 
-画板:最终着色器
+画板&rarr;最终着色器
 
-草稿:FBO
+草稿&rarr;FBO
 
 
 
-#### PBO
+#### PBO(将像素从gpu置换至cpu)
 
 
 

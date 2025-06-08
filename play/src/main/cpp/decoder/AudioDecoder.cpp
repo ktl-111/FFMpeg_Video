@@ -281,7 +281,7 @@ int64_t AudioDecoder::getTimestamp() const {
     return mCurTimeStampMs;
 }
 
-void AudioDecoder::avSync(AVFrame *frame) {
+int64_t AudioDecoder::avSync(AVFrame *frame) {
     int64_t elapsedTimeMs = getCurrentTimeMs() - mStartTimeMsForSync;
     int64_t diff = mCurTimeStampMs - elapsedTimeMs;
     diff = FFMIN(diff, DELAY_THRESHOLD);
@@ -291,6 +291,7 @@ void AudioDecoder::avSync(AVFrame *frame) {
     } else {
         LOGE("avSync warning")
     }
+    return diff;
 }
 
 double AudioDecoder::getDuration() {

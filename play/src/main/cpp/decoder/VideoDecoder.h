@@ -66,7 +66,7 @@ public:
 
     void convertFrame(AVFrame *srcFrame, AVFrame *dstFrame);
 
-    virtual void avSync(AVFrame *frame) override;
+    virtual int64_t avSync(AVFrame *frame) override;
 
     virtual int seek(int64_t pos) override;
 
@@ -83,6 +83,7 @@ public:
     void seekLock();
 
     void seekUnlock();
+    void fixStartTime();
 
     void surfaceReCreate(JNIEnv *env, jobject surface);
 
@@ -90,6 +91,7 @@ public:
 
     bool isHwDecoder(AVFrame *frame);
 
+    double getScale();
 private:
     int mWidth = -1;
     int mHeight = -1;
@@ -115,6 +117,7 @@ private:
     AVFilterInOut *inputs = nullptr;
     AVFilterContext *buffersinkContext = nullptr;
     AVFilterContext *buffersrcContext = nullptr;
+    double mScale = 1.0f;
 
     void initFilter();
 
@@ -123,6 +126,7 @@ private:
     int convertToSurface(AVFrame *srcFrame, AVFrame *dstFrame);
 
     int convertFrameTo420Frame(AVFrame *srcFrame, AVFrame *dstFrame);
+
 
 };
 

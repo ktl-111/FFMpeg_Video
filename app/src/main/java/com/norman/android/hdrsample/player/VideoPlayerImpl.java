@@ -116,14 +116,14 @@ public class VideoPlayerImpl extends DecodePlayerImpl<VideoDecoder, VideoExtract
     @Override
     protected void onOutputBufferRender(long presentationTimeUs) {
         long sleepTime = TimeUtil.microToMill(timeSyncer.sync(presentationTimeUs));
-        LogUtils.i(TAG, "onOutputBufferRender: " + sleepTime);
+        LogUtils.i(TAG, "onOutputBufferRender sleepTime: " + sleepTime + " presentationTimeUs:" + presentationTimeUs);
 //        sleepTime = 100;
-        if (sleepTime > 0) {
-            try {
-                Thread.sleep(sleepTime);//还没渲染的时间点就等待
-            } catch (InterruptedException ignored) {
-            }
-        }
+//        if (sleepTime > 0) {
+//            try {
+//                Thread.sleep(sleepTime);//还没渲染的时间点就等待
+//            } catch (InterruptedException ignored) {
+//            }
+//        }
         currentVideoOutput.onDecodeBufferRender(presentationTimeUs);
     }
 

@@ -28,7 +28,7 @@ public:
 
     virtual int decode(AVPacket *packet, AVFrame *frame);
 
-    virtual void avSync(AVFrame *frame);
+    virtual int64_t avSync(AVFrame *frame);
 
     virtual int seek(int64_t pos);
 

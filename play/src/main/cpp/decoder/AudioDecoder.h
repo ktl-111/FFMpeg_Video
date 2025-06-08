@@ -24,9 +24,9 @@ public:
 
     virtual bool prepare(JNIEnv *env) override;
 
-    virtual int decode(AVPacket *packet,AVFrame *frame) override;
+    virtual int decode(AVPacket *packet, AVFrame *frame) override;
 
-    virtual void avSync(AVFrame *frame) override;
+    virtual int64_t avSync(AVFrame *frame) override;
 
     virtual int seek(int64_t pos) override;
 
@@ -42,13 +42,16 @@ public:
     uint8_t *mAudioBuffer = nullptr;
 
     void playAudio(AVFrame *frame);
+
 private:
     int64_t mStartTimeMsForSync = -1;
     SLAndroidSimpleBufferQueueItf pcmBufferQueue;
     const AVCodec *mAudioCodec = nullptr;
 
     SwrContext *mSwrContext = nullptr;
+
     void updateTimestamp(AVFrame *frame);
+
     int resample(AVFrame *frame);
 };
 
