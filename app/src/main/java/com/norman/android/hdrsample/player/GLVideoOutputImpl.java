@@ -335,6 +335,7 @@ class GLVideoOutputImpl extends GLVideoOutput {
     }
 
     /**
+     * GLEnvContextManager.create创建当前gl线程,并创建surface,令当前线程池都处于gl线程,可随时调用gl相关api
      * videoSurface 渲染
      * textureRenderer 着色器
      * renderToTarget
