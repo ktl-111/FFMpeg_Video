@@ -14,7 +14,7 @@ abstract class GLRenderer {
 
     boolean requestProgram;
 
-    GLRenderTarget renderTarget;
+    public GLRenderTarget renderTarget;
 
     protected int programId;
 
@@ -22,14 +22,14 @@ abstract class GLRenderer {
 
     private GLShaderCode frameShader;
 
-    boolean renderSuccess;
+    public boolean renderSuccess;
 
     /**
      * 渲染到目标
      *
      * @param renderTarget
      */
-    synchronized void renderToTarget(GLRenderTarget renderTarget) {
+    public synchronized void renderToTarget(GLRenderTarget renderTarget) {
         this.renderTarget = renderTarget;
         renderTarget.startRender();
         create();

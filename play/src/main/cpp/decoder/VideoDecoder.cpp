@@ -855,11 +855,27 @@ int64_t VideoDecoder::avSync(AVFrame *frame) {
     return diff;
 }
 
+int VideoDecoder::getKeyFrameIndex(int64_t timestamp) {
+
+//    int64_t target = av_rescale_q((int64_t) (timestamp * AV_TIME_BASE), AV_TIME_BASE_Q, mTimeBase);
+    int64_t target = (int64_t) (timestamp / av_q2d(getTimeBase())) / 1000;
+    int index = av_index_search_timestamp(mStream, target, AVSEEK_FLAG_BACKWARD);
+    index = FFMAX(index, 0);
+    return index;
+}
+
 int VideoDecoder::seek(int64_t pos) {
+    /** AVSEEK_FLAG_BACKWARD:是seek到请求的timestamp之前最近的关键帧
+AVSEEK_FLAG_BYTE: 是基于字节位置的查找
+AVSEEK_FLAG_ANY: 是可以seek到任意帧，注意不一定是关键帧，因此使用时可能会导致花屏
+AVSEEK_FLAG_FRAME:是基于帧数量快进
+
+     AVSEEK_FLAG_ANY+AVSEEK_FLAG_FRAME只能ip
+     */
     int64_t seekPos = (int64_t) (pos / av_q2d(getTimeBase())) / 1000;
     int ret = avformat_seek_file(mFtx, getStreamIndex(),
                                  INT64_MIN, seekPos, INT64_MAX,
-                                 0);
+                                 AVSEEK_FLAG_BACKWARD | AVSEEK_FLAG_FRAME);
     flush();
     LOGI("[video] seek to: %ld, seekPos: %" PRId64 ", ret: %d(%s)", pos, seekPos, ret,
          av_err2str(ret))

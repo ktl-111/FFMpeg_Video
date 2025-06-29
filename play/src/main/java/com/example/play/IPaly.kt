@@ -6,6 +6,7 @@ import com.example.play.utils.FFMpegUtils
 
 interface IPaly {
     fun init(iPalyListener: IPalyListener?)
+    fun setTrackInterceptor(interceptor: TrackInterceptor)
     fun prepare(path: String, surface: Surface?, outConfig: OutConfig? = null)
     fun start()
     fun stop()

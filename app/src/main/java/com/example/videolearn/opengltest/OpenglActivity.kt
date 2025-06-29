@@ -1,4 +1,4 @@
-package com.example.videolearn.opengl
+package com.example.videolearn.opengltest
 
 import android.content.res.Resources
 import android.graphics.Bitmap

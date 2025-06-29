@@ -18,6 +18,8 @@ public interface VideoExtractor extends Extractor {
 
     int getHeight();
 
+    int getRotation();
+
     /**
      * 帧率
      */

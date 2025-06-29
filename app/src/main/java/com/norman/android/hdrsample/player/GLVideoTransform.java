@@ -72,8 +72,8 @@ public abstract class GLVideoTransform extends GLRenderer {
     }
 
 
-    synchronized void renderToTarget(GLRenderTextureTarget inputTarget, GLRenderTextureTarget outputTarget) {
-        if (!enable){
+    public synchronized void renderToTarget(GLRenderTextureTarget inputTarget, GLRenderTextureTarget outputTarget) {
+        if (!enable) {
             renderSuccess = false;
             return;
         }
@@ -88,7 +88,7 @@ public abstract class GLVideoTransform extends GLRenderer {
     }
 
     @Override
-    synchronized void renderToTarget(GLRenderTarget renderTarget) {
+    public synchronized void renderToTarget(GLRenderTarget renderTarget) {
         throw new RuntimeException("not support renderToTarget(GLRenderTarget renderTarget)");
     }
 
@@ -101,11 +101,11 @@ public abstract class GLVideoTransform extends GLRenderer {
         }
     }
 
-    public synchronized void enable(){
+    public synchronized void enable() {
         enable = true;
     }
 
-    public synchronized void disable(){
+    public synchronized void disable() {
         enable = false;
     }
 
@@ -130,7 +130,7 @@ public abstract class GLVideoTransform extends GLRenderer {
 
     protected abstract void onTransform();
 
-    protected  void onTransformFinish(){
+    protected void onTransformFinish() {
 
     }
 }

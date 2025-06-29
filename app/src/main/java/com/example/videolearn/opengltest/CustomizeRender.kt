@@ -1,4 +1,4 @@
-package com.example.videolearn.opengl
+package com.example.videolearn.opengltest
 
 import android.opengl.GLES20
 import android.opengl.GLSurfaceView

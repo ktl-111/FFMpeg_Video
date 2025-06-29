@@ -25,7 +25,7 @@ public:
 #define TAG "FFMpeg-lib"
 
 #define LOGD(...) if (Logger::isLogD()) { \
-       __android_log_print(ANDROID_LOG_DEBUG,TAG,__VA_ARGS__); \
+       __android_log_print(ANDROID_LOG_INFO,TAG,__VA_ARGS__); \
     }
 #define LOGI(...) if (Logger::isLogI()) { \
 __android_log_print(ANDROID_LOG_INFO,TAG,__VA_ARGS__);\

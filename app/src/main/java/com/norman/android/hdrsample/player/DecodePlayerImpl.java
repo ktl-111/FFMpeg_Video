@@ -18,9 +18,9 @@ import java.nio.ByteBuffer;
  * @param <D>
  * @param <E>
  */
-abstract class DecodePlayerImpl<D extends Decoder,E extends Extractor> extends PlayerImpl implements Player {
-    private static final String KEY_CSD_0 = "csd-0";
-    private static final String KEY_CSD_1 = "csd-1";
+public abstract class DecodePlayerImpl<D extends Decoder,E extends Extractor> extends PlayerImpl implements Player {
+    public static final String KEY_CSD_0 = "csd-0";
+    public static final String KEY_CSD_1 = "csd-1";
 
     private final CallBackHandler callBackHandler = new CallBackHandler();
 

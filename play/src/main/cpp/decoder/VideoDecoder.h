@@ -83,6 +83,7 @@ public:
     void seekLock();
 
     void seekUnlock();
+
     void fixStartTime();
 
     void surfaceReCreate(JNIEnv *env, jobject surface);
@@ -92,6 +93,9 @@ public:
     bool isHwDecoder(AVFrame *frame);
 
     double getScale();
+
+    int getKeyFrameIndex(int64_t timestamp);
+
 private:
     int mWidth = -1;
     int mHeight = -1;

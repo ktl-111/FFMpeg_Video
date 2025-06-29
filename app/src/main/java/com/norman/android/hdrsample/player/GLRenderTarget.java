@@ -1,6 +1,6 @@
 package com.norman.android.hdrsample.player;
 
-abstract class GLRenderTarget {
+public abstract class GLRenderTarget {
 
     int width;
     int height;
@@ -11,7 +11,7 @@ abstract class GLRenderTarget {
     private boolean rendering;
 
 
-    void setRenderSize(int renderWidth, int renderHeight) {
+    public void setRenderSize(int renderWidth, int renderHeight) {
         if (renderWidth != this.width
                 || this.height != renderHeight) {
             this.width = renderWidth;
@@ -20,7 +20,7 @@ abstract class GLRenderTarget {
         }
     }
 
-    void startRender() {
+    public void startRender() {
         if (recreate){
             recreate = false;
             destroy();
@@ -30,7 +30,7 @@ abstract class GLRenderTarget {
         onStart();
     }
 
-    void finishRender() {
+    public void finishRender() {
         onFinish();
         rendering = false;
         if (recreate){

@@ -7,7 +7,7 @@ import com.norman.android.hdrsample.player.shader.TextureFragmentShader;
 import com.norman.android.hdrsample.util.ColorMatrixUtil;
 import com.norman.android.hdrsample.util.LogUtils;
 
-class GLTextureY2YRenderer extends GLTextureRenderer {
+public class GLTextureY2YRenderer extends GLTextureRenderer {
 
     /**
      * 支持YUV扩展

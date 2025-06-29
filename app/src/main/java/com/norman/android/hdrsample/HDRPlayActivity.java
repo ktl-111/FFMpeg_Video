@@ -140,7 +140,7 @@ public class HDRPlayActivity extends AppCompatActivity implements View.OnClickLi
         textViewScreenInfo = findViewById(R.id.TextViewScreenInfo);
         textViewOpenGLSupportInfo = findViewById(R.id.TextViewOpenGLSupportInfo);
 
-//        initView(R.id.VideoPlayerView, 0.3f, true);
+        initView(R.id.VideoPlayerView, 0.3f, true);
         initView(R.id.VideoPlayerView2, 1.0f, false);
 
         findViewById(R.id.ButtonCubeLut).setOnClickListener(this);

@@ -28,6 +28,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.example.videolearn.compose.ComposeActivity
 import com.example.videolearn.ffmpegcompose.FFMpegActivity
+import com.example.videolearn.glvideo.GLVideoActivity
 import com.example.videolearn.live.LiveActivity
 import com.example.videolearn.shotscreen.ShotScreenActivity
 import com.example.videolearn.test.ParseDataActivity
@@ -58,10 +59,13 @@ class MainActivity : AppCompatActivity() {
                     startActivity(android.content.Intent(this@MainActivity, ComposeActivity::class.java))
                 },
                 Items("opengl") {
-                    startActivity(android.content.Intent(this@MainActivity, com.example.videolearn.opengl.OpenglActivity::class.java))
+                    startActivity(android.content.Intent(this@MainActivity, com.example.videolearn.opengltest.OpenglActivity::class.java))
                 },
                 Items("HDR") {
                     ffmpeg(mHdrPickLauncher)
+                },
+                Items("glvideo") {
+                    ffmpeg(mGLVideoLauncher)
                 },
                 Items("ffmpeg") {
                     ffmpeg(mMediaPickLauncher)
@@ -145,6 +149,20 @@ class MainActivity : AppCompatActivity() {
                 Log.i(TAG, "onActivityResult: ${uriToFileApiQ} ${uri.path}")
                 startActivity(Intent(this, FFMpegActivity::class.java)
                     .also { it.putExtra("filepath", uriToFileApiQ) })
+            }
+        }
+    private val mGLVideoLauncher =
+        registerForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+            uri?.let { uri ->
+                val uriToFileApiQ = uri2Path(this, uri)
+                val file = File(cacheDir, "test.mp4")
+                if (file.exists()) {
+                    file.delete()
+                }
+                val copyTo = File(uriToFileApiQ).copyTo(File(cacheDir, "test.mp4"))
+                Log.i(TAG, "onActivityResult: ${uriToFileApiQ} ${uri.path} ${copyTo}")
+                startActivity(Intent(this, GLVideoActivity::class.java)
+                    .also { it.putExtra("filepath", copyTo.absolutePath) })
             }
         }
 

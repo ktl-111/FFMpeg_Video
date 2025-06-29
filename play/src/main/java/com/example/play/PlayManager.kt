@@ -20,6 +20,7 @@ class PlayManager : IPaly {
     private val TAG = "PlayManager"
     private lateinit var mProxy: IPaly
     private var iPalyListener: IPalyListener? = null
+    private var trackInterceptor: TrackInterceptor? = null
     private val seekDoneFlow by lazy {
         MutableStateFlow(true)
     }
@@ -55,6 +56,10 @@ class PlayManager : IPaly {
         this.iPalyListener = iPalyListener
     }
 
+    override fun setTrackInterceptor(interceptor: TrackInterceptor) {
+        this.trackInterceptor = interceptor
+    }
+
     var init = false
     override fun prepare(path: String, surface: Surface?, outConfig: OutConfig?) {
         if (init) {
@@ -67,6 +72,9 @@ class PlayManager : IPaly {
         }
         mProxy = FFMpegProxy()
         mProxy.init(iPalyListener)
+        trackInterceptor?.also {
+            mProxy.setTrackInterceptor(it)
+        }
         mProxy.prepare(path, surface, outConfig)
         init = true
     }

@@ -20,7 +20,7 @@ import com.norman.android.hdrsample.util.GLESUtil;
 import com.norman.android.hdrsample.util.LogUtils;
 
 
-class GLRenderTextureTarget extends GLRenderTarget {
+public class GLRenderTextureTarget extends GLRenderTarget {
     private String mTAG;
 
     public GLRenderTextureTarget(String tag) {
@@ -45,7 +45,7 @@ class GLRenderTextureTarget extends GLRenderTarget {
     int maxFrameAverageLuminance;
     int maxMasteringLuminance;
 
-    void setBitDepth(int bitDepth) {
+    public void setBitDepth(int bitDepth) {
         if (this.bitDepth != bitDepth) {
             this.bitDepth = bitDepth;
             requestRecreate();
@@ -54,21 +54,21 @@ class GLRenderTextureTarget extends GLRenderTarget {
 
     private String TAG = "GLRender";
 
-    void setColorSpace(@ColorSpace int colorSpace) {
+    public void setColorSpace(@ColorSpace int colorSpace) {
         LogUtils.i(TAG, "setColorSpace " + colorSpace);
         this.colorSpace = colorSpace;
     }
 
 
-    protected void setMaxContentLuminance(int maxContentLuminance) {
+    public void setMaxContentLuminance(int maxContentLuminance) {
         this.maxContentLuminance = maxContentLuminance;
     }
 
-    protected void setMaxFrameAverageLuminance(int maxFrameAverageLuminance) {
+    public void setMaxFrameAverageLuminance(int maxFrameAverageLuminance) {
         this.maxFrameAverageLuminance = maxFrameAverageLuminance;
     }
 
-    protected void setMaxMasteringLuminance(int maxMasteringLuminance) {
+    public void setMaxMasteringLuminance(int maxMasteringLuminance) {
         this.maxMasteringLuminance = maxMasteringLuminance;
     }
 

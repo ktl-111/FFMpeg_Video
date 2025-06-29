@@ -9,7 +9,9 @@ extern "C" {
 }
 
 AVFrameQueue::AVFrameQueue(int64_t maxSize, std::string tag) {
-    pthread_mutex_init(&mMutex, nullptr);
+    pthread_mutexattr_init(&attr);
+    pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_RECURSIVE); // 关键设置
+    pthread_mutex_init(&mMutex, &attr);
     pthread_cond_init(&mCond, nullptr);
     if (maxSize < 3) {
         maxSize = 3;
@@ -42,10 +44,10 @@ void AVFrameQueue::pushBack(AVFrame *frame, bool noti) {
          frame->pts, frame->pts * av_q2d(frame->time_base), mQueue.size(),
          currIndex, av_get_pix_fmt_name((AVPixelFormat) frame->format), frame->width, frame->height)
     mQueue.push_back(frame);
-    pthread_mutex_unlock(&mMutex);
     if (noti) {
         notify();
     }
+    pthread_mutex_unlock(&mMutex);
 }
 
 void AVFrameQueue::pushFront(AVFrame *frame) {
@@ -54,8 +56,8 @@ void AVFrameQueue::pushFront(AVFrame *frame) {
          frame->pts * av_q2d(frame->time_base), frame->format)
     mQueue.push_front(frame);
     currIndex++;
-    pthread_mutex_unlock(&mMutex);
     notify();
+    pthread_mutex_unlock(&mMutex);
 }
 
 AVFrame *AVFrameQueue::getFrameUnlock(bool pop, bool findBack) {
@@ -109,8 +111,8 @@ AVFrame *AVFrameQueue::getFrameUnlock(bool pop, bool findBack) {
 AVFrame *AVFrameQueue::getFrame(bool pop, bool findBack) {
     pthread_mutex_lock(&mMutex);
     AVFrame *frame = getFrameUnlock(pop, findBack);
-    pthread_mutex_unlock(&mMutex);
     notify();
+    pthread_mutex_unlock(&mMutex);
     return frame;
 }
 
@@ -122,8 +124,8 @@ AVFrame *AVFrameQueue::back() {
         return nullptr;
     }
     AVFrame *frame = mQueue.back();
-    pthread_mutex_unlock(&mMutex);
     notify();
+    pthread_mutex_unlock(&mMutex);
     return frame;
 }
 
@@ -135,8 +137,8 @@ AVFrame *AVFrameQueue::front() {
         return nullptr;
     }
     AVFrame *frame = mQueue.front();
-    pthread_mutex_unlock(&mMutex);
     notify();
+    pthread_mutex_unlock(&mMutex);
     return frame;
 }
 
@@ -147,6 +149,19 @@ bool AVFrameQueue::isFull() {
     pthread_mutex_unlock(&mMutex);
 
     return queueSize >= mMaxSize;
+}
+
+bool AVFrameQueue::isFullWait() {
+    int64_t queueSize;
+    pthread_mutex_lock(&mMutex);
+    queueSize = (int) mQueue.size();
+    bool wait = queueSize >= mMaxSize;
+    if (wait) {
+        pthread_cond_wait(&mCond, &mMutex);
+    }
+    pthread_mutex_unlock(&mMutex);
+
+    return wait;
 }
 
 void AVFrameQueue::wait(unsigned int timeOutMs) {
@@ -232,10 +247,10 @@ void AVFrameQueue::clear(bool noti) {
         mQueue.pop_front();
     }
     currIndex = -1;
-    pthread_mutex_unlock(&mMutex);
     if (noti) {
         notify();
     }
+    pthread_mutex_unlock(&mMutex);
 }
 
 AVFrame *AVFrameQueue::getFrameByTime(int64_t time, bool findBack) {
@@ -276,7 +291,7 @@ AVFrame *AVFrameQueue::getFrameByTime(int64_t time, bool findBack) {
         }
         int64_t pts = srcFrame->pts * av_q2d(srcFrame->time_base) * 1000;
 
-        if (pts == time) {
+        if (pts > time) {
             find = true;
         }
         if (find) {

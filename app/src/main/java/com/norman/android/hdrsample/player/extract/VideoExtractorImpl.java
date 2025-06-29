@@ -20,6 +20,7 @@ class VideoExtractorImpl implements VideoExtractor {
     private String mimeType;
     private long durationUs;
     private int width;
+    private int rotation;
     private int height;
     private int maxInputSize;
     private int frameRate;
@@ -49,7 +50,7 @@ class VideoExtractorImpl implements VideoExtractor {
                     fileSourceDescriptor.getStartOffset(),
                     fileSourceDescriptor.getLength());
         } catch (IOException e) {
-            throw  new IORuntimeException(e);
+            throw new IORuntimeException(e);
         } finally {
             if (fileSourceDescriptor != null) {
                 fileSourceDescriptor.close();
@@ -63,6 +64,7 @@ class VideoExtractorImpl implements VideoExtractor {
                 mimeType = mime;
                 durationUs = MediaFormatUtil.getLong(format, MediaFormat.KEY_DURATION);
                 width = MediaFormatUtil.getInteger(format, MediaFormat.KEY_WIDTH);
+                rotation = MediaFormatUtil.getInteger(format, MediaFormat.KEY_ROTATION);
                 height = MediaFormatUtil.getInteger(format, MediaFormat.KEY_HEIGHT);
                 frameRate = MediaFormatUtil.getInteger(format, MediaFormat.KEY_FRAME_RATE);
                 csd0Buffer = MediaFormatUtil.getByteBuffer(format, KEY_CSD_0);
@@ -85,6 +87,7 @@ class VideoExtractorImpl implements VideoExtractor {
 
     /**
      * 是否存在Video轨道
+     *
      * @return
      */
     @Override
@@ -188,6 +191,11 @@ class VideoExtractorImpl implements VideoExtractor {
     @Override
     public synchronized int getWidth() {
         return width;
+    }
+
+    @Override
+    public int getRotation() {
+        return rotation;
     }
 
     @Override

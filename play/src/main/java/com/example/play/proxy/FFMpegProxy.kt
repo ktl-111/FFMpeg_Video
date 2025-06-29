@@ -5,6 +5,7 @@ import com.example.play.IPaly
 import com.example.play.IPalyListener
 import com.example.play.PlayerState
 import com.example.play.Step
+import com.example.play.TrackInterceptor
 import com.example.play.config.OutConfig
 import com.example.play.utils.FFMpegUtils
 import com.example.play.utils.LogHelper
@@ -20,9 +21,14 @@ internal class FFMpegProxy : IPaly {
     private val TAG = "FFMpegProxy"
     private var nativeManager: Long = -1
     private var palyListener: IPalyListener? = null
+    private var trackInterceptor: TrackInterceptor? = null
     override fun init(iPalyListener: IPalyListener?) {
         palyListener = iPalyListener
         nativeManager = nativeInit()
+    }
+
+    override fun setTrackInterceptor(interceptor: TrackInterceptor) {
+        this.trackInterceptor = interceptor
     }
 
     override fun prepare(path: String, surface: Surface?, outConfig: OutConfig?) {
@@ -127,5 +133,9 @@ internal class FFMpegProxy : IPaly {
     private fun onPlayError(code: Int) {
         LogHelper.e(TAG, "onPlayError code:${code}")
         palyListener?.onPlayError(code)
+    }
+
+    private fun onNativeTrackInterceptor(duration: Double): DoubleArray? {
+        return trackInterceptor?.onStart(duration)
     }
 }

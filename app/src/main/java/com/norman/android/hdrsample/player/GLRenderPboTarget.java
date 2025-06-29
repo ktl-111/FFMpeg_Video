@@ -26,7 +26,7 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 
 
-class GLRenderPboTarget extends GLRenderTarget {
+public class GLRenderPboTarget extends GLRenderTarget {
 
     private String TAG = "PboTarget";
 
@@ -69,25 +69,32 @@ class GLRenderPboTarget extends GLRenderTarget {
                 GL_PIXEL_PACK_BUFFER, 0, width * height * 4,
                 GL_MAP_READ_BIT);
         if (buffer != null) {
-            buffer.rewind();
-            if (!writeDone) {
-                int result = DecodeUtils.INSTANCE.writeData(buffer, time);
-                LogUtils.i(TAG, "glMapBufferRange " + buffer.getClass().getSimpleName() + " time:" + time + " result:" + result);
-                if (result == 10000) {
-                    DecodeUtils.INSTANCE.endDecode();
-                    writeDone = true;
-                }
-
-            }
-//            // 创建并保存Bitmap（建议在工作线程执行）
-//            Bitmap bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
-//            buffer.rewind();
-//            bitmap.copyPixelsFromBuffer(buffer);
-//            saveBitmap(bitmap);        // 保存到本地
-//            bitmap.recycle();
+//            encodeBuffer(buffer);
+            saveBufferToLocal(buffer);
         }
 
         currentPBOIndex = nextPBOIndex;
+    }
+
+    private void encodeBuffer(ByteBuffer buffer) {
+        buffer.rewind();
+        if (!writeDone) {
+            int result = DecodeUtils.INSTANCE.writeData(buffer, time);
+            LogUtils.i(TAG, "glMapBufferRange " + buffer.getClass().getSimpleName() + " time:" + time + " result:" + result);
+            if (result == 10000) {
+                DecodeUtils.INSTANCE.endDecode();
+                writeDone = true;
+            }
+
+        }
+    }
+
+    private void saveBufferToLocal(ByteBuffer buffer) {
+        Bitmap bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
+        buffer.rewind();
+        bitmap.copyPixelsFromBuffer(buffer);
+        saveBitmap(bitmap);        // 保存到本地
+        bitmap.recycle();
     }
 
     // 保存到本地方法
@@ -95,6 +102,7 @@ class GLRenderPboTarget extends GLRenderTarget {
         String path = new File(AppUtil.getAppContext().getExternalCacheDir(), System.currentTimeMillis() + ".png").getAbsolutePath();
         try (FileOutputStream out = new FileOutputStream(path)) {
             bitmap.compress(Bitmap.CompressFormat.JPEG, 100, out);
+            LogUtils.i(TAG, "save bitmap to " + path + " success");
         } catch (IOException e) {
             LogUtils.e("PBO", "Save failed " + e.getMessage());
         }

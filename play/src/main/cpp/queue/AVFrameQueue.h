@@ -37,6 +37,8 @@ public:
 
     bool isFull();
 
+    bool isFullWait();
+
     void checkEmptyWait();
 
     bool isEmpty();
@@ -57,8 +59,11 @@ private:
 
     pthread_cond_t mCond{};
     pthread_mutex_t mMutex{};
+    pthread_mutexattr_t attr;
     char *mTag = nullptr;
     int currIndex = -1;
+
+    void innerNotify();
 };
 
 

@@ -10,7 +10,6 @@
 #include "../utils/MutexObj.h"
 #include "Logger.h"
 #include "../decoder/VideoDecoder.h"
-#include "../decoder/AudioDecoder.h"
 #include "../queue/AVPacketQueue.h"
 #include "../queue/AVFrameQueue.h"
 
@@ -30,6 +29,7 @@ extern "C" {
 typedef struct PlayerJniContext {
     jobject instance;
     jmethodID onAllocateFrame;
+    jmethodID onNativeTrackInterceptor;
     jmethodID onVideoConfig;
     jmethodID onPlayProgress;
     jmethodID onPlayCompleted;
@@ -42,6 +42,7 @@ typedef struct PlayerJniContext {
         onPlayCompleted = nullptr;
         onPlayError = nullptr;
         onAllocateFrame = nullptr;
+        onNativeTrackInterceptor = nullptr;
     }
 
     bool isValid() {
@@ -50,6 +51,7 @@ typedef struct PlayerJniContext {
                 onPlayProgress != nullptr
                         && onVideoConfig != nullptr
                 && onAllocateFrame != nullptr
+                && onNativeTrackInterceptor != nullptr
                 && onPlayError != nullptr;
     }
 
@@ -88,7 +90,7 @@ public:
 
     void stop();
 
-    bool seekTo(int64_t seekTime);
+    bool seekTo(int64_t seekTime, bool callSeek);
 
     void surfaceReCreate(JNIEnv *env, jobject surface);
 
@@ -117,7 +119,9 @@ private:
     volatile PlayerState mPlayerState = UNKNOWN;
 
     AVFormatContext *mAvFormatContext = nullptr;
-
+    jdouble *ptsArr = nullptr;
+    jsize ptsSize;
+    int currPtsIndex = 0;
     std::thread *mReadPacketThread = nullptr;
     std::thread *mVideoDecodeThread = nullptr;
     std::thread *mVideoThread = nullptr;
@@ -126,13 +130,8 @@ private:
     std::shared_ptr<AVFrameQueue> mVideoFrameQueue = nullptr;
     std::shared_ptr<VideoDecoder> mVideoDecoder = nullptr;
 
-    std::thread *mAudioThread = nullptr;
-    std::shared_ptr<AVPacketQueue> mAudioPacketQueue = nullptr;
-    std::shared_ptr<AudioDecoder> mAudioDecoder = nullptr;
 
     void VideoDecodeLoop();
-
-    void AudioDecodeLoop();
 
     bool readAvPacketToQueue(ReadPackType type);
 
