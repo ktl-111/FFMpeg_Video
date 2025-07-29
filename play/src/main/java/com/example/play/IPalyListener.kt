@@ -10,7 +10,7 @@ interface IPalyListener {
      *
      * @param time ms
      */
-    fun onPalyProgress(frame: ByteBuffer?, time: Double)
-    fun onPalyComplete()
+    fun onPlayProgress(frame: ByteBuffer?, time: Double)
+    fun onPlayComplete()
     fun onPlayError(code: Int)
 }

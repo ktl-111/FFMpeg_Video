@@ -29,7 +29,7 @@ extern "C" {
 typedef struct PlayerJniContext {
     jobject instance;
     jmethodID onAllocateFrame;
-    jmethodID onNativeTrackInterceptor;
+    jmethodID onNativeTrackInterceptor = nullptr;
     jmethodID onVideoConfig;
     jmethodID onPlayProgress;
     jmethodID onPlayCompleted;
@@ -119,7 +119,7 @@ private:
     volatile PlayerState mPlayerState = UNKNOWN;
 
     AVFormatContext *mAvFormatContext = nullptr;
-    jdouble *ptsArr = nullptr;
+    jlong *ptsArr = nullptr;
     jsize ptsSize;
     int currPtsIndex = 0;
     std::thread *mReadPacketThread = nullptr;

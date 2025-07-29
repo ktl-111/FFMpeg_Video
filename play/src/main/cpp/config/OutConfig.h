@@ -11,7 +11,7 @@ extern "C" {
 
 class OutConfig {
 public:
-    OutConfig(int width, int height, int cropWidth, int cropHeight, double fps);
+    OutConfig(int width, int height, int cropWidth, int cropHeight, int fps);
 
     ~OutConfig();
 
@@ -23,7 +23,7 @@ public:
 
     int getCropHeight();
 
-    double getFps();
+    int getFps();
 
     AVRational getTimeBase();
 
@@ -32,7 +32,7 @@ private:
     int mHeight;
     int mCropWidth;
     int mCropHeight;
-    double mFps;
+    int mFps;
     AVRational mTimeBase{};
 };
 

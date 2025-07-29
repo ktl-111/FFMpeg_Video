@@ -46,6 +46,19 @@ bool AVPacketQueue::isFull() {
     return queueSize >= mMaxSize;
 }
 
+bool AVPacketQueue::isFullWait() {
+    int64_t queueSize;
+    pthread_mutex_lock(&mMutex);
+    queueSize = (int) mQueue.size();
+    bool wait = queueSize >= mMaxSize;
+    if (wait) {
+        pthread_cond_wait(&mCond, &mMutex);
+    }
+    pthread_mutex_unlock(&mMutex);
+
+    return wait;
+}
+
 void AVPacketQueue::wait(unsigned int timeOutMs) {
     pthread_mutex_lock(&mMutex);
     LOGI("[AVPacketQueue], packet queue wait start,timeoutms:%d", timeOutMs)

@@ -26,7 +26,7 @@ void FFMpegPlayer::init(JNIEnv *env, jobject thiz) {
     mPlayerJni.onAllocateFrame = env->GetMethodID(jclazz, "onAllocateFrame",
                                                   "(I)Ljava/nio/ByteBuffer;");
     mPlayerJni.onNativeTrackInterceptor = env->GetMethodID(jclazz, "onNativeTrackInterceptor",
-                                                           "(D)[D");
+                                                           "(D)[J");
     mPlayerJni.onVideoConfig = env->GetMethodID(jclazz, "onNativeVideoConfig",
                                                 "(IIDDILjava/lang/String;)V");
     mPlayerJni.onPlayProgress = env->GetMethodID(jclazz, "onNativePalyProgress",
@@ -94,12 +94,14 @@ bool FFMpegPlayer::prepare(JNIEnv *env, std::string &path, jobject surface, jobj
                                     mVideoDecoder->getDuration(), mVideoDecoder->getFps(),
                                     videoRotation,
                                     env->NewStringUTF(codecName));
-
-                jdoubleArray ptsArrays = (jdoubleArray) env->CallObjectMethod(mPlayerJni.instance,
-                                                                              mPlayerJni.onNativeTrackInterceptor,
-                                                                              mVideoDecoder->getDuration());
-                ptsSize = env->GetArrayLength(ptsArrays);
-                ptsArr = env->GetDoubleArrayElements(ptsArrays, nullptr);
+                jlongArray ptsArrays = (jlongArray) env->CallObjectMethod(
+                        mPlayerJni.instance,
+                        mPlayerJni.onNativeTrackInterceptor,
+                        mVideoDecoder->getDuration());
+                if (ptsArrays) {
+                    ptsSize = env->GetArrayLength(ptsArrays);
+                    ptsArr = env->GetLongArrayElements(ptsArrays, nullptr);
+                }
             }
         }
     }
@@ -109,8 +111,8 @@ bool FFMpegPlayer::prepare(JNIEnv *env, std::string &path, jobject surface, jobj
     if (prepared) {
         updatePlayerState(PlayerState::PREPARE);
     }
-    mVideoPacketQueue = std::make_shared<AVPacketQueue>(3);
-    mVideoFrameQueue = std::make_shared<AVFrameQueue>(3, "cache");
+    mVideoPacketQueue = std::make_shared<AVPacketQueue>(5);
+    mVideoFrameQueue = std::make_shared<AVFrameQueue>(1, "cache");
     mVideoThread = new std::thread(&FFMpegPlayer::VideoDecodeLoop, this);
     mReadPacketThread = new std::thread(&FFMpegPlayer::ReadPacketLoop, this);
     mVideoDecodeThread = new std::thread(&FFMpegPlayer::ReadVideoFrameLoop, this);
@@ -187,8 +189,9 @@ bool FFMpegPlayer::seekTo(int64_t seekTime, bool externalCallSeek) {
         mVideoPacketQueue->clear();
         mVideoFrameQueue->clear(true);
     }
+
     mVideoDecoder->seekUnlock();
-    if (callSeek || externalCallSeek) {
+    if (callSeek && externalCallSeek) {
         LOGI("seek back wait start")
         mVideoFrameQueue->wait();
         LOGI("seek back wait end")
@@ -319,26 +322,28 @@ void FFMpegPlayer::VideoDecodeLoop() {
         }
         LOGI("OnFrameArrived start needAttach:%d", needAttach)
         if (!mHasAbort && mVideoDecoder) {
-            if (!mIsSeek && mVideoDecoder->getScale() == 1.0f && ptsArr == nullptr) {
+            bool sync = mVideoDecoder->getScale() == 1.0;
+            LOGI("avsync scale:%f %d", mVideoDecoder->getScale(), sync)
+            if (!mIsSeek && sync && ptsArr == nullptr) {
                 int64_t timestamp = mVideoDecoder->getTimestamp();
                 LOGI("avSync start %ld,mIsSeek: %d", timestamp, mIsSeek)
                 int64_t diff = mVideoDecoder->avSync(frame);
                 LOGI("avSync end %ld,mIsSeek: %d", timestamp, mIsSeek)
-                if (diff < 0) {
+                if (diff < -10) {
                     mVideoDecoder->fixStartTime();
 //                    mVideoDecoder->updateTimestamp(frame);
                     if (needAttach) {
                         mJvm->DetachCurrentThread();
                     }
-                    return;
+                    return false;
                 }
                 if (mIsSeek) {
-                    return;
+                    return false;
                 }
             }
             mVideoDecoder->showFrameToWindow(frame);
             LOGI("avSync done")
-            if (!mIsSeek && mPlayerJni.isValid()) { // no audio track
+            if (mPlayerJni.isValid()) { // no audio track
                 double timestamp = mVideoDecoder->getTimestamp();
                 env->CallVoidMethod(mPlayerJni.instance, mPlayerJni.onPlayProgress, nullptr,
                                     timestamp);
@@ -352,17 +357,22 @@ void FFMpegPlayer::VideoDecodeLoop() {
                         int preIndex = mVideoDecoder->getKeyFrameIndex(ptsArr[currPtsIndex - 1]);
                         int currIndex = mVideoDecoder->getKeyFrameIndex(seekPts);
                         LOGD("seek to preIndex:%d currIndex:%d", preIndex, currIndex)
-                        seekTo(seekPts, preIndex != currIndex);
+                        bool seek = preIndex != currIndex;
+                        if (seek) {
+                            seekTo(seekPts, seek);
+                        }
                     } else {
-                        seekTo(seekPts, true);
+//                        seekTo(seekPts, true);
                     }
                 }
             }
             if (needAttach) {
                 mJvm->DetachCurrentThread();
             }
+            return true;
         } else {
             LOGI("[video] setOnFrameArrived, has abort")
+            return false;
         }
     });
 
@@ -424,28 +434,32 @@ void FFMpegPlayer::ReadVideoFrameLoop() {
             mVideoDecoder->seekLock();
             decodeResult = -1;
             AVPacket *packet = mVideoPacketQueue->pop();
-            std::shared_ptr<AVFrameQueue> tempFrameQueue = std::make_shared<AVFrameQueue>(1,
+            //慢seek 黑屏/花屏,ABCD,seek到C,seek前在解码c/d,seek后flush到A,此时解码c/d成功,但是画面黑屏,软解花屏
+            std::shared_ptr<AVFrameQueue> tempFrameQueue = std::make_shared<AVFrameQueue>(10,
                                                                                           "temp");
+            bool tSeek = mIsSeek;
             if (packet != nullptr) {
                 LOGI("ReadVideoFrameLoop popto pts:%ld size:%ld", packet->pts,
                      mVideoFrameQueue->getSize())
-                do {
-                    if (tempFrameQueue->isFull()) {
-                        break;
-                    }
-                    AVFrame *pFrame = av_frame_alloc();
 
+                do {
+                    AVFrame *pFrame = av_frame_alloc();
                     decodeResult = mVideoDecoder->decode(packet, pFrame);
                     if (mHasAbort) {
                         decodeResult = -1;
                         break;
                     }
                     if (decodeResult == 0) {
-                        tempFrameQueue->pushBack(pFrame, true);
+                        if (!pushFrameToQueue(pFrame, tempFrameQueue, false)) {
+                            pFrame = nullptr;
+                        } else {
+                            double time = pFrame->pts * av_q2d(pFrame->time_base) * 1000;
+                            LOGI("pushFrameToQueue success %ld(%lf)", pFrame->pts, time)
+                        }
                     } else {
                         av_frame_free(&pFrame);
                     }
-                } while (mVideoDecoder->isNeedResent());
+                } while (mVideoDecoder->isNeedResent() && tSeek == mIsSeek);
                 LOGI("[video] ReadVideoFrameLoop decode %d,tempQueueSize:%ld", decodeResult,
                      tempFrameQueue->getSize())
                 if (packet->size == 0 && packet->data == nullptr && decodeResult != AVERROR_EOF) {
@@ -466,6 +480,10 @@ void FFMpegPlayer::ReadVideoFrameLoop() {
             }
             av_packet_free(&packet);
             mVideoDecoder->seekUnlock();
+            if (tSeek != mIsSeek) {
+                LOGI("tSeek != mIsSeek")
+                tempFrameQueue->clear(true);
+            }
             while (!tempFrameQueue->isEmpty()) {
                 AVFrame *pFrame = tempFrameQueue->getFrame(true, false);
                 if (pFrame == nullptr) {
@@ -474,7 +492,6 @@ void FFMpegPlayer::ReadVideoFrameLoop() {
                     continue;
                 }
                 if (!pushFrameToQueue(pFrame, mVideoFrameQueue, false)) {
-                    av_frame_free(&pFrame);
                     pFrame = nullptr;
                 } else {
                     double time = pFrame->pts * av_q2d(pFrame->time_base) * 1000;
@@ -533,8 +550,8 @@ bool FFMpegPlayer::readAvPacketToQueue(ReadPackType type) {
         }
         if (mVideoDecoder && mVideoPacketQueue &&
                 avPacket->stream_index == mVideoDecoder->getStreamIndex()) {
-            LOGI("pushBack video pts:%ld(%f)", avPacket->pts,
-                 avPacket->pts * av_q2d(mVideoDecoder->getTimeBase()))
+            LOGI("pushBack video pts:%ld(%f) dts:%ld", avPacket->pts,
+                 avPacket->pts * av_q2d(mVideoDecoder->getTimeBase()), avPacket->dts)
             suc = pushPacketToQueue(avPacket, mVideoPacketQueue);
         }
         isEnd = false;
@@ -568,16 +585,11 @@ bool FFMpegPlayer::pushPacketToQueue(AVPacket *packet,
         return false;
     }
 
-    while (queue->isFull()) {
+    while (queue->isFullWait()) {
         if (mHasAbort) {
             return false;
         }
-        LOGI("pushPacketToQueue is full, wait start")
-        queue->wait();
-        LOGI("pushPacketToQueue is full, wait end")
-        if (mHasAbort) {
-            return false;
-        }
+        LOGI("pushPacketToQueue is full")
         if (mIsSeek && queue->isEmpty()) {
             LOGI("pushPacketToQueue is full, wait end and filter")
             return false;
@@ -612,8 +624,10 @@ bool FFMpegPlayer::pushFrameToQueue(AVFrame *frame, const std::shared_ptr<AVFram
         }
 
     }
-    LOGI("pushFrameToQueue pts:%ld(%f),pkt_size:(%d),mCurrSeekTime:%ld,mIsBackSeek:%d", frame->pts,
-         frame->pts * av_q2d(frame->time_base), frame->pkt_size, mCurrSeekTime, mIsBackSeek)
+    LOGI("pushFrameToQueue pts:%ld(%f),pkt_size:(%d),mCurrSeekTime:%ld,mIsBackSeek:%d,%p,%p",
+         frame->pts,
+         frame->pts * av_q2d(frame->time_base), frame->pkt_size, mCurrSeekTime, mIsBackSeek, frame,
+         frame->data[3])
     if (frame->pkt_size == 0) {
         if (queue->checkLastIsEofFrame()) {
             LOGI("pushFrameToQueue last is eof.filter curr frame")
@@ -634,22 +648,25 @@ bool FFMpegPlayer::pushFrameToQueue(AVFrame *frame, const std::shared_ptr<AVFram
         LOGI("pushFrameToQueue isseek pts:%lf mCurrSeekTime:%ld notify:%d", pts, mCurrSeekTime,
              notify)
     }
+    if (ptsArr != nullptr) {
+        notify = true;
+    }
     if (fornt) {
         queue->pushFront(frame);
     } else {
         queue->pushBack(frame, notify);
     }
     //seek后,拿到的time还不满足条件就已经full
-    if (mIsSeek && !notify && queue->isFull()) {
+    if (ptsArr == nullptr && mIsSeek && !notify && queue->isFull()) {
         LOGI("pushFrameToQueue is seek,full and no find frame,clear")
         queue->clear(false);
+        return false;
     }
     if (mShowFirstFrame) {
         mVideoDecoder->resultCallback(frame);
         mShowFirstFrame = false;
     }
-    suc = true;
-    return suc;
+    return true;
 }
 
 void FFMpegPlayer::updatePlayerState(PlayerState state) {

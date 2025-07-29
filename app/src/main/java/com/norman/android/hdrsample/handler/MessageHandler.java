@@ -198,7 +198,7 @@ public interface MessageHandler {
     }
 
     static MessageHandler obtain(String threadName, android.os.Handler.Callback callback, LifeCycleCallback lifeCycleCallback) {
-        MessageThreadPool pool = MessageThreadPool.get();
+        MessageThreadPool pool = MessageThreadPool.get(threadName);
         return obtain(pool, threadName, callback, lifeCycleCallback);
     }
 

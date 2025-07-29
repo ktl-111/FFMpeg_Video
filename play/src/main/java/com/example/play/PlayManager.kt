@@ -87,20 +87,20 @@ class PlayManager : IPaly {
 
     override fun stop() {
         if (this::mProxy.isInitialized) {
-            MediaScope.launch(Dispatchers.IO) {
-                callStop = true
-                val seekResult = seekDoneFlow.value
-                LogHelper.i(TAG, "stop,curr seekDoneFlow:$seekResult")
-                if (!seekResult) {
+            callStop = true
+            val seekResult = seekDoneFlow.value
+            LogHelper.i(TAG, "stop,curr seekDoneFlow:$seekResult")
+            if (!seekResult) {
+                MediaScope.launch(Dispatchers.IO) {
                     seekDoneFlow.onEach { result ->
                         LogHelper.i(TAG, "stop seekDoneFlow result:$result")
                         if (result) {
                             mProxy.stop()
                         }
                     }.collect()
-                } else {
-                    mProxy.stop()
                 }
+            } else {
+                mProxy.stop()
             }
         }
     }
@@ -160,7 +160,6 @@ class PlayManager : IPaly {
         when (step) {
             Step.PauseStep -> pause()
             Step.PlayStep -> start()
-            Step.UnknownStep -> {}
         }
     }
 

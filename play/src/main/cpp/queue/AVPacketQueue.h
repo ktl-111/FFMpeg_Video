@@ -25,6 +25,7 @@ public:
     void clear();
 
     bool isFull();
+    bool isFullWait();
 
     void checkEmptyWait();
 

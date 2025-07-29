@@ -44,7 +44,7 @@ public abstract class GLRenderTarget {
         return rendering;
     }
 
-    void clearColor() {
+    public void clearColor() {
         if (isRendering()) {//已经在渲染中了就不需要去start了
             onClearColor();
         } else {

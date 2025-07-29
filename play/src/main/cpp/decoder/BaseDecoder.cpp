@@ -36,7 +36,7 @@ void BaseDecoder::setErrorMsgListener(std::function<void(int, std::string &)> li
     mErrorMsgListener = std::move(listener);
 }
 
-void BaseDecoder::setOnFrameArrived(std::function<void(AVFrame *)> listener) {
+void BaseDecoder::setOnFrameArrived(std::function<bool(AVFrame *)> listener) {
     mOnFrameArrivedListener = std::move(listener);
 }
 

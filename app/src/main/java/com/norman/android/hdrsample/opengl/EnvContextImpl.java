@@ -17,7 +17,6 @@ class EnvContextImpl implements GLEnvContext {
     private String TAG = "EnvContextImpl";
 
     public EnvContextImpl(GLEnvDisplay display, GLEnvConfig config, AttrList contextAttrib, EGLContext context) {
-        LogUtils.i(TAG, "EnvContextImpl init");
         envDisplay = display;
         envConfig = config;
         eglContext = EGL14.eglCreateContext(
@@ -77,8 +76,6 @@ class EnvContextImpl implements GLEnvContext {
             GLEnvException.checkError();
         }
     }
-
-
 
 
     @Override

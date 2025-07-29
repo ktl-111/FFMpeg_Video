@@ -14,9 +14,6 @@ package com.example.play
  ** liubin     2024.06.20   1.0
  ***********************************************************/
 sealed class Step {
-    object UnknownStep : Step() {
-        override fun toString() = "UnknownStep"
-    }
 
     object PlayStep : Step() {
         override fun toString() = "PlayStep"

@@ -19,6 +19,10 @@ public class GLTextureY2YRenderer extends GLTextureRenderer {
     private @ColorRange int colorRange = ColorRange.LIMITED;
 
 
+    public int getBitDepth() {
+        return bitDepth;
+    }
+
     private int bitDepth = 8;
 
 
@@ -58,7 +62,6 @@ public class GLTextureY2YRenderer extends GLTextureRenderer {
      */
     public static boolean isSupportY2YEXT() {
         String extensions = GLES20.glGetString(GLES20.GL_EXTENSIONS);
-        LogUtils.i(TAG, "isSupportY2YEXT " + extensions);
         return extensions.contains(EXTENSION_YUV_TARGET);
     }
 

@@ -34,9 +34,18 @@ public class GLRenderTextureTarget extends GLRenderTarget {
     }
 
     int frameBufferId;
+
+    public int getTextureId() {
+        return textureId;
+    }
+
     int textureId;
 
     int bitDepth = 8;
+
+    public int getColorSpace() {
+        return colorSpace;
+    }
 
     @ColorSpace
     int colorSpace = ColorSpace.VIDEO_SDR;

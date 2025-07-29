@@ -1,0 +1,29 @@
+@startuml
+
+start
+if(格式是否支持) then (no)
+:异常;
+kill
+else (yes)
+
+if (是否支持硬解) then (no)
+  :软解;
+else (yes)
+  :硬解;
+  endif
+if(ffmpeg prepare) then (no)
+:异常;
+kill
+else (yes)
+:获取opengl config(8bit/10bit/16bit);
+if(y2y采集器) then (yes)
+:GL_EXT_YUV_target;
+else (no)
+:GL_OES_EGL_image_external;
+endif
+:播放;
+kill
+
+
+
+@enduml

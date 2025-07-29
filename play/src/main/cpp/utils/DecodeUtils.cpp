@@ -19,7 +19,7 @@ extern "C" {
 #include "libavutil/display.h"
 #include "libavutil/opt.h"
 }
-
+JavaVM *mJvm = nullptr;
 AVFormatContext *inFormatContext = nullptr;
 AVCodecContext *encodeContext = nullptr;
 AVRational inTimeBase;
@@ -51,9 +51,12 @@ Java_com_example_play_utils_DecodeUtils_nativeCutting(JNIEnv *env, jobject thiz,
                                                       jlong endtime,
                                                       jobject out_config,
                                                       jobject cb) {
+    if (mJvm == nullptr) {
+        env->GetJavaVM(&mJvm);
+    }
     start_time = starttime / 1000.0;
     end_time = endtime / 1000.0;
-    callback = cb;
+    callback = env->NewGlobalRef(cb);
     progress = 0;
     writeFramsCount = 0;
     // callback
@@ -233,10 +236,8 @@ Java_com_example_play_utils_DecodeUtils_nativeCutting(JNIEnv *env, jobject thiz,
     } else {
         encodeContext->pix_fmt = decodecContext->pix_fmt;
     }
-    //    encodeContext->sample_aspect_ratio = decodecContext->sample_aspect_ratio;
     encodeContext->max_b_frames = 0;//不需要B帧
     encodeContext->gop_size = outStream->avg_frame_rate.num;//多少帧一个I帧
-
     encodeContext->qmax = 35;
     encodeContext->qmin = 10;
     encodeContext->bit_rate = 300 * 1000;
@@ -294,71 +295,81 @@ extern "C"
 JNIEXPORT jint JNICALL
 Java_com_example_play_utils_DecodeUtils_nativeWriteData(JNIEnv *env, jobject thiz, jobject buffer,
                                                         jlong time) {
+
+    bool needAttach = mJvm->GetEnv((void **) &env,
+                                   JNI_VERSION_1_4) == JNI_EDETACHED;
+    if (needAttach) {
+        mJvm->AttachCurrentThread(&env, nullptr);
+        LOGI("[video] OnFrameArrived AttachCurrentThread")
+    }
     jint result = 0;
     while (1) {
-        // 初始化filter图的帧
-        AVPixelFormat srcFormat = AV_PIX_FMT_RGBA;
+        if (time < start_time * 1000) {
+            LOGI("cutting time < start_time %ld %f ", time, start_time)
+            break;
+        }
         uint8_t *pixels = (uint8_t *) env->GetDirectBufferAddress(buffer);
 
 
-        AVRational outTimeBase = {1, (int) videoDecoder->getTargetFps() * TimeBaseDiff};
         AVFrame *frame = av_frame_alloc();
         frame->width = outStream->codecpar->width;
         frame->height = outStream->codecpar->height;
-        frame->pts = time / av_q2d(outTimeBase) / 1000.0;
+        frame->pts = time / av_q2d(inTimeBase) / 1000.0;
         frame->pkt_dts = frame->pts;
         frame->format = AV_PIX_FMT_YUV420P;
-        frame->time_base = outTimeBase;
+        frame->time_base = inTimeBase;
         frame->duration = TimeBaseDiff;
         result = av_frame_get_buffer(frame, 32);
-        LOGI("cutting write data start result:%d size:%d*%d", result, frame->width, frame->height)
+        LOGI("cutting start write data time:%ld pts:%ld(%f) size:%d*%d", time, frame->pts,
+             frame->pts * av_q2d(inTimeBase), frame->width, frame->height)
         result = libyuv::ABGRToI420(pixels, frame->width * 4,
                                     frame->data[0], frame->linesize[0],
                                     frame->data[1], frame->linesize[1],
                                     frame->data[2], frame->linesize[2],
                                     frame->width, frame->height);
-//        result = sws_scale(swsGetContext,
-//                           reinterpret_cast<const uint8_t *const *>(srcSlice),
-//                           srcStride,
-//                           0,
-//                           videoDecoder->getHeight(),
-//                           frame->data,
-//                           frame->linesize);
-
-
         int sendResult = -1;
         int receiveResult = -1;
-        LOGI("cutting frame pts:%ld(%f) dts:%ld(%f) duration:%ld(%f) flags:%d result:%d(%s) %d-%d",
-             frame->pts,
-             frame->pts * av_q2d(outTimeBase),
-             frame->pkt_dts, frame->pkt_dts * av_q2d(outTimeBase),
-             frame->duration, frame->duration * av_q2d(outTimeBase),
-             frame->flags, result, av_err2str(result), inTimeBase.num, inTimeBase.den)
+        AVFrame *filtered_frame = av_frame_alloc();
+        // 将帧发送到filter图中
+        int frameFlags = av_buffersrc_add_frame_flags(buffersrcContext, frame,
+                                                      AV_BUFFERSRC_FLAG_KEEP_REF);
+        int buffersinkGetFrame = av_buffersink_get_frame(buffersinkContext, filtered_frame);
+        if (frameFlags <
+                0 ||
+                buffersinkGetFrame < 0) {
+            LOGI("cutting filter frame %d %d", frameFlags, buffersinkGetFrame);
+            if (buffersinkGetFrame == AVERROR(EAGAIN)) {
+                av_frame_free(&frame);
+                av_frame_free(&filtered_frame);
+                break;
+            }
+            env->CallVoidMethod(callback, onFail, ERRORCODE_FILTER_WRITE_ERROR);
+            break;
+        }
+        LOGI("cutting filterframe pts:%ld %ld(%f)  format:%s",
+             filtered_frame->pts,
+             filtered_frame->pts * TimeBaseDiff,
+             filtered_frame->pts * TimeBaseDiff * av_q2d(outTimeBase),
+             av_get_pix_fmt_name((AVPixelFormat) filtered_frame->format))
 
-
-        if (frame->pts * av_q2d(outTimeBase) > end_time) {
+        if (filtered_frame->pts * TimeBaseDiff * av_q2d(outTimeBase) >= end_time) {
             LOGI("cutting pts > endpts")
             av_frame_free(&frame);
+            av_frame_free(&filtered_frame);
             result = 10000;
             break;
         }
         AVFrame *dstFrame = av_frame_alloc();
-        videoDecoder->convertFrame(frame, dstFrame);
-        LOGI("cutting start encode pts:%ld(%f) %d %p", dstFrame->pts,
-             dstFrame->pts * av_q2d(outTimeBase), dstFrame->linesize[0], &dstFrame->data)
+        videoDecoder->convertFrame(filtered_frame, dstFrame);
 
         dstFrame->pict_type = AV_PICTURE_TYPE_NONE;
         do {
             sendResult = -1;
             receiveResult = -1;
-            LOGI("cutting start avcodec_send_frame")
             sendResult = avcodec_send_frame(encodeContext, dstFrame);
-            LOGI("cutting end avcodec_send_frame %d", sendResult)
             if (sendResult == 0) {
                 AVPacket *receivePacket = av_packet_alloc();
-                LOGI("cutting start avcodec_receive_packet")
                 receiveResult = avcodec_receive_packet(encodeContext, receivePacket);
-                LOGI("cutting end avcodec_receive_packet %d", sendResult)
                 if (receiveResult == 0) {
                     receivePacket->stream_index = outStream->index;
                     receivePacket->pts = writeFramsCount;
@@ -377,13 +388,13 @@ Java_com_example_play_utils_DecodeUtils_nativeWriteData(JNIEnv *env, jobject thi
                                             receivePacket);
                     if (result == 0) {
                         writeFramsCount += TimeBaseDiff;
-                        LOGI("cutting progress:%f %d %f",
+                        LOGI("cutting progress:%f %d %f needAttach:%d",
                              writeFramsCount / TimeBaseDiff / frameCount,
                              writeFramsCount / TimeBaseDiff, frameCount)
                         progress = std::min(
                                 writeFramsCount / TimeBaseDiff / frameCount * 100 + 1,
                                 99.0);
-//                        env->CallVoidMethod(callback, onProgress, progress);
+                        env->CallVoidMethod(callback, onProgress, progress);
                     } else {
                         LOGI("cutting av_interleaved_write_frame fail result %d %s", result,
                              av_err2str(result))
@@ -407,7 +418,12 @@ extern "C"
 JNIEXPORT void JNICALL
 Java_com_example_play_utils_DecodeUtils_nativeEndDecode(JNIEnv *env, jobject thiz) {
 
-
+    bool needAttach = mJvm->GetEnv((void **) &env,
+                                   JNI_VERSION_1_4) == JNI_EDETACHED;
+    if (needAttach) {
+        mJvm->AttachCurrentThread(&env, nullptr);
+        LOGI("[video] OnFrameArrived AttachCurrentThread")
+    }
     int sendResult = -1;
     int receiveResult = -1;
     int result = 0;
@@ -442,7 +458,7 @@ Java_com_example_play_utils_DecodeUtils_nativeEndDecode(JNIEnv *env, jobject thi
                     progress = std::min(
                             writeFramsCount / TimeBaseDiff / frameCount * 100 - 1,
                             99.0);
-//                    env->CallVoidMethod(callback, onProgress, progress);
+                    env->CallVoidMethod(callback, onProgress, progress);
                 } else {
                     LOGI("cutting av_interleaved_write_frame fail flush result %d %s", result,
                          av_err2str(result))
@@ -471,6 +487,6 @@ Java_com_example_play_utils_DecodeUtils_nativeEndDecode(JNIEnv *env, jobject thi
     videoDecoder = nullptr;
     LOGI("cutting done!!!")
     progress = 100;
-//    env->CallVoidMethod(callback, onProgress, progress);
-//    env->CallVoidMethod(callback, onDone);
+    env->CallVoidMethod(callback, onProgress, progress);
+    env->CallVoidMethod(callback, onDone);
 }

@@ -27,6 +27,15 @@ import java.nio.ByteBuffer;
 
 
 public class GLRenderPboTarget extends GLRenderTarget {
+    public interface BitmapCallback {
+        void result(ByteBuffer bitmap);
+    }
+
+    private BitmapCallback bufferCallback;
+
+    public void setBufferCallback(BitmapCallback bufferCallback) {
+        this.bufferCallback = bufferCallback;
+    }
 
     private String TAG = "PboTarget";
 
@@ -68,9 +77,11 @@ public class GLRenderPboTarget extends GLRenderTarget {
         ByteBuffer buffer = (ByteBuffer) GLES30.glMapBufferRange(
                 GL_PIXEL_PACK_BUFFER, 0, width * height * 4,
                 GL_MAP_READ_BIT);
+        LogUtils.i(TAG, "onEnd " + width + "*" + height);
         if (buffer != null) {
 //            encodeBuffer(buffer);
             saveBufferToLocal(buffer);
+            LogUtils.i(TAG, "onEnd done" + width + "*" + height);
         }
 
         currentPBOIndex = nextPBOIndex;
@@ -90,16 +101,20 @@ public class GLRenderPboTarget extends GLRenderTarget {
     }
 
     private void saveBufferToLocal(ByteBuffer buffer) {
-        Bitmap bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
-        buffer.rewind();
-        bitmap.copyPixelsFromBuffer(buffer);
-        saveBitmap(bitmap);        // 保存到本地
-        bitmap.recycle();
+        if (bufferCallback != null) {
+            bufferCallback.result(buffer);
+        } else {
+            buffer.rewind();
+            Bitmap bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
+            bitmap.copyPixelsFromBuffer(buffer);
+            saveBitmap(bitmap);        // 保存到本地
+            bitmap.recycle();
+        }
     }
 
     // 保存到本地方法
     private void saveBitmap(Bitmap bitmap) {
-        String path = new File(AppUtil.getAppContext().getExternalCacheDir(), System.currentTimeMillis() + ".png").getAbsolutePath();
+        String path = new File(AppUtil.getAppContext().getExternalCacheDir(), time + ".png").getAbsolutePath();
         try (FileOutputStream out = new FileOutputStream(path)) {
             bitmap.compress(Bitmap.CompressFormat.JPEG, 100, out);
             LogUtils.i(TAG, "save bitmap to " + path + " success");

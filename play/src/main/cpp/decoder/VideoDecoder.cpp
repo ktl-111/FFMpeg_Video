@@ -39,10 +39,10 @@ void VideoDecoder::initConfig(JNIEnv *env, jobject out_config) {
     std::shared_ptr<OutConfig> outConfig;
     if (out_config) {
         jclass outConfigClass = env->GetObjectClass(out_config);
-        jfieldID outWidthId = env->GetFieldID(outConfigClass, "width", "I");
+        jfieldID outWidthId = env->GetFieldID(outConfigClass, "outWidth", "I");
         jint outWidth = env->GetIntField(out_config, outWidthId);
 
-        jfieldID outHeightId = env->GetFieldID(outConfigClass, "height", "I");
+        jfieldID outHeightId = env->GetFieldID(outConfigClass, "outHeight", "I");
         jint outHeight = env->GetIntField(out_config, outHeightId);
 
         jfieldID cropWidthId = env->GetFieldID(outConfigClass, "cropWidth", "I");
@@ -51,8 +51,8 @@ void VideoDecoder::initConfig(JNIEnv *env, jobject out_config) {
         jfieldID cropHeightId = env->GetFieldID(outConfigClass, "cropHeight", "I");
         jint cropHeight = env->GetIntField(out_config, cropHeightId);
 
-        jfieldID outFpsId = env->GetFieldID(outConfigClass, "fps", "D");
-        jdouble outFps = env->GetDoubleField(out_config, outFpsId);
+        jfieldID outFpsId = env->GetFieldID(outConfigClass, "fps", "I");
+        jint outFps = env->GetIntField(out_config, outFpsId);
 
         jfieldID outScaleId = env->GetFieldID(outConfigClass, "scale", "D");
         mScale = env->GetDoubleField(out_config, outScaleId);
@@ -194,6 +194,7 @@ bool VideoDecoder::prepare(JNIEnv *env) {
     }
     if (mVideoCodec == nullptr) {
         std::string msg = "not find decoder";
+        LOGE("prepare error:%s", msg.c_str())
         if (mErrorMsgListener) {
             mErrorMsgListener(-1000, msg);
         }
@@ -204,6 +205,7 @@ bool VideoDecoder::prepare(JNIEnv *env) {
     mCodecContext = avcodec_alloc_context3(mVideoCodec);
     if (!mCodecContext) {
         std::string msg = "codec context alloc failed";
+        LOGE("prepare error:%s", msg.c_str())
         if (mErrorMsgListener) {
             mErrorMsgListener(-2000, msg);
         }
@@ -237,6 +239,7 @@ bool VideoDecoder::prepare(JNIEnv *env) {
     int ret = avcodec_open2(mCodecContext, mVideoCodec, nullptr);
     if (ret != 0) {
         std::string msg = "codec open failed";
+        LOGE("prepare error:%s", msg.c_str())
         if (mErrorMsgListener) {
             mErrorMsgListener(-3000, msg);
         }
@@ -278,7 +281,7 @@ double VideoDecoder::getScale() {
 }
 
 void VideoDecoder::initFilter() {
-    if (!mOutConfig || mOutConfig->getFps() == 0.0) {
+    if (!mOutConfig || mOutConfig->getFps() == 0) {
         LOGI("not config,no init filter")
         return;
     }
@@ -435,9 +438,9 @@ int VideoDecoder::decode(AVPacket *avPacket, AVFrame *frame) {
     sendRes = avcodec_send_packet(mCodecContext, avPacket);
     mNeedResent = sendRes == AVERROR(EAGAIN) || isEof;
     bool isKeyFrame = avPacket->flags & AV_PKT_FLAG_KEY;
-    LOGI("[video] avcodec_send_packet...pts: %" PRId64 "(%f), dts: %" PRId64 ", isKeyFrame: %d, res: %d, isEof: %d",
+    LOGI("[video] avcodec_send_packet...pts: %" PRId64 "(%f), dts: %" PRId64 ", isKeyFrame: %d, res: %d(%s), isEof: %d",
          avPacket->pts, avPacket->pts * av_q2d(getStream()->time_base) * 1000, avPacket->dts,
-         isKeyFrame, sendRes, isEof)
+         isKeyFrame, sendRes, av_err2str(sendRes), isEof)
     // avcodec_receive_frame的-11，表示需要发新帧
     receiveRes = avcodec_receive_frame(mCodecContext, pAvFrame);
 
@@ -602,7 +605,11 @@ void VideoDecoder::resultCallback(AVFrame *srcFrame) {
          av_get_pix_fmt_name((AVPixelFormat) srcFrame->format), dstWidth, dstHeight)
     if (isHwDecoder(srcFrame)) {
         if (mOnFrameArrivedListener) {
-            mOnFrameArrivedListener(srcFrame);
+            if (!mOnFrameArrivedListener(srcFrame)) {
+                int result = av_mediacodec_release_buffer(
+                        (AVMediaCodecBuffer *) (srcFrame)->data[3], 0);
+                av_frame_free(&srcFrame);
+            }
         }
         return;
     }
@@ -631,6 +638,11 @@ void VideoDecoder::resultCallback(AVFrame *srcFrame) {
 
 
 void VideoDecoder::showFrameToWindow(AVFrame *pFrame) {
+    LOGI("showFrameToWindow pts:%ld(%lf) format:%s data:%p %d %d*%d", pFrame->pts,
+         pFrame->pts * av_q2d(pFrame->time_base),
+         av_get_pix_fmt_name((AVPixelFormat) pFrame->format), &pFrame->data[3],
+         pFrame->linesize[0],
+         pFrame->width, pFrame->height)
     if (isHwDecoder(pFrame)) {
         auto startTime = std::chrono::steady_clock::now();
         //直接渲染到surface
@@ -644,11 +656,6 @@ void VideoDecoder::showFrameToWindow(AVFrame *pFrame) {
         LOGE("showFrameToWindow nativeWindow is null")
         return;
     }
-    LOGI("showFrameToWindow pts:%ld(%lf) format:%s data:%p %d %d*%d", pFrame->pts,
-         pFrame->pts * av_q2d(pFrame->time_base),
-         av_get_pix_fmt_name((AVPixelFormat) pFrame->format), &pFrame->data[3],
-         pFrame->linesize[0],
-         pFrame->width, pFrame->height)
     auto startTime = std::chrono::steady_clock::now();
     //将yuv数据转成rgb
 
@@ -775,7 +782,7 @@ int VideoDecoder::getRotation() const {
     return mRotate;
 }
 
-double VideoDecoder::getConfigOutFps() const {
+int VideoDecoder::getConfigOutFps() const {
     if (mOutConfig) {
         return mOutConfig->getFps();
     }
@@ -783,7 +790,7 @@ double VideoDecoder::getConfigOutFps() const {
 }
 
 double VideoDecoder::getTargetFps() const {
-    double fps = getConfigOutFps();
+    double fps = getConfigOutFps()*1.0;
     if (fps == 0) {
         fps = getFps();
     }
@@ -872,11 +879,11 @@ AVSEEK_FLAG_FRAME:是基于帧数量快进
 
      AVSEEK_FLAG_ANY+AVSEEK_FLAG_FRAME只能ip
      */
+    flush();
     int64_t seekPos = (int64_t) (pos / av_q2d(getTimeBase())) / 1000;
     int ret = avformat_seek_file(mFtx, getStreamIndex(),
                                  INT64_MIN, seekPos, INT64_MAX,
                                  AVSEEK_FLAG_BACKWARD | AVSEEK_FLAG_FRAME);
-    flush();
     LOGI("[video] seek to: %ld, seekPos: %" PRId64 ", ret: %d(%s)", pos, seekPos, ret,
          av_err2str(ret))
     // seek后需要恢复起始时间

@@ -5,7 +5,6 @@ import android.media.MediaFormat;
 import android.os.Build;
 import android.view.Surface;
 
-import com.norman.android.hdrsample.opengl.GLEnvColorSpace;
 import com.norman.android.hdrsample.opengl.GLEnvConfig;
 import com.norman.android.hdrsample.opengl.GLEnvConfigSimpleChooser;
 import com.norman.android.hdrsample.opengl.GLEnvContext;
@@ -27,8 +26,6 @@ import java.nio.ShortBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 /**
  * GLVideoOutput的具体实现，先通过外部纹理(OES或Y2Y)或YUV420 Buffer转成2D纹理，然后再用frontTarget和backTarget对纹理
@@ -51,7 +48,7 @@ class GLVideoOutputImpl extends GLVideoOutput {
      */
     private GLTextureSurface videoSurface;
 
-    private final OutputSurface outputSurface = new OutputSurface();//对最终渲染的Surface对应的GLWindowSurface的封装
+    private OutputSurface outputSurface;//对最终渲染的Surface对应的GLWindowSurface的封装
 
     /**
      * OES纹理渲染
@@ -153,6 +150,7 @@ class GLVideoOutputImpl extends GLVideoOutput {
     protected void onOutputSurfaceChange(Surface surface) {
         LogUtils.i(TAG, "onOutputSurfaceChange " + surface);
         outputSurface.setSurface(surface);
+
     }
 
     @Override
@@ -198,6 +196,7 @@ class GLVideoOutputImpl extends GLVideoOutput {
         envContextManager = GLEnvContextManager.create(glEnvDisplay, envConfig);
         envContextManager.attach();
         envContext = envContextManager.getEnvContext();
+        outputSurface = new OutputSurface(envContext);
         if (textureSource == TextureSource.AUTO) {
             // 支持10位YUV420Buffer就用Buffer模式，不然就用外部纹理模式
             bufferMode = profile10Bit &&
@@ -462,103 +461,5 @@ class GLVideoOutputImpl extends GLVideoOutput {
         windowSurface.setPresentationTime(TimeUtil.microToNano(presentationTimeUs));
         windowSurface.swapBuffers();
         return true;
-    }
-
-
-    class OutputSurface {
-        private GLEnvWindowSurface windowSurface;
-
-        private Surface surface;
-
-        private int lastColorSpace;
-
-
-        public void setSurface(Surface surface) {
-            synchronized (GLVideoOutputImpl.this) {
-                this.surface = surface;
-                if (surface == null || !surface.isValid()) {
-                    release();
-                }
-            }
-
-        }
-
-
-        public void release() {
-            synchronized (GLVideoOutputImpl.this) {
-                if (windowSurface == null) {
-                    return;
-                }
-                windowSurface.release();
-                windowSurface = null;
-            }
-        }
-
-        public boolean isValid() {
-            synchronized (GLVideoOutputImpl.this) {
-                return surface != null && surface.isValid();
-            }
-        }
-
-        public GLEnvWindowSurface getWindowSurface(@ColorSpace int requestColorSpace) {
-            synchronized (GLVideoOutputImpl.this) {
-                if (surface == null) {
-                    release();
-                    return null;
-                }
-                if (windowSurface == null ||
-                        surface != windowSurface.getSurface() ||
-                        this.lastColorSpace != requestColorSpace) {//surface不同或者色域不同就要重新创建WindowSurface
-                    release();
-                    GLEnvDisplay envDisplay = envContext.getEnvDisplay();
-                    GLEnvWindowSurface.Builder builder = new GLEnvWindowSurface.Builder(envContext, surface);
-                    if (isSupportHDR(surface)) {//判断Surface是否支持HDR
-                        if (requestColorSpace == ColorSpace.VIDEO_BT2020_PQ) {
-                            if (envDisplay.isSupportBT2020PQ()) {
-                                builder.setColorSpace(GLEnvColorSpace.BT2020_PQ);
-                            }
-                        } else if (requestColorSpace == ColorSpace.VIDEO_BT2020_HLG) {
-                            if (envDisplay.isSupportBT2020HLG()) {
-                                builder.setColorSpace(GLEnvColorSpace.BT2020_HLG);
-                            }
-                        } else if (requestColorSpace == ColorSpace.VIDEO_BT2020_LINEAR) {
-                            if (envDisplay.isSupportBT2020Linear()) {
-                                builder.setColorSpace(GLEnvColorSpace.BT2020_LINEAR);
-                            }
-                        }
-                    }
-                    windowSurface = builder.build();
-                    this.lastColorSpace = requestColorSpace;
-                }
-                if (!windowSurface.isValid()) {
-                    release();
-                }
-                return windowSurface;
-            }
-        }
-
-        /**
-         * 如果是SurfaceView的Surface(通过判断toString是否包含字符串null)或者版本13以上Surface就支持HDR
-         *
-         * @param surface
-         * @return
-         */
-        private boolean isSupportHDR(Surface surface) {
-            if (surface == null) {
-                return false;
-            }
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                return true;
-            }
-            String str = surface.toString();
-            String pattern = "Surface\\(name=([^)]+)\\)";
-            Pattern regexPattern = Pattern.compile(pattern);
-            Matcher matcher = regexPattern.matcher(str);
-            if (!matcher.find()) {
-                return false;
-            }
-            String extractedValue = matcher.group(1);
-            return extractedValue.equals("null");
-        }
     }
 }

@@ -1,7 +1,7 @@
 #include "OutConfig.h"
 #include "../globals.h"
 
-OutConfig::OutConfig(int width, int height, int cropWidth, int cropHeight, double fps) {
+OutConfig::OutConfig(int width, int height, int cropWidth, int cropHeight, int fps) {
     mWidth = width;
     mHeight = height;
     mCropWidth = cropWidth;
@@ -31,7 +31,7 @@ int OutConfig::getCropHeight() {
     return mCropHeight;
 }
 
-double OutConfig::getFps() {
+int OutConfig::getFps() {
     return mFps;
 }
 

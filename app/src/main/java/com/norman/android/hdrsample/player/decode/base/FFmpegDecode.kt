@@ -181,7 +181,7 @@ class FFmpegDecode(private val mimeType: String, private val fileSource: FileSou
         return null
     }
 
-    override fun onPalyProgress(frame: ByteBuffer?, time: Double) {
+    override fun onPlayProgress(frame: ByteBuffer?, time: Double) {
         runBlocking {
             suspendCancellableCoroutine<Boolean> { continuation ->
                 createLooper?.also {
@@ -200,7 +200,7 @@ class FFmpegDecode(private val mimeType: String, private val fileSource: FileSou
         }
     }
 
-    override fun onPalyComplete() {
+    override fun onPlayComplete() {
         LogUtils.i(TAG, "onPalyComplete: ")
     }
 

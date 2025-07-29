@@ -44,7 +44,7 @@ public:
 
     double getTargetFps() const;
 
-    double getConfigOutFps() const;
+    int getConfigOutFps() const;
 
     int getWidth() const;
 

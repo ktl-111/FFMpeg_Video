@@ -230,7 +230,7 @@ public class HDRPlayActivity extends AppCompatActivity implements View.OnClickLi
         String destPath = outFile.getAbsolutePath();
         long startTime = 5_000;
         long allTime = 5_000;
-        OutConfig config = new OutConfig(0, 0, 0, 0, 0);
+        OutConfig config = new OutConfig(0, 0, 0, 0, 0, 1.0);
         config.setScale(0.3);
         DecodeUtils.INSTANCE.startDecode(filepath, destPath, startTime, startTime + allTime, config,
                 new FFMpegUtils.VideoCuttingInterface() {

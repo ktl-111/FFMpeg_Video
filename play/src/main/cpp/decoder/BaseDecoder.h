@@ -52,7 +52,7 @@ public:
 
     void setErrorMsgListener(std::function<void(int, std::string &)> listener);
 
-    void setOnFrameArrived(std::function<void(AVFrame *)> listener);
+    void setOnFrameArrived(std::function<bool(AVFrame *)> listener);
 
 protected:
     AVFormatContext *mFtx = nullptr;
@@ -69,7 +69,7 @@ protected:
 
     std::function<void(int, std::string &)> mErrorMsgListener = nullptr;
 
-    std::function<void(AVFrame *frame)> mOnFrameArrivedListener = nullptr;
+    std::function<bool(AVFrame *frame)> mOnFrameArrivedListener = nullptr;
 
     bool mNeedResent = false;
 

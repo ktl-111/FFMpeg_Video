@@ -13,7 +13,7 @@ import android.opengl.GLES20;
 import android.opengl.GLES30;
 
 
-class GLRenderScreenTarget extends GLRenderTarget {
+public class GLRenderScreenTarget extends GLRenderTarget {
 
     @Override
     void onCreate() {

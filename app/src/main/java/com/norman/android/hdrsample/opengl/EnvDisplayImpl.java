@@ -6,7 +6,9 @@ import android.opengl.EGLDisplay;
 import android.text.TextUtils;
 
 import com.norman.android.hdrsample.util.LogUtil;
+import com.norman.android.hdrsample.util.LogUtils;
 
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -36,7 +38,7 @@ class EnvDisplayImpl implements GLEnvDisplay {
     private static final String EGL_KHR_surfaceless_context = "EGL_KHR_surfaceless_context";
 
 
-    private final Map<String,Boolean> extensionsContainMap = new HashMap<>();
+    private final Map<String, Boolean> extensionsContainMap = new HashMap<>();
 
     private final EGLDisplay eglDisplay;
     private final int displayId;
@@ -97,18 +99,19 @@ class EnvDisplayImpl implements GLEnvDisplay {
 
     @Override
     public GLEnvConfig chooseConfig(GLEnvConfigChooser configChooser) {
-        GLEnvConfig envConfig  = configChooser.chooseConfig(envConfigs);
-        if (envConfig == null){
+        GLEnvConfig envConfig = configChooser.chooseConfig(envConfigs);
+        if (envConfig == null) {
+            new Throwable("chooseConfig is null").printStackTrace();
             LogUtil.w("chooseConfig is null");
-        }else {
-            LogUtil.d("chooseConfig is "+envConfig);
+        } else {
+            LogUtil.d("chooseConfig is " + envConfig);
         }
         return envConfig;
     }
 
     @Override
     public boolean supportConfig(GLEnvConfigChooser configChooser) {
-        GLEnvConfig envConfig =  configChooser.chooseConfig(envConfigs);
+        GLEnvConfig envConfig = configChooser.chooseConfig(envConfigs);
         return envConfig != null;
     }
 
@@ -136,6 +139,7 @@ class EnvDisplayImpl implements GLEnvDisplay {
 
     /**
      * 是否支持BT2020 PQ
+     *
      * @return
      */
     @Override
@@ -145,6 +149,7 @@ class EnvDisplayImpl implements GLEnvDisplay {
 
     /**
      * 是否支持BT2020 HLG
+     *
      * @return
      */
     @Override
@@ -154,6 +159,7 @@ class EnvDisplayImpl implements GLEnvDisplay {
 
     /**
      * 是否支持BT2020 Linear
+     *
      * @return
      */
     @Override
@@ -163,6 +169,7 @@ class EnvDisplayImpl implements GLEnvDisplay {
 
     /**
      * 是否不需要surface也可以makeCurrent
+     *
      * @return
      */
     @Override
@@ -172,31 +179,32 @@ class EnvDisplayImpl implements GLEnvDisplay {
 
     /**
      * 扩展信息
+     *
      * @return
      */
 
     @Override
     public String getEGLExtensions() {
-        if (eglExtensions != null){
+        if (eglExtensions != null) {
             return eglExtensions;
         }
-        if (isRelease()){
+        if (isRelease()) {
             eglExtensions = "";
-        }else {
+        } else {
             eglExtensions = EGL14.eglQueryString(eglDisplay, EGL10.EGL_EXTENSIONS);
             eglExtensions = TextUtils.isEmpty(eglExtensions) ? "" : eglExtensions;
         }
         return eglExtensions;
     }
 
-    private boolean containEGLExtension(String key){
+    private boolean containEGLExtension(String key) {
         Boolean value = extensionsContainMap.get(key);
-        if (value != null){
+        if (value != null) {
             return value;
         }
-        value =   getEGLExtensions().contains(key);
-        extensionsContainMap.put(key,value);
-        return  value;
+        value = getEGLExtensions().contains(key);
+        extensionsContainMap.put(key, value);
+        return value;
     }
 
     @Override

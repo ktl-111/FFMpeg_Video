@@ -122,12 +122,12 @@ internal class FFMpegProxy : IPaly {
 
     private fun onNativePalyProgress(frame: ByteBuffer?, time: Double) {
         LogHelper.d(TAG, "onNativePalyProgress: ${time}")
-        palyListener?.onPalyProgress(frame, time)
+        palyListener?.onPlayProgress(frame, time)
     }
 
     private fun onNativePalyComplete() {
         LogHelper.i(TAG, "onNativePalyComplete: ")
-        palyListener?.onPalyComplete()
+        palyListener?.onPlayComplete()
     }
 
     private fun onPlayError(code: Int) {
@@ -135,7 +135,7 @@ internal class FFMpegProxy : IPaly {
         palyListener?.onPlayError(code)
     }
 
-    private fun onNativeTrackInterceptor(duration: Double): DoubleArray? {
+    private fun onNativeTrackInterceptor(duration: Double): LongArray? {
         return trackInterceptor?.onStart(duration)
     }
 }

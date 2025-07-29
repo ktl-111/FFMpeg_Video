@@ -16,6 +16,7 @@ import com.norman.android.hdrsample.opengl.GLEnvDisplay;
 
 import java.nio.ByteBuffer;
 import java.nio.FloatBuffer;
+import java.util.Arrays;
 
 
 /**
@@ -236,9 +237,14 @@ public class GLESUtil {
      * @return
      */
     public static int createExternalTextureId() {
-        int[] texture = new int[1];
-        GLES20.glGenTextures(1, texture, 0);
-        GLES20.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, texture[0]);
+        return createExternalTextureId(3, 0);
+    }
+
+    public static int createExternalTextureId(int allTextTureSize, int index) {
+        int[] texture = new int[allTextTureSize];
+        GLES20.glGenTextures(texture.length, texture, 0);
+        LogUtils.i(TAG, "createExternalTextureId " + Arrays.toString(texture));
+        GLES20.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, texture[index]);
         GLES20.glTexParameterf(GLES11Ext.GL_TEXTURE_EXTERNAL_OES,
                 GLES20.GL_TEXTURE_MIN_FILTER, GLES20.GL_LINEAR);
         GLES20.glTexParameterf(GLES11Ext.GL_TEXTURE_EXTERNAL_OES,
@@ -248,7 +254,7 @@ public class GLESUtil {
         GLES20.glTexParameteri(GLES11Ext.GL_TEXTURE_EXTERNAL_OES,
                 GLES20.GL_TEXTURE_WRAP_T, GLES20.GL_CLAMP_TO_EDGE);
         GLES20.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, 0);
-        return texture[0];
+        return texture[index];
     }
 
     /**

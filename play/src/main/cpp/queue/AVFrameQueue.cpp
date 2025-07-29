@@ -13,9 +13,9 @@ AVFrameQueue::AVFrameQueue(int64_t maxSize, std::string tag) {
     pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_RECURSIVE); // 关键设置
     pthread_mutex_init(&mMutex, &attr);
     pthread_cond_init(&mCond, nullptr);
-    if (maxSize < 3) {
-        maxSize = 3;
-    }
+//    if (maxSize < 3) {
+//        maxSize = 3;
+//    }
     mMaxSize = maxSize;
     if (mTag) {
         free(mTag);
@@ -80,31 +80,36 @@ AVFrame *AVFrameQueue::getFrameUnlock(bool pop, bool findBack) {
         return nullptr;
     } else {
         if (currIndex >= size) {
+            LOGI("[AVFrameQueue(%s)] getFrame currIndex(%d) > size(%lu)", mTag, currIndex, size)
             currIndex = size - 1;
-            LOGI("[AVFrameQueue(%s)] getFrame currIndex > size", mTag)
-            return nullptr;
         }
     }
+    int getIndex = currIndex;
     AVFrame *frame = mQueue.at(currIndex);
-    if (!pop && (isFull && currIndex > mMaxSize / 2)) {
+    if (!pop && (isFull && (currIndex > mMaxSize / 2 || mMaxSize == 1))) {
         pop = true;
     }
     if (pop) {
         if (!tempPop) {
-            AVFrame *pFrame = mQueue.front();
-            if (pFrame->format == AV_PIX_FMT_MEDIACODEC) {
-                LOGI("[AVFrameQueue(%s)], getFrame queue AV_PIX_FMT_MEDIACODEC", mTag)
-                av_mediacodec_release_buffer((AVMediaCodecBuffer *) (pFrame)->data[3], 0);
+            if (mMaxSize != 1) {
+                AVFrame *pFrame = mQueue.front();
+                if (pFrame->format == AV_PIX_FMT_MEDIACODEC) {
+                    LOGI("[AVFrameQueue(%s)], getFrame queue AV_PIX_FMT_MEDIACODEC", mTag)
+                    av_mediacodec_release_buffer((AVMediaCodecBuffer *) (pFrame)->data[3], 0);
+                }
+                av_frame_free(&pFrame);
             }
-            av_frame_free(&pFrame);
         }
         mQueue.pop_front();
         currIndex--;
     }
-
-    LOGI("[AVFrameQueue(%s)] getFrame end pts:%ld index:%d size:%ld isFull:%d pop:%d", mTag,
+    if (currIndex < 0) {
+        currIndex = -1;
+    }
+    LOGI("[AVFrameQueue(%s)] getFrame end pts:%ld index:%d getIndex:%d size:%ld isFull:%d pop:%d",
+         mTag,
          frame->pts,
-         currIndex, mQueue.size(), isFull, pop)
+         currIndex, getIndex, mQueue.size(), isFull, pop)
     return frame;
 }
 
@@ -157,6 +162,7 @@ bool AVFrameQueue::isFullWait() {
     queueSize = (int) mQueue.size();
     bool wait = queueSize >= mMaxSize;
     if (wait) {
+        LOGI("[AVFrameQueue(%s)],isFullWait", mTag)
         pthread_cond_wait(&mCond, &mMutex);
     }
     pthread_mutex_unlock(&mMutex);
