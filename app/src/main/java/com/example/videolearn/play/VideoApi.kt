@@ -2,22 +2,20 @@ package com.example.videolearn.play
 
 import com.example.play.Step
 
-interface BaseVideoApi {
+interface VideoControlApi {
+    fun start()
     fun stop()
-    fun resume()
-    fun pause()
-    fun release()
 }
 
-interface PlayVideoApi : BaseVideoApi {
-    fun start()
+interface PlaybackControlApi : VideoControlApi {
+    fun resume()
+    fun pause()
+}
+
+interface VideoPlaybackApi : PlaybackControlApi {
     fun seek(time: Long, nextStep: Step = Step.PauseStep)
 }
 
-interface TrackApi : BaseVideoApi {
-    fun trackStart()
-}
+interface TrackControlApi : PlaybackControlApi
 
-interface CuttingApi {
-    fun cuttingStart()
-}
+interface VideoEditingApi : VideoControlApi

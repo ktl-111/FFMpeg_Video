@@ -22,7 +22,7 @@ void AVPacketQueue::push(AVPacket *packet) {
     notify();
 }
 
-AVPacket *AVPacketQueue::pop() {
+AVPacket *AVPacketQueue::pop(bool pop) {
     pthread_mutex_lock(&mMutex);
     bool isEmpty = mQueue.empty() && mQueue.size() <= 0;
     if (isEmpty) {
@@ -31,9 +31,13 @@ AVPacket *AVPacketQueue::pop() {
         return nullptr;
     }
     AVPacket *packet = mQueue.front();
-    mQueue.pop();
+    if (pop) {
+        mQueue.pop();
+    }
     pthread_mutex_unlock(&mMutex);
-    notify();
+    if (pop) {
+        notify();
+    }
     return packet;
 }
 

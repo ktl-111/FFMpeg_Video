@@ -29,9 +29,9 @@ void FFMpegPlayer::init(JNIEnv *env, jobject thiz) {
                                                            "(D)[J");
     mPlayerJni.onVideoConfig = env->GetMethodID(jclazz, "onNativeVideoConfig",
                                                 "(IIDDILjava/lang/String;)V");
-    mPlayerJni.onPlayProgress = env->GetMethodID(jclazz, "onNativePalyProgress",
+    mPlayerJni.onPlayProgress = env->GetMethodID(jclazz, "onNativePlayProgress",
                                                  "(Ljava/nio/ByteBuffer;D)V");
-    mPlayerJni.onPlayCompleted = env->GetMethodID(jclazz, "onNativePalyComplete", "()V");
+    mPlayerJni.onPlayCompleted = env->GetMethodID(jclazz, "onNativePlayComplete", "()V");
     mPlayerJni.onPlayError = env->GetMethodID(jclazz, "onPlayError", "(I)V");
 }
 
@@ -433,16 +433,23 @@ void FFMpegPlayer::ReadVideoFrameLoop() {
         do {
             mVideoDecoder->seekLock();
             decodeResult = -1;
-            AVPacket *packet = mVideoPacketQueue->pop();
+            AVPacket *packet = mVideoPacketQueue->pop(false);
             //慢seek 黑屏/花屏,ABCD,seek到C,seek前在解码c/d,seek后flush到A,此时解码c/d成功,但是画面黑屏,软解花屏
-            std::shared_ptr<AVFrameQueue> tempFrameQueue = std::make_shared<AVFrameQueue>(10,
+            std::shared_ptr<AVFrameQueue> tempFrameQueue = std::make_shared<AVFrameQueue>(5,
                                                                                           "temp");
             bool tSeek = mIsSeek;
+            bool pop = true;
             if (packet != nullptr) {
                 LOGI("ReadVideoFrameLoop popto pts:%ld size:%ld", packet->pts,
                      mVideoFrameQueue->getSize())
 
                 do {
+                    if (tempFrameQueue->isFull()) {
+                        LOGI("tempFrameQueue is full")
+                        //temp已经满了，但是package还没发送完成，如果此时丢弃，会有花屏问题
+                        pop = false;
+                        break;
+                    }
                     AVFrame *pFrame = av_frame_alloc();
                     decodeResult = mVideoDecoder->decode(packet, pFrame);
                     if (mHasAbort) {
@@ -478,7 +485,11 @@ void FFMpegPlayer::ReadVideoFrameLoop() {
             } else {
                 LOGE("ReadVideoFrameLoop pop packet failed...")
             }
-            av_packet_free(&packet);
+            packet = nullptr;
+            if (pop) {
+                packet = mVideoPacketQueue->pop(true);
+                av_packet_free(&packet);
+            }
             mVideoDecoder->seekUnlock();
             if (tSeek != mIsSeek) {
                 LOGI("tSeek != mIsSeek")

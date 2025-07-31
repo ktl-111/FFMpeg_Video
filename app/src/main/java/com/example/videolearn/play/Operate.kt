@@ -11,6 +11,7 @@ sealed class Operate(val outConfig: OutConfig, val textureIndex: Int) {
     }
 
     class CuttingOperate(outConfig: OutConfig = OutConfig(), val destPath: String, val startTime: Long, val allTime: Long, val cuttingCallback: CuttingCallback) : Operate(outConfig, 1) {
+        internal var callFirstSeek = false
         override fun toString() = "CuttingOperate(${hashCode()})"
     }
 

@@ -6,7 +6,7 @@ import android.os.Handler
 import android.os.Looper
 import android.util.Log
 import android.view.Surface
-import com.example.play.IPalyListener
+import com.example.play.IPlayListener
 import com.example.play.PlayManager
 import com.norman.android.hdrsample.handler.MessageHandler
 import com.norman.android.hdrsample.handler.MessageHandler.LifeCycleCallback
@@ -22,7 +22,7 @@ import kotlin.coroutines.resume
 
 //new LocalFileSource("/storage/emulated/0/test/VID20241218191908_HDR.mp4")
 
-class FFmpegDecode(private val mimeType: String, private val fileSource: FileSource) : IPalyListener, DecodecApi {
+class FFmpegDecode(private val mimeType: String, private val fileSource: FileSource) : IPlayListener, DecodecApi {
     private val TAG = "FFmpegDecode"
     private val playManager = PlayManager().also {
         it.init(this)
@@ -187,10 +187,10 @@ class FFmpegDecode(private val mimeType: String, private val fileSource: FileSou
                 createLooper?.also {
                     Handler(it).post {
                         kotlin.runCatching {
-                            LogUtils.i(TAG, "onPalyProgress time $time")
+                            LogUtils.i(TAG, "onPlayProgress time $time")
                             callback?.onOutputBufferComplete(time.toLong())
                         }.onFailure {
-                            LogUtils.i(TAG, "onPalyProgress fail ${it.message}")
+                            LogUtils.i(TAG, "onPlayProgress fail ${it.message}")
                             it.printStackTrace()
                         }
                         continuation.resume(true)
@@ -201,7 +201,7 @@ class FFmpegDecode(private val mimeType: String, private val fileSource: FileSou
     }
 
     override fun onPlayComplete() {
-        LogUtils.i(TAG, "onPalyComplete: ")
+        LogUtils.i(TAG, "onPlayComplete: ")
     }
 
     override fun onPlayError(code: Int) {

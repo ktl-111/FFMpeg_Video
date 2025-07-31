@@ -18,7 +18,7 @@ public:
 
     void push(AVPacket *packet);
 
-    AVPacket *pop();
+    AVPacket *pop(bool pop);
 
     bool checkLastIsEofPack();
 

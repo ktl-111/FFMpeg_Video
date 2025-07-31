@@ -1,8 +1,8 @@
 package com.example.play.proxy
 
 import android.view.Surface
-import com.example.play.IPaly
-import com.example.play.IPalyListener
+import com.example.play.IPlay
+import com.example.play.IPlayListener
 import com.example.play.PlayerState
 import com.example.play.Step
 import com.example.play.TrackInterceptor
@@ -12,7 +12,7 @@ import com.example.play.utils.LogHelper
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
-internal class FFMpegProxy : IPaly {
+internal class FFMpegProxy : IPlay {
     init {
         System.loadLibrary("ffmpegplayer")
     }
@@ -20,10 +20,10 @@ internal class FFMpegProxy : IPaly {
     private var outConfig: OutConfig? = null
     private val TAG = "FFMpegProxy"
     private var nativeManager: Long = -1
-    private var palyListener: IPalyListener? = null
+    private var palyListener: IPlayListener? = null
     private var trackInterceptor: TrackInterceptor? = null
-    override fun init(iPalyListener: IPalyListener?) {
-        palyListener = iPalyListener
+    override fun init(iPlayListener: IPlayListener?) {
+        palyListener = iPlayListener
         nativeManager = nativeInit()
     }
 
@@ -120,13 +120,13 @@ internal class FFMpegProxy : IPaly {
         palyListener?.onVideoConfig(width, height, duration, fps, rotation)
     }
 
-    private fun onNativePalyProgress(frame: ByteBuffer?, time: Double) {
-        LogHelper.d(TAG, "onNativePalyProgress: ${time}")
+    private fun onNativePlayProgress(frame: ByteBuffer?, time: Double) {
+        LogHelper.d(TAG, "onNativePlayProgress: ${time}")
         palyListener?.onPlayProgress(frame, time)
     }
 
-    private fun onNativePalyComplete() {
-        LogHelper.i(TAG, "onNativePalyComplete: ")
+    private fun onNativePlayComplete() {
+        LogHelper.i(TAG, "onNativePlayComplete: ")
         palyListener?.onPlayComplete()
     }
 

@@ -4,8 +4,6 @@ import android.media.MediaExtractor
 import android.media.MediaFormat
 import android.util.Log
 import com.norman.android.hdrsample.player.color.ColorSpace
-import com.norman.android.hdrsample.player.color.ColorStandard
-import com.norman.android.hdrsample.player.color.ColorTransfer
 import com.norman.android.hdrsample.util.LogUtils
 import com.norman.android.hdrsample.util.MediaFormatUtil
 import java.io.IOException
@@ -39,17 +37,7 @@ class VideoManager(private val path: String) {
                 // 如果需要特定类型的轨道，可以在这里进行判断
                 if (mimeType!!.startsWith("video/")) {
                     Log.d(TAG, "Video track found: $format")
-                    val colorStandard = MediaFormatUtil.getColorStandard(format)
-                    val colorTransfer = MediaFormatUtil.getColorTransfer(format)
-                    if (colorStandard == ColorStandard.BT2020 && colorTransfer == ColorTransfer.HLG) {
-                        MediaFormatUtil.setColorSpace(format, ColorSpace.VIDEO_BT2020_HLG)
-                    } else if (colorStandard == ColorStandard.BT2020 && colorTransfer == ColorTransfer.ST2084) {
-                        MediaFormatUtil.setColorSpace(format, ColorSpace.VIDEO_BT2020_PQ)
-                    } else if (colorStandard == ColorStandard.BT2020 && colorTransfer == ColorTransfer.LINEAR) {
-                        MediaFormatUtil.setColorSpace(format, ColorSpace.VIDEO_BT2020_LINEAR)
-                    } else {
-                        MediaFormatUtil.setColorSpace(format, ColorSpace.VIDEO_SDR)
-                    }
+                    MediaFormatUtil.setColorSpace(format, ColorSpace.VIDEO_SDR)
                     return format
                 }
             }
@@ -61,19 +49,19 @@ class VideoManager(private val path: String) {
         return null
     }
 
-    fun getPlayManager(operate: Operate.PlayOperate): PlayVideoApi {
+    fun getPlayManager(operate: Operate.PlayOperate): VideoPlaybackApi {
         return VideoManagerImpl(path = path, operate = operate, videoFormat = videoFormat!!).also {
             LogUtils.i(TAG, "getPlayManager")
         }
     }
 
-    fun getTrackManager(operate: Operate.TrackOperate): TrackApi {
+    fun getTrackManager(operate: Operate.TrackOperate): TrackControlApi {
         return VideoManagerImpl(path = path, operate = operate, videoFormat = videoFormat!!).also {
             LogUtils.i(TAG, "getTrackManager")
         }
     }
 
-    fun getCuttingManager(operate: Operate.CuttingOperate): CuttingApi {
+    fun getCuttingManager(operate: Operate.CuttingOperate): VideoEditingApi {
         return VideoManagerImpl(path = path, operate = operate, videoFormat = videoFormat!!).also {
             LogUtils.i(TAG, "getCuttingManager")
         }

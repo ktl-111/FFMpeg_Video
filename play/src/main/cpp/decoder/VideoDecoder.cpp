@@ -790,7 +790,7 @@ int VideoDecoder::getConfigOutFps() const {
 }
 
 double VideoDecoder::getTargetFps() const {
-    double fps = getConfigOutFps()*1.0;
+    double fps = getConfigOutFps() * 1.0;
     if (fps == 0) {
         fps = getFps();
     }
@@ -879,11 +879,11 @@ AVSEEK_FLAG_FRAME:是基于帧数量快进
 
      AVSEEK_FLAG_ANY+AVSEEK_FLAG_FRAME只能ip
      */
-    flush();
     int64_t seekPos = (int64_t) (pos / av_q2d(getTimeBase())) / 1000;
     int ret = avformat_seek_file(mFtx, getStreamIndex(),
                                  INT64_MIN, seekPos, INT64_MAX,
                                  AVSEEK_FLAG_BACKWARD | AVSEEK_FLAG_FRAME);
+    flush();
     LOGI("[video] seek to: %ld, seekPos: %" PRId64 ", ret: %d(%s)", pos, seekPos, ret,
          av_err2str(ret))
     // seek后需要恢复起始时间

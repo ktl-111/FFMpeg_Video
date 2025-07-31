@@ -4,8 +4,8 @@ import android.view.Surface
 import com.example.play.config.OutConfig
 import com.example.play.utils.FFMpegUtils
 
-interface IPaly {
-    fun init(iPalyListener: IPalyListener?)
+interface IPlay {
+    fun init(iPlayListener: IPlayListener?)
     fun setTrackInterceptor(interceptor: TrackInterceptor)
     fun prepare(path: String, surface: Surface?, outConfig: OutConfig? = null)
     fun start()

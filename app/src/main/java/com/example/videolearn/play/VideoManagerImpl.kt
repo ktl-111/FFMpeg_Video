@@ -1,7 +1,7 @@
 package com.example.videolearn.play
 
 import android.media.MediaFormat
-import com.example.play.IPalyListener
+import com.example.play.IPlayListener
 import com.example.play.PlayManager
 import com.example.play.Step
 import com.example.play.TrackInterceptor
@@ -33,12 +33,13 @@ import com.norman.android.hdrsample.util.TimeUtil
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.asCoroutineDispatcher
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.util.concurrent.Executors
 
-class VideoManagerImpl(private val path: String, private val operate: Operate, private val videoFormat: MediaFormat) : PlayVideoApi, TrackApi, CuttingApi {
+class VideoManagerImpl(private val path: String, private val operate: Operate, private val videoFormat: MediaFormat) : VideoPlaybackApi, TrackControlApi, VideoEditingApi {
     private val TAG = "VideoManagerImpl"
     private val mediaScope: CoroutineScope = CoroutineScope(Executors.newSingleThreadExecutor { runnable ->
         val t = Thread(runnable)
@@ -57,58 +58,53 @@ class VideoManagerImpl(private val path: String, private val operate: Operate, p
 
 
     override fun start() {
-        playManager.start()
+        LogUtils.i(TAG, "start ${operate}")
+        if (operate is Operate.CuttingOperate) {
+            operate.onIs<Operate.CuttingOperate> { operate ->
+                DecodeUtils.startDecode(path, destPath = operate.destPath, startTime = operate.startTime, endTime = operate.startTime + operate.allTime, config = operate.outConfig, object : FFMpegUtils.VideoCuttingInterface {
+                    override fun onStart() {
+                        operate.cuttingCallback.onStart()
+                    }
+
+                    override fun onProgress(progress: Double) {
+                        operate.cuttingCallback.onCuttingProgress(progress)
+                    }
+
+                    override fun onFail(resultCode: Int) {
+                        operate.cuttingCallback.onFail(resultCode)
+                    }
+
+                    override fun onDone() {
+                        operate.cuttingCallback.onCuttingDone()
+                    }
+                })
+                playManager.start()
+            }
+        } else {
+            playManager.start()
+        }
     }
 
     override fun stop() {
+        LogUtils.i(TAG, "stop ${operate}")
         playManager.stop()
     }
 
     override fun resume() {
+        LogUtils.i(TAG, "resume ${operate}")
         playManager.resume()
     }
 
     override fun pause() {
+        LogUtils.i(TAG, "pause ${operate}")
         playManager.pause()
     }
 
     override fun seek(time: Long, nextStep: Step) {
+        LogUtils.i(TAG, "seek ${operate},time:${time},nextSetp:${nextStep}")
         playManager.seekTo(time, nextStep)
     }
 
-    override fun release() {
-
-    }
-
-
-    override fun trackStart() {
-        playManager.start()
-    }
-
-
-    override fun cuttingStart() {
-        operate.onIs<Operate.CuttingOperate> { operate ->
-            DecodeUtils.startDecode(path, destPath = operate.destPath, startTime = operate.startTime, endTime = operate.startTime + operate.allTime, config = operate.outConfig, object : FFMpegUtils.VideoCuttingInterface {
-                override fun onStart() {
-                    operate.cuttingCallback.onStart()
-                }
-
-                override fun onProgress(progress: Double) {
-                    operate.cuttingCallback.onCuttingProgress(progress)
-                }
-
-                override fun onFail(resultCode: Int) {
-                    operate.cuttingCallback.onFail(resultCode)
-                }
-
-                override fun onDone() {
-                    operate.cuttingCallback.onCuttingDone()
-                }
-            })
-            start()
-            seek(operate.startTime, Step.PlayStep)
-        }
-    }
 
     private inline fun <reified T : Operate> Operate.onIs(action: (T) -> Unit) {
         operate.taskIfIs<T>()?.let { action(it) }
@@ -246,22 +242,30 @@ class VideoManagerImpl(private val path: String, private val operate: Operate, p
 
                 }
                 glTextureRenderer.setRotation(MediaFormatUtil.getInteger(videoFormat, MediaFormat.KEY_ROTATION))
-                init(object : IPalyListener {
+                init(object : IPlayListener {
                     override fun onVideoConfig(witdh: Int, height: Int, duration: Double, fps: Double, rotation: Int) {
                     }
 
                     var preTime = -1;
 
                     override fun onPlayProgress(frame: ByteBuffer?, time: Double) {
-                        LogUtils.i(TAG, "onPalyProgress time:${time}")
+                        LogUtils.i(TAG, "onPlayProgress time:${time}")
                         runBlocking(mediaScope.coroutineContext) {
-                            LogUtils.i(TAG, "onPalyProgress time:${time}")
+                            LogUtils.i(TAG, "onPlayProgress time:${time}")
                             if (operate is Operate.TrackOperate) {
                                 val currTime = (time / 1000).toInt()
                                 if (preTime == currTime) {
                                     return@runBlocking
                                 }
                                 preTime = currTime
+                            }
+                            if (operate is Operate.CuttingOperate) {
+                                if (!operate.callFirstSeek) {
+                                    operate.callFirstSeek = true
+                                    mediaScope.launch {
+                                        seek(operate.startTime, Step.PlayStep)
+                                    }
+                                }
                             }
 
                             LogUtils.i(TAG, "start gl parse operate:${operate}")

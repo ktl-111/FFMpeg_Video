@@ -16,10 +16,10 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 
-class PlayManager : IPaly {
+class PlayManager : IPlay {
     private val TAG = "PlayManager"
-    private lateinit var mProxy: IPaly
-    private var iPalyListener: IPalyListener? = null
+    private lateinit var mProxy: IPlay
+    private var iPlayListener: IPlayListener? = null
     private var trackInterceptor: TrackInterceptor? = null
     private val seekDoneFlow by lazy {
         MutableStateFlow(true)
@@ -52,8 +52,8 @@ class PlayManager : IPaly {
 
     data class SeekBean(val seekTime: Long, val nextStep: Step)
 
-    override fun init(iPalyListener: IPalyListener?) {
-        this.iPalyListener = iPalyListener
+    override fun init(iPlayListener: IPlayListener?) {
+        this.iPlayListener = iPlayListener
     }
 
     override fun setTrackInterceptor(interceptor: TrackInterceptor) {
@@ -71,7 +71,7 @@ class PlayManager : IPaly {
             return
         }
         mProxy = FFMpegProxy()
-        mProxy.init(iPalyListener)
+        mProxy.init(iPlayListener)
         trackInterceptor?.also {
             mProxy.setTrackInterceptor(it)
         }

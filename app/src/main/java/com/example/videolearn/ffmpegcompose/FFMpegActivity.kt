@@ -1,7 +1,5 @@
 package com.example.videolearn.ffmpegcompose
 
-import android.media.MediaCodecInfo.CodecProfileLevel
-import android.media.MediaCodecList
 import android.media.MediaFormat
 import android.os.Bundle
 import android.util.Log
@@ -71,12 +69,13 @@ import com.example.play.utils.FFMpegUtils
 import com.example.play.utils.LogProxy
 import com.example.play.utils.MediaScope
 import com.example.videolearn.ffmpegcompose.bean.VideoBean
-import com.example.videolearn.play.BaseVideoApi
 import com.example.videolearn.play.CuttingCallback
 import com.example.videolearn.play.Operate
 import com.example.videolearn.play.PlayCallback
-import com.example.videolearn.play.PlayVideoApi
+import com.example.videolearn.play.PlaybackControlApi
+import com.example.videolearn.play.VideoControlApi
 import com.example.videolearn.play.VideoManager
+import com.example.videolearn.play.VideoPlaybackApi
 import com.example.videolearn.play.VideoTrackCallback
 import com.norman.android.hdrsample.util.MediaFormatUtil
 import com.norman.android.hdrsample.util.toBitmap
@@ -93,7 +92,7 @@ class FFMpegActivity : AppCompatActivity(), LogProxy {
     val TAG = "FFMPEGActivity"
     private lateinit var surface: Surface
     private lateinit var surfaceView: SurfaceView
-    private val videoApiMutableMap = mutableMapOf<String, BaseVideoApi>()
+    private val videoApiMutableMap: MutableMap<String, VideoControlApi> = mutableMapOf()
     private lateinit var videoManager: VideoManager
     private lateinit var path: String
     private val videoList = mutableStateListOf<VideoBean>()
@@ -144,23 +143,6 @@ class FFMpegActivity : AppCompatActivity(), LogProxy {
         super.onCreate(savedInstanceState)
         FFMpegUtils.addLogProxy(this)
         FFMpegUtils.setNativeLogLevel(Log.DEBUG)
-        val codecList = MediaCodecList(MediaCodecList.REGULAR_CODECS)
-        for (info in codecList.codecInfos) {
-            if (info.isEncoder) continue
-            val supportedTypes = info.getSupportedTypes()
-            for (type in supportedTypes) {
-                if (type == "video/hevc") {
-                    // 检查HEVC ProfileLevel
-                    val levels = info.getCapabilitiesForType(type).profileLevels
-                    for (l in levels) {
-                        Log.i(TAG, "prepare levels:${l.profile}")
-                        if (l.profile == CodecProfileLevel.HEVCProfileMain10) {
-                            Log.i(TAG, "prepare 支持HEVC 10bit硬解")
-                        }
-                    }
-                }
-            }
-        }
         //直播地址
         //         path = "http://zhibo.hkstv.tv/livestream/mutfysrq/playlist.m3u8"
         //         path = "http://39.135.138.58:18890/PLTV/88888888/224/3221225630/index.m3u8"
@@ -179,6 +161,12 @@ class FFMpegActivity : AppCompatActivity(), LogProxy {
         //        path = File(application.externalCacheDir, "vid_test1.mp4").absolutePath
         path = intent.getStringExtra("filepath") ?: ""
         //        path = File(application.externalCacheDir, "404.gif").absolutePath
+        if (!File(path).exists()) {
+            Toast.makeText(this, "文件不存在", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        videoManager = VideoManager(path)
         setContent {
             rootView(
                 videoList, mFps, mCurrPlayTime, mSize, mVideoDuration, mCuttingProgress
@@ -186,12 +174,8 @@ class FFMpegActivity : AppCompatActivity(), LogProxy {
         }
     }
 
-    private fun prepare(path: String?, surface: Surface) {
-        if (path == null || !File(path).exists()) {
-            Toast.makeText(this, "文件不存在", Toast.LENGTH_SHORT).show()
-            return
-        }
-        videoManager = VideoManager(path)
+    private fun prepare(surface: Surface) {
+
         val videoFormat = videoManager.videoFormat
         var width = MediaFormatUtil.getInteger(videoFormat, MediaFormat.KEY_WIDTH)
         var height = MediaFormatUtil.getInteger(videoFormat, MediaFormat.KEY_HEIGHT)
@@ -239,7 +223,7 @@ class FFMpegActivity : AppCompatActivity(), LogProxy {
             videoApiMutableMap["play"] = it
             it.start()
         }
-        initGetVideoFrames()
+        initTrack()
     }
 
 //    private val outConfig = OutConfig(960, 540, 378, 496, fps = 24.toDouble())
@@ -254,6 +238,7 @@ class FFMpegActivity : AppCompatActivity(), LogProxy {
     private fun start() {
         Log.i(TAG, "start: ")
         videoApiMutableMap.values.forEach {
+            it.start()
         }
     }
 
@@ -265,14 +250,18 @@ class FFMpegActivity : AppCompatActivity(), LogProxy {
     private fun resume() {
         Log.i(TAG, "resume: ")
         videoApiMutableMap.values.forEach {
-            it.resume()
+            if (it is PlaybackControlApi) {
+                it.resume()
+            }
         }
     }
 
     private fun pause() {
         Log.i(TAG, "pause: ")
         videoApiMutableMap.values.forEach {
-            it.pause()
+            if (it is PlaybackControlApi) {
+                it.pause()
+            }
         }
     }
 
@@ -321,8 +310,8 @@ class FFMpegActivity : AppCompatActivity(), LogProxy {
         //            }
     }
 
-    private fun getPlayManager(): PlayVideoApi? {
-        return videoApiMutableMap["play"] as? PlayVideoApi
+    private fun getPlayManager(): VideoPlaybackApi? {
+        return videoApiMutableMap["play"] as? VideoPlaybackApi
     }
 
     private fun uiSeekTo(seekTime: Double) {
@@ -378,7 +367,8 @@ class FFMpegActivity : AppCompatActivity(), LogProxy {
                 }
 
             })).also {
-                it.cuttingStart()
+                videoApiMutableMap["cutting"] = it
+                it.start()
             }
         }
     }
@@ -407,7 +397,7 @@ class FFMpegActivity : AppCompatActivity(), LogProxy {
         super.onDestroy()
         FFMpegUtils.removeLogProxy(this)
         videoApiMutableMap.values.forEach {
-            it.pause()
+            it.stop()
         }
         videoList.forEach {
             it.bitmap.value?.also {
@@ -416,7 +406,7 @@ class FFMpegActivity : AppCompatActivity(), LogProxy {
         }
     }
 
-    private fun initGetVideoFrames() {
+    private fun initTrack() {
         val duration = MediaFormatUtil.getLong(videoManager.videoFormat, MediaFormat.KEY_DURATION) / 1000.0 / 1000.0
         val list = mutableListOf<VideoBean>().apply {
             for (time in 1..duration.toLong()) {
@@ -428,9 +418,6 @@ class FFMpegActivity : AppCompatActivity(), LogProxy {
         }
         videoList.clear()
         videoList.addAll(list)
-        if (true) {
-            return
-        }
         videoManager.getTrackManager(Operate.TrackOperate(outConfig = OutConfig(scale = 0.1), trackCallback = object : VideoTrackCallback {
             override fun onVideoTrackResult(byteBuffer: ByteBuffer, width: Int, height: Int, time: Long) {
                 val bitmap = byteBuffer.toBitmap(width, height)
@@ -452,7 +439,7 @@ class FFMpegActivity : AppCompatActivity(), LogProxy {
 
         })).also {
             videoApiMutableMap["track"] = it
-            it.trackStart()
+            it.start()
         }
     }
 
@@ -501,7 +488,7 @@ class FFMpegActivity : AppCompatActivity(), LogProxy {
                                         surface = holder.surface
                                         MediaScope.launch {
                                             if (getPlayManager() == null) {
-                                                prepare(path, surface)
+                                                prepare(surface)
                                             } else {
                                                 surfaceReCreate(surface)
                                             }
@@ -675,7 +662,7 @@ class FFMpegActivity : AppCompatActivity(), LogProxy {
                     mutableStateOf("")
                 }
                 commonButton(text = "seek to", modifier = Modifier.weight(1.0f)) {
-                    getPlayManager()?.seek((currPlayTime.value * 1000).toLong()+100)
+                    getPlayManager()?.seek((currPlayTime.value * 1000).toLong() + 100)
 //                    uiSeekTo(text.let {
 //                        if (it.isEmpty()) {
 //                            0.toDouble()

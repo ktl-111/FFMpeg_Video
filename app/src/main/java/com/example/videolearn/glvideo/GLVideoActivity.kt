@@ -33,10 +33,11 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.example.play.config.OutConfig
 import com.example.videolearn.BaseActivity
-import com.example.videolearn.play.BaseVideoApi
 import com.example.videolearn.play.CuttingCallback
 import com.example.videolearn.play.Operate
 import com.example.videolearn.play.PlayCallback
+import com.example.videolearn.play.PlaybackControlApi
+import com.example.videolearn.play.VideoControlApi
 import com.example.videolearn.play.VideoManager
 import com.example.videolearn.play.VideoTrackCallback
 import com.norman.android.hdrsample.util.LogUtils
@@ -48,7 +49,7 @@ import java.nio.ByteBuffer
 
 class GLVideoActivity : BaseActivity() {
     private val TAG = "GLVideoActivity"
-    private val managerList = mutableMapOf<String, BaseVideoApi>()
+    private val managerList = mutableMapOf<String, VideoControlApi>()
 
     private val videoList = mutableStateListOf<BitmapBean>()
     private lateinit var videoManager: VideoManager
@@ -77,7 +78,9 @@ class GLVideoActivity : BaseActivity() {
 
     private fun cutting() {
         managerList.values.forEach {
-            it.pause()
+            if (it is PlaybackControlApi) {
+                it.pause()
+            }
         }
         val outFile = File(getExternalFilesDir(""), "testout.mp4")
         if (!outFile.exists()) {
@@ -110,7 +113,7 @@ class GLVideoActivity : BaseActivity() {
             }
 
         }))
-        cuttingManager.cuttingStart()
+        cuttingManager.start()
     }
 
     @Composable
@@ -134,7 +137,7 @@ class GLVideoActivity : BaseActivity() {
 
         }))
         managerList["track"] = trackManager
-        trackManager.trackStart()
+        trackManager.start()
         TrackContent()
     }
 
@@ -217,14 +220,18 @@ class GLVideoActivity : BaseActivity() {
     override fun onResume() {
         super.onResume()
         managerList.values.forEach {
-            it.resume()
+            if (it is PlaybackControlApi) {
+                it.resume()
+            }
         }
     }
 
     override fun onPause() {
         super.onPause()
         managerList.values.forEach {
-            it.pause()
+            if (it is PlaybackControlApi) {
+                it.pause()
+            }
         }
     }
 }
