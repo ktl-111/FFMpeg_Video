@@ -30,7 +30,7 @@ void FFMpegPlayer::init(JNIEnv *env, jobject thiz) {
     mPlayerJni.onVideoConfig = env->GetMethodID(jclazz, "onNativeVideoConfig",
                                                 "(IIDDILjava/lang/String;)V");
     mPlayerJni.onPlayProgress = env->GetMethodID(jclazz, "onNativePlayProgress",
-                                                 "(Ljava/nio/ByteBuffer;D)V");
+                                                 "(Ljava/nio/ByteBuffer;J)V");
     mPlayerJni.onPlayCompleted = env->GetMethodID(jclazz, "onNativePlayComplete", "()V");
     mPlayerJni.onPlayError = env->GetMethodID(jclazz, "onPlayError", "(I)V");
 }
@@ -344,7 +344,7 @@ void FFMpegPlayer::VideoDecodeLoop() {
             mVideoDecoder->showFrameToWindow(frame);
             LOGI("avSync done")
             if (mPlayerJni.isValid()) { // no audio track
-                double timestamp = mVideoDecoder->getTimestamp();
+                int64_t timestamp = mVideoDecoder->getTimestamp();
                 env->CallVoidMethod(mPlayerJni.instance, mPlayerJni.onPlayProgress, nullptr,
                                     timestamp);
             }
@@ -712,8 +712,10 @@ int64_t FFMpegPlayer::getCurrTimestamp() {
 int FFMpegPlayer::getPlayerState() {
     AVFrame *front = mVideoFrameQueue->front();
     AVFrame *back = mVideoFrameQueue->back();
-    LOGI("cache time,front:%f back:%f", front->pts * av_q2d(front->time_base),
-         back->pts * av_q2d(back->time_base))
+    if (front && back) {
+        LOGI(",fcache timeront:%f back:%f", front->pts * av_q2d(front->time_base),
+             back->pts * av_q2d(back->time_base))
+    }
     return mPlayerState;
 }
 

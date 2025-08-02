@@ -3,10 +3,12 @@ package com.example.videolearn.play.impl
 import android.media.MediaFormat
 import com.example.play.IPlayListener
 import com.example.play.PlayManager
+import com.example.play.PlayerState
 import com.example.play.TrackInterceptor
 import com.example.videolearn.play.Operate
 import com.example.videolearn.play.PlaybackControlApi
 import com.norman.android.hdrsample.opengl.GLEnvConfigSimpleChooser
+import com.norman.android.hdrsample.opengl.GLEnvContext
 import com.norman.android.hdrsample.opengl.GLEnvContextManager
 import com.norman.android.hdrsample.opengl.GLEnvDisplay
 import com.norman.android.hdrsample.opengl.GLTextureSurface
@@ -15,6 +17,7 @@ import com.norman.android.hdrsample.player.GLRenderScreenTarget
 import com.norman.android.hdrsample.player.GLRenderTextureTarget
 import com.norman.android.hdrsample.player.GLTexture2DRenderer
 import com.norman.android.hdrsample.player.GLTextureOESRenderer
+import com.norman.android.hdrsample.player.GLTextureRenderer
 import com.norman.android.hdrsample.player.GLTextureY2YRenderer
 import com.norman.android.hdrsample.player.GLVideoTransform
 import com.norman.android.hdrsample.player.OutputSurface
@@ -37,7 +40,7 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.util.concurrent.Executors
 
-open class VideoManagerImpl<T : Operate>(protected val path: String, protected val operate: T, protected val videoFormat: MediaFormat) : PlaybackControlApi {
+open class VideoManagerImpl<T : Operate>(protected val path: String, protected val operate: T, private val videoFormat: MediaFormat) : PlaybackControlApi {
     protected val TAG = "VideoManagerImpl"
     protected val mediaScope: CoroutineScope = CoroutineScope(Executors.newSingleThreadExecutor { runnable ->
         val t = Thread(runnable)
@@ -50,8 +53,38 @@ open class VideoManagerImpl<T : Operate>(protected val path: String, protected v
     })
     protected val playManager: PlayManager
 
+    protected var scale = 1.0f
+    protected var translationX = 0f
+    protected var translationY = 0f
+
+    /**
+     * Transform转换时用frontTarget和backTarget交替做为中转
+     */
+    var frontTarget = GLRenderTextureTarget("frontTarget")
+
+    var backTarget = GLRenderTextureTarget("backTarget")
+
+    val pboTarget = GLRenderPboTarget()
+
+    val texture2DRenderer = GLTexture2DRenderer()
+    val screenTarget = GLRenderScreenTarget()
+    lateinit var glTextureRenderer: GLTextureRenderer
+    lateinit var videoSurface: GLTextureSurface
+    lateinit var outputSurface: OutputSurface
+    lateinit var envContext: GLEnvContext
+    var maxMasteringLuminance: Int = 0
+    var maxContentLuminance: Int = 0
+    var maxFrameAverageLuminance: Int = 0
+    var bitdepth: Int = 0
+    val transformList: MutableList<GLVideoTransform> = mutableListOf()
+    var videoWidth = 0
+    var videoHeight = 0
+    val colorRange = MediaFormatUtil.getColorRange(videoFormat)
+    val colorSpace = MediaFormatUtil.getColorSpace(videoFormat)
+    var isStart = false
+
     init {
-        playManager = initPlayManager(path, operate)
+        playManager = initPlayManager(path)
     }
 
 
@@ -75,21 +108,26 @@ open class VideoManagerImpl<T : Operate>(protected val path: String, protected v
         playManager.pause()
     }
 
+    override fun translation(scale: Float, translationX: Float, translationY: Float) {
+        this.scale = scale
+        this.translationX = translationX
+        this.translationY = translationY
+        LogUtils.i(TAG, "translation scale:${scale} translationX:$translationX translationY:${translationY}")
+        val playerState = playManager.getPlayerState()
+        if (playerState != PlayerState.Unknown && playerState != PlayerState.Prepare) {
+            updateSurface(playManager.getCurrTimestamp())
+        }
+    }
 
     private inline fun <reified T : Operate> Operate.onIs(action: (T) -> Unit) {
         operate.taskIfIs<T>()?.let { action(it) }
     }
 
     private inline fun <reified T : Operate> Operate.taskIfIs(): T? = this as? T
-
-
-    private fun initPlayManager(path: String, operate: Operate): PlayManager {
+    private fun initPlayManager(path: String): PlayManager {
         LogUtils.i(TAG, "initPlayManager START operate:${operate} videoFormat:${videoFormat} ")
         //MediaExtractor不兼容KEY_HDR10_PLUS_INFO，不论HDR10还是HDR10+出来的都是KEY_HDR_STATIC_INFO，后续看看怎么解决
         val hdrStaticInfo = MediaFormatUtil.getByteBuffer(videoFormat, MediaFormat.KEY_HDR_STATIC_INFO)
-        val maxMasteringLuminance: Int
-        val maxContentLuminance: Int
-        val maxFrameAverageLuminance: Int
         if (hdrStaticInfo != null) {
             hdrStaticInfo.clear()
             hdrStaticInfo.position(1)
@@ -115,8 +153,8 @@ open class VideoManagerImpl<T : Operate>(protected val path: String, protected v
             maxContentLuminance = 0
             maxFrameAverageLuminance = 0
         }
-        var videoWidth = MediaFormatUtil.getInteger(videoFormat, MediaFormat.KEY_WIDTH)
-        var videoHeight = MediaFormatUtil.getInteger(videoFormat, MediaFormat.KEY_HEIGHT)
+        videoWidth = MediaFormatUtil.getInteger(videoFormat, MediaFormat.KEY_WIDTH)
+        videoHeight = MediaFormatUtil.getInteger(videoFormat, MediaFormat.KEY_HEIGHT)
         val rotation = MediaFormatUtil.getInteger(videoFormat, MediaFormat.KEY_ROTATION)
         if (rotation == 90 || rotation == 270) {
             val (x, y) = arrayOf(videoWidth, videoHeight)
@@ -133,7 +171,6 @@ open class VideoManagerImpl<T : Operate>(protected val path: String, protected v
         LogUtils.i(TAG, "path:${path} $videoWidth*$videoHeight ${duration} ${operate}")
         return PlayManager().apply {
             runBlocking(mediaScope.coroutineContext) {
-                val transformList: MutableList<GLVideoTransform> = mutableListOf()
                 transformList.add(HDRToSDRVideoTransform().apply {
                     setGammaOETF(GammaOETF.BT1886)
                     setGamutMap(GamutMap.CLIP)
@@ -177,118 +214,33 @@ open class VideoManagerImpl<T : Operate>(protected val path: String, protected v
                 }
                 val glEnvContextManager = GLEnvContextManager.create(glEnvDisplay, glEnvConfig)
                 glEnvContextManager.attach()
-                val envContext = glEnvContextManager.envContext
-                val outputSurface = OutputSurface(envContext)
+                envContext = glEnvContextManager.envContext
+                outputSurface = OutputSurface(envContext)
                 if (operate is Operate.PlayOperate) {
                     outputSurface.setSurface(operate.surface)
                 }
 
-                val colorRange = MediaFormatUtil.getColorRange(videoFormat)
-                val colorSpace = MediaFormatUtil.getColorSpace(videoFormat)
 
-                /**
-                 * Transform转换时用frontTarget和backTarget交替做为中转
-                 */
-                var frontTarget = GLRenderTextureTarget("frontTarget")
 
-                var backTarget = GLRenderTextureTarget("backTarget")
 
-                val pboTarget = GLRenderPboTarget()
-
-                val texture2DRenderer = GLTexture2DRenderer()
-                val screenTarget = GLRenderScreenTarget()
-
-                val videoSurface = GLTextureSurface(GLESUtil.createExternalTextureId(operate.getOperateSize(), operate.textureIndex))
+                videoSurface = GLTextureSurface(GLESUtil.createExternalTextureId(operate.getOperateSize(), operate.textureIndex))
                 videoSurface.setDefaultBufferSize(videoWidth, videoHeight)
                 val textureY2YMode = colorSpace != ColorSpace.VIDEO_SDR && GLTextureY2YRenderer.isSupportY2YEXT()
-                val glTextureRenderer = if (textureY2YMode) GLTextureY2YRenderer() else GLTextureOESRenderer()
+                glTextureRenderer = if (textureY2YMode) GLTextureY2YRenderer() else GLTextureOESRenderer()
                 glTextureRenderer.setTextureId(videoSurface.textureId)
-                val bitdepth = if (profile10Bit) 10 else 8
+                bitdepth = if (profile10Bit) 10 else 8
                 if (glTextureRenderer is GLTextureY2YRenderer) {
-                    glTextureRenderer.setBitDepth(bitdepth)
-                    glTextureRenderer.setColorRange(colorRange)
-                }
-                videoSurface.setOnFrameAvailableListener {
-
+                    (glTextureRenderer as GLTextureY2YRenderer).setBitDepth(bitdepth)
+                    (glTextureRenderer as GLTextureY2YRenderer).setColorRange(colorRange)
                 }
                 glTextureRenderer.setRotation(MediaFormatUtil.getInteger(videoFormat, MediaFormat.KEY_ROTATION))
                 init(object : IPlayListener {
                     override fun onVideoConfig(witdh: Int, height: Int, duration: Double, fps: Double, rotation: Int) {
                     }
 
-                    override fun onPlayProgress(frame: ByteBuffer?, time: Double) {
+                    override fun onPlayProgress(frame: ByteBuffer?, time: Long) {
                         LogUtils.i(TAG, "onPlayProgress time:${time}")
-                        runBlocking(mediaScope.coroutineContext) {
-                            LogUtils.i(TAG, "onPlayProgress time:${time}")
-                            if (updateProgressPreCheck(time.toLong())) {
-                                return@runBlocking
-                            }
-
-                            LogUtils.i(TAG, "start gl parse operate:${operate}")
-                            videoSurface.updateTexImage()
-                            val textureMatrix: FloatArray = glTextureRenderer.getTextureMatrix()
-                            videoSurface.getTransformMatrix(textureMatrix) //纹理矩阵能解决绿边问题
-                            frontTarget.setBitDepth(bitdepth)
-                            backTarget.setBitDepth(bitdepth)
-                            // 前面得到的纹理输出到frontTarget上
-
-                            frontTarget.setRenderSize(videoWidth, videoHeight)
-                            backTarget.setRenderSize(videoWidth, videoHeight)
-                            pboTarget.setRenderSize(videoWidth, videoHeight)
-                            // 标记frontTarget的属性，方便后续处理
-                            frontTarget.setColorSpace(colorSpace)
-                            frontTarget.setMaxContentLuminance(maxContentLuminance)
-                            frontTarget.setMaxFrameAverageLuminance(maxFrameAverageLuminance)
-                            frontTarget.setMaxMasteringLuminance(maxMasteringLuminance)
-                            //把前面的数据渲染到新的纹理上面
-                            glTextureRenderer.renderToTarget(frontTarget)
-
-                            //用frontTarget和backTarget做中转做Transform的处理
-                            //这里单fbo也能处理,如果存在多层后处理的话,就需要用到双fbo
-                            for (videoTransform in transformList) {
-                                //HDRToSDRVideoTransform
-                                //HDR->SDR
-                                videoTransform.renderToTarget(frontTarget, backTarget)
-                                val renderSuccess = videoTransform.renderSuccess
-                                LogUtils.i(TAG, " transformList for " + videoTransform.javaClass.simpleName + " frontTarget:" + frontTarget + " backTarget:" + backTarget + " success:" + renderSuccess)
-                                if (renderSuccess) { //如果绘制成功了，才中转纹理
-                                    LogUtils.i(TAG, "transformList for $videoTransform  success")
-                                    val temp = frontTarget
-                                    frontTarget = backTarget
-                                    backTarget = temp
-                                }
-                            }
-                            val timeUs = (time * 1000).toLong()
-                            when (operate) {
-                                is Operate.PlayOperate -> {
-                                    operate.playCallback.onPlayProgress(time.toLong())
-                                    // 获得最终纹理
-                                    texture2DRenderer.setTextureId(frontTarget.textureId)
-
-                                    val windowSurface = outputSurface.getWindowSurface(frontTarget.colorSpace)
-                                    if (windowSurface != null) {
-                                        envContext.makeCurrent(windowSurface)
-                                        LogUtils.i(TAG, "onOutputBufferRender: windowSurface:$windowSurface")
-                                        screenTarget.setRenderSize(windowSurface.width, windowSurface.height)
-                                        screenTarget.clearColor()
-                                        texture2DRenderer.renderToTarget(screenTarget)
-                                        windowSurface.setPresentationTime(TimeUtil.microToNano(timeUs.toLong()))
-                                        windowSurface.swapBuffers()
-                                    }
-                                }
-
-                                is Operate.TrackOperate, is Operate.EditingOperate -> {
-                                    pboTarget.setTime(timeUs)
-                                    pboTarget.setBufferCallback { buffer ->
-                                        updateProgressFrame(buffer, videoWidth, videoHeight, time.toLong())
-                                    }
-                                    frontTarget.startRender()
-                                    pboTarget.startRender()
-                                    pboTarget.finishRender()
-                                    frontTarget.finishRender()
-                                }
-                            }
-                        }
+                        updateSurface(time)
                     }
 
                     override fun onPlayComplete() {
@@ -312,6 +264,79 @@ open class VideoManagerImpl<T : Operate>(protected val path: String, protected v
                 }
 
                 prepare(path, videoSurface, outConfig = operate.outConfig)
+            }
+        }
+    }
+
+    protected fun updateSurface(time: Long) {
+        runBlocking(mediaScope.coroutineContext) {
+            LogUtils.i(TAG, "onPlayProgress time:${time}")
+            if (updateProgressPreCheck(time.toLong())) {
+                return@runBlocking
+            }
+            glTextureRenderer.updatePositionMatrix(scale, translationX, translationY)
+            LogUtils.i(TAG, "start gl parse operate:${operate}")
+            videoSurface.updateTexImage()
+            val textureMatrix: FloatArray = glTextureRenderer.getTextureMatrix()
+            videoSurface.getTransformMatrix(textureMatrix) //纹理矩阵能解决绿边问题
+            frontTarget.setBitDepth(bitdepth)
+            backTarget.setBitDepth(bitdepth)
+            // 前面得到的纹理输出到frontTarget上
+            frontTarget.setRenderSize(videoWidth, videoHeight)
+            backTarget.setRenderSize(videoWidth, videoHeight)
+            pboTarget.setRenderSize(videoWidth, videoHeight)
+            // 标记frontTarget的属性，方便后续处理
+            frontTarget.setColorSpace(colorSpace)
+            frontTarget.setMaxContentLuminance(maxContentLuminance)
+            frontTarget.setMaxFrameAverageLuminance(maxFrameAverageLuminance)
+            frontTarget.setMaxMasteringLuminance(maxMasteringLuminance)
+            //把前面的数据渲染到新的纹理上面
+            glTextureRenderer.renderToTarget(frontTarget)
+
+            //用frontTarget和backTarget做中转做Transform的处理
+            //这里单fbo也能处理,如果存在多层后处理的话,就需要用到双fbo
+            for (videoTransform in transformList) {
+                //HDRToSDRVideoTransform
+                //HDR->SDR
+                videoTransform.renderToTarget(frontTarget, backTarget)
+                val renderSuccess = videoTransform.renderSuccess
+                LogUtils.i(TAG, " transformList for " + videoTransform.javaClass.simpleName + " frontTarget:" + frontTarget + " backTarget:" + backTarget + " success:" + renderSuccess)
+                if (renderSuccess) { //如果绘制成功了，才中转纹理
+                    LogUtils.i(TAG, "transformList for $videoTransform  success")
+                    val temp = frontTarget
+                    frontTarget = backTarget
+                    backTarget = temp
+                }
+            }
+            val timeUs = (time * 1000).toLong()
+            when (operate) {
+                is Operate.PlayOperate -> {
+                    operate.playCallback.onPlayProgress(time.toLong())
+                    // 获得最终纹理
+                    texture2DRenderer.setTextureId(frontTarget.textureId)
+
+                    val windowSurface = outputSurface.getWindowSurface(frontTarget.colorSpace)
+                    if (windowSurface != null) {
+                        envContext.makeCurrent(windowSurface)
+                        LogUtils.i(TAG, "onOutputBufferRender: windowSurface:$windowSurface")
+                        screenTarget.setRenderSize(windowSurface.width, windowSurface.height)
+                        screenTarget.clearColor()
+                        texture2DRenderer.renderToTarget(screenTarget)
+                        windowSurface.setPresentationTime(TimeUtil.microToNano(timeUs.toLong()))
+                        windowSurface.swapBuffers()
+                    }
+                }
+
+                is Operate.TrackOperate, is Operate.EditingOperate -> {
+                    pboTarget.setTime(timeUs)
+                    pboTarget.setBufferCallback { buffer ->
+                        updateProgressFrame(buffer, videoWidth, videoHeight, time.toLong())
+                    }
+                    frontTarget.startRender()
+                    pboTarget.startRender()
+                    pboTarget.finishRender()
+                    frontTarget.finishRender()
+                }
             }
         }
     }

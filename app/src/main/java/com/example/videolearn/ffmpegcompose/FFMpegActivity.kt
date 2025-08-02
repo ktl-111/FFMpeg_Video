@@ -13,6 +13,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.gestures.forEachGesture
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -58,6 +59,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.constraintlayout.compose.ChainStyle
@@ -127,11 +129,11 @@ class FFMpegActivity : AppCompatActivity(), LogProxy {
 //            ).show()
         })
         it.add(BtnBean("currTime") {
-//            Toast.makeText(
-//                this@FFMpegActivity,
-//                "player state:${getPlayManager()?.getCurrTimestamp()}",
-//                Toast.LENGTH_SHORT
-//            ).show()
+            Toast.makeText(
+                this@FFMpegActivity,
+                "player state:${getPlayManager()?.getCurrTimestamp()}",
+                Toast.LENGTH_SHORT
+            ).show()
         })
         it.add(BtnBean("getDecodeData") {
             getDecodeData()
@@ -180,13 +182,15 @@ class FFMpegActivity : AppCompatActivity(), LogProxy {
         var height = MediaFormatUtil.getInteger(videoFormat, MediaFormat.KEY_HEIGHT)
         val duration = MediaFormatUtil.getLong(videoFormat, MediaFormat.KEY_DURATION) / 1000.0
         val fps = MediaFormatUtil.getInteger(videoFormat, MediaFormat.KEY_FRAME_RATE)
-        val ratio = width.toFloat() / height
         val rotation = MediaFormatUtil.getInteger(videoFormat, MediaFormat.KEY_ROTATION)
         if (rotation == 90 || rotation == 270) {
             val (x, y) = arrayOf(width, height)
             width = y
             height = x
         }
+        parentSize = IntSize(width, height)
+        videoSize = IntSize(width, height)
+        val ratio = width.toFloat() / height
         val videoHeight: Int
         val videoWidth: Int
         if (height > width) {
@@ -220,6 +224,7 @@ class FFMpegActivity : AppCompatActivity(), LogProxy {
 
         })).also {
             videoApiMutableMap["play"] = it
+            it.translation(scale, offsetX / videoSize.width.toFloat(), offsetY / videoSize.height.toFloat())
             it.start()
         }
         initTrack()
@@ -366,6 +371,7 @@ class FFMpegActivity : AppCompatActivity(), LogProxy {
                 }
 
             })).also {
+                it.translation(scale, offsetX / videoSize.width.toFloat(), offsetY / videoSize.height.toFloat())
                 it.start()
             }
         }
@@ -450,6 +456,12 @@ class FFMpegActivity : AppCompatActivity(), LogProxy {
         }, mFps, mCurrPlayTime, mSize, mVideoDuration, mCuttingProgress)
     }
 
+    var scale = 2f
+    var offsetX = 0f
+    var offsetY = 0f
+    var parentSize = IntSize(0, 0)
+    var videoSize = IntSize(0, 0)
+
     @Composable
     fun rootView(
         videoList: SnapshotStateList<VideoBean>,
@@ -475,7 +487,57 @@ class FFMpegActivity : AppCompatActivity(), LogProxy {
                         .border(width = 1.dp, color = Color.Red)
                         .padding(1.dp)
                         .align(Alignment.Center)
+                        .pointerInput(Unit) {
+                            detectTransformGestures(
+                                onGesture = { centroid, pan, zoom, _ ->
+                                    // 双指居中缩放
+                                    val prevScale = scale
+                                    val tempScale = scale * zoom
+                                    var tempOffSetX = offsetX
+                                    var tempOffSetY = offsetY
+                                    if (zoom != 1f) {
+                                        // 计算以中心点缩放时的偏移调整
+                                        val compensationX = (centroid.x - videoSize.width / 2) * (tempScale - prevScale)
+                                        val compensationY = (centroid.y - videoSize.height / 2) * (tempScale - prevScale)
+
+                                        tempOffSetX = (tempOffSetX * zoom) + compensationX
+                                        tempOffSetY = (tempOffSetY * zoom) + compensationY
+                                    }
+                                    // 单指拖拽
+                                    else {
+                                        tempOffSetX += pan.x
+                                        tempOffSetY += pan.y
+                                    }
+                                    // 边界限制 - 确保图像边缘不能小于父布局边缘
+                                    val scaleSize = Size((videoSize.width * tempScale), (videoSize.height * tempScale))
+
+                                    // 计算允许的最大偏移量
+                                    val maxX = ((scaleSize.width - parentSize.width) / 2).coerceAtLeast(0f)
+                                    val maxY = ((scaleSize.height - parentSize.height) / 2).coerceAtLeast(0f)
+                                    Log.i(TAG, "ZoomableBitmap:  maxX:$maxX maxY:$maxY scaleSize:${scaleSize} imageSize:${videoSize} tempOffSetX:${tempOffSetX} tempOffSetY:${tempOffSetY}")
+                                    if (zoom != 1f && (maxX <= 0 || maxY <= 0)) {
+                                        return@detectTransformGestures
+                                    }
+                                    if (maxX > 0) {
+                                        offsetX = tempOffSetX.coerceIn(-maxX, maxX)
+                                    }
+                                    if (maxY > 0) {
+//                                    // 限制偏移范围
+                                        offsetY = tempOffSetY.coerceIn(-maxY, maxY)
+                                    }
+
+                                    scale = tempScale
+                                    Log.i(TAG, "ZoomableBitmap centroid:${centroid} pan:$pan zoom:${zoom} offsetX:${offsetX} offsetY:${offsetY}  parentSize:${parentSize} imageSize:${videoSize} scale:${scale}")
+                                    getPlayManager()?.also {
+                                        it.pause()
+                                        //opengl归一化处理(ndc单位)，坐标范围[-1,1],共两个单位,如100*100px,在ndc单位里一像素=0.02,如果移动50像素,就是(50*2)/100,先将ndc单位转像素,再/宽度,归一计算
+                                        it.translation(scale, offsetX * 2 / videoSize.width, offsetY * 2 / videoSize.height)
+                                    }
+                                }
+                            )
+                        }
                 ) {
+
                     AndroidView(
                         factory = { context ->
                             return@AndroidView SurfaceView(context).also {

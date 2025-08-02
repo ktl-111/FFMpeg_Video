@@ -10,7 +10,7 @@ interface IPlayListener {
      *
      * @param time ms
      */
-    fun onPlayProgress(frame: ByteBuffer?, time: Double)
+    fun onPlayProgress(frame: ByteBuffer?, time: Long)
     fun onPlayComplete()
     fun onPlayError(code: Int)
 }

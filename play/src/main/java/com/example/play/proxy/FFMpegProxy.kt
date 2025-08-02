@@ -120,7 +120,7 @@ internal class FFMpegProxy : IPlay {
         palyListener?.onVideoConfig(width, height, duration, fps, rotation)
     }
 
-    private fun onNativePlayProgress(frame: ByteBuffer?, time: Double) {
+    private fun onNativePlayProgress(frame: ByteBuffer?, time: Long) {
         LogHelper.d(TAG, "onNativePlayProgress: ${time}")
         palyListener?.onPlayProgress(frame, time)
     }

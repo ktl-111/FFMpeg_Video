@@ -181,7 +181,7 @@ class FFmpegDecode(private val mimeType: String, private val fileSource: FileSou
         return null
     }
 
-    override fun onPlayProgress(frame: ByteBuffer?, time: Double) {
+    override fun onPlayProgress(frame: ByteBuffer?, time: Long) {
         runBlocking {
             suspendCancellableCoroutine<Boolean> { continuation ->
                 createLooper?.also {

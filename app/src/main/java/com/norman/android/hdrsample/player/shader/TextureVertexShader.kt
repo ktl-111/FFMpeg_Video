@@ -17,7 +17,7 @@ class TextureVertexShader : GLShaderCode() {
             uniform mat4 $POSITION_MATRIX_SCALE;
             out vec2 textureCoordinate;
             void main() {
-                gl_Position =$POSITION_MATRIX_SCALE*position;
+                gl_Position =$POSITION_MATRIX_SCALE*${POSITION};
                 textureCoordinate =($TEXTURE_MATRIX*$INPUT_TEXTURE_COORDINATE).xy;
             }
             """.trimIndent()
@@ -31,6 +31,7 @@ class TextureVertexShader : GLShaderCode() {
 
         @JvmField
         val TEXTURE_MATRIX = "textureMatrix"
+
         @JvmField
         val POSITION_MATRIX_SCALE = "positionMatrixScale"
 
