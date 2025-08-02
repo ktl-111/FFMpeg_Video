@@ -237,10 +237,10 @@ void FFMpegPlayer::stop() {
     mIsMute = false;
     updatePlayerState(PlayerState::STOP);
     if (mVideoPacketQueue) {
-        mVideoPacketQueue->notify();
+        mVideoPacketQueue->notify(true);
     }
     if (mVideoFrameQueue) {
-        mVideoFrameQueue->notify();
+        mVideoFrameQueue->notify(true);
     }
     mMutexObj->wakeUp();
 
@@ -417,7 +417,7 @@ void FFMpegPlayer::VideoDecodeLoop() {
 }
 
 void FFMpegPlayer::ReadVideoFrameLoop() {
-    LOGI("ReadVideoFrameLoop start")
+    LOGI("ReadVideoFrameLoop start %f", mVideoDecoder->getScale())
     while (true) {
         if (!mHasAbort) {
             mVideoPacketQueue->checkEmptyWait();

@@ -9,6 +9,7 @@ extern "C" {
 }
 
 AVFrameQueue::AVFrameQueue(int64_t maxSize, std::string tag) {
+    release = false;
     pthread_mutexattr_init(&attr);
     pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_RECURSIVE); // 关键设置
     pthread_mutex_init(&mMutex, &attr);
@@ -159,11 +160,14 @@ bool AVFrameQueue::isFull() {
 bool AVFrameQueue::isFullWait() {
     int64_t queueSize;
     pthread_mutex_lock(&mMutex);
-    queueSize = (int) mQueue.size();
-    bool wait = queueSize >= mMaxSize;
-    if (wait) {
-        LOGI("[AVFrameQueue(%s)],isFullWait", mTag)
-        pthread_cond_wait(&mCond, &mMutex);
+    bool wait = false;
+    if (!release) {
+        queueSize = (int) mQueue.size();
+        wait = queueSize >= mMaxSize;
+        if (wait) {
+            LOGI("[AVFrameQueue(%s)],isFullWait", mTag)
+            pthread_cond_wait(&mCond, &mMutex);
+        }
     }
     pthread_mutex_unlock(&mMutex);
 
@@ -189,7 +193,14 @@ void AVFrameQueue::wait(unsigned int timeOutMs) {
 }
 
 void AVFrameQueue::notify() {
+    notify(false);
+}
+
+void AVFrameQueue::notify(bool release) {
     pthread_mutex_lock(&mMutex);
+    if (!this->release) {
+        this->release = release;
+    }
     pthread_cond_broadcast(&mCond);
     pthread_mutex_unlock(&mMutex);
 }
@@ -205,10 +216,12 @@ int64_t AVFrameQueue::getSize() {
 void AVFrameQueue::checkEmptyWait() {
     LOGI("[AVFrameQueue(%s)] checkEmptyWait start", mTag)
     pthread_mutex_lock(&mMutex);
-    int64_t size = (int64_t) mQueue.size();
-    if (size <= 0) {
-        LOGI("[AVFrameQueue(%s)] empty,wait", mTag)
-        pthread_cond_wait(&mCond, &mMutex);
+    if (!release) {
+        int64_t size = (int64_t) mQueue.size();
+        if (size <= 0) {
+            LOGI("[AVFrameQueue(%s)] empty,wait", mTag)
+            pthread_cond_wait(&mCond, &mMutex);
+        }
     }
     pthread_mutex_unlock(&mMutex);
     LOGI("[AVFrameQueue(%s)] checkEmptyWait end", mTag)

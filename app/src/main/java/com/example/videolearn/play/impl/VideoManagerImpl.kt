@@ -4,8 +4,6 @@ import android.media.MediaFormat
 import com.example.play.IPlayListener
 import com.example.play.PlayManager
 import com.example.play.TrackInterceptor
-import com.example.play.utils.DecodeUtils
-import com.example.play.utils.FFMpegUtils
 import com.example.videolearn.play.Operate
 import com.example.videolearn.play.PlaybackControlApi
 import com.norman.android.hdrsample.opengl.GLEnvConfigSimpleChooser
@@ -59,30 +57,7 @@ open class VideoManagerImpl<T : Operate>(protected val path: String, protected v
 
     override fun start() {
         LogUtils.i(TAG, "start ${operate}")
-        if (operate is Operate.EditingOperate) {
-            operate.onIs<Operate.EditingOperate> { operate ->
-                DecodeUtils.startDecode(path, destPath = operate.destPath, startTime = operate.startTime, endTime = operate.startTime + operate.allTime, config = operate.outConfig, object : FFMpegUtils.VideoCuttingInterface {
-                    override fun onStart() {
-                        operate.editingCallback.onStart()
-                    }
-
-                    override fun onProgress(progress: Double) {
-                        operate.editingCallback.onEditingProgress(progress)
-                    }
-
-                    override fun onFail(resultCode: Int) {
-                        operate.editingCallback.onFail(resultCode)
-                    }
-
-                    override fun onDone() {
-                        operate.editingCallback.onEditingDone()
-                    }
-                })
-                playManager.start()
-            }
-        } else {
-            playManager.start()
-        }
+        playManager.start()
     }
 
     override fun stop() {

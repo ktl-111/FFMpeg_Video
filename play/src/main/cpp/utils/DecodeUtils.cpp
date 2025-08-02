@@ -280,12 +280,6 @@ Java_com_example_play_utils_DecodeUtils_nativeCutting(JNIEnv *env, jobject thiz,
         return;
     }
 
-    LOGI("cutting seek %f", start_time / av_q2d(inTimeBase))
-    if (start_time > 0) {
-        avformat_seek_file(inFormatContext, inStreamIndex, INT64_MIN,
-                           start_time / av_q2d(inTimeBase), INT64_MAX, 0);
-    }
-
     frameCount = outFps * (end_time - start_time);
     progress += 1;
     env->CallVoidMethod(callback, onProgress, progress);

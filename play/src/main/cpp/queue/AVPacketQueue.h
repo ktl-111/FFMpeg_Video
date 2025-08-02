@@ -25,6 +25,7 @@ public:
     void clear();
 
     bool isFull();
+
     bool isFullWait();
 
     void checkEmptyWait();
@@ -36,9 +37,11 @@ public:
     void wait(unsigned int timeOutMs = -1);
 
     void notify();
+    void notify(bool release);
 
 private:
     int64_t mMaxSize = 60;
+    bool release = true;//queue有加锁等待，避免stop后释放不了锁，导致anr，添加变量控制是否需要加锁等待
 
     std::queue<AVPacket *> mQueue;
 

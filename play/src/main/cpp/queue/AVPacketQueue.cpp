@@ -3,6 +3,7 @@
 #include "Logger.h"
 
 AVPacketQueue::AVPacketQueue(int64_t maxSize) {
+    release = false;
     pthread_mutex_init(&mMutex, nullptr);
     pthread_cond_init(&mCond, nullptr);
     mMaxSize = maxSize;
@@ -82,7 +83,14 @@ void AVPacketQueue::wait(unsigned int timeOutMs) {
 }
 
 void AVPacketQueue::notify() {
+    notify(false);
+}
+
+void AVPacketQueue::notify(bool release) {
     pthread_mutex_lock(&mMutex);
+    if (!this->release) {
+        this->release = release;
+    }
     pthread_cond_broadcast(&mCond);
     pthread_mutex_unlock(&mMutex);
 }
@@ -90,10 +98,12 @@ void AVPacketQueue::notify() {
 void AVPacketQueue::checkEmptyWait() {
     LOGI("[AVPacketQueue] checkEmptyWait start")
     pthread_mutex_lock(&mMutex);
-    int64_t size = (int64_t) mQueue.size();
-    if (size <= 0) {
-        LOGI("[AVPacketQueue] empty,wait")
-        pthread_cond_wait(&mCond, &mMutex);
+    if (!release) {
+        int64_t size = (int64_t) mQueue.size();
+        if (size <= 0) {
+            LOGI("[AVPacketQueue] empty,wait")
+            pthread_cond_wait(&mCond, &mMutex);
+        }
     }
     pthread_mutex_unlock(&mMutex);
     LOGI("[AVPacketQueue] checkEmptyWait end")
@@ -102,10 +112,12 @@ void AVPacketQueue::checkEmptyWait() {
 void AVPacketQueue::checkNotEmptyWait() {
     LOGI("[AVPacketQueue] checkEmptyWait start")
     pthread_mutex_lock(&mMutex);
-    int64_t size = (int64_t) mQueue.size();
-    if (size != 0) {
-        LOGI("[AVPacketQueue] not empty,wait")
-        pthread_cond_wait(&mCond, &mMutex);
+    if (!release) {
+        int64_t size = (int64_t) mQueue.size();
+        if (size != 0) {
+            LOGI("[AVPacketQueue] not empty,wait")
+            pthread_cond_wait(&mCond, &mMutex);
+        }
     }
     pthread_mutex_unlock(&mMutex);
     LOGI("[AVPacketQueue] checkEmptyWait end")

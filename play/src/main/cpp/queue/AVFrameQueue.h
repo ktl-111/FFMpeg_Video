@@ -48,6 +48,7 @@ public:
     void wait(unsigned int timeOutMs = -1);
 
     void notify();
+    void notify(bool release);
 
     AVFrame *getFrameByTime(int64_t time, bool findBack);
 
@@ -56,7 +57,7 @@ public:
     int64_t mMaxSize = 60;
 private:
     std::deque<AVFrame *> mQueue;
-
+    bool release = true;
     pthread_cond_t mCond{};
     pthread_mutex_t mMutex{};
     pthread_mutexattr_t attr;
