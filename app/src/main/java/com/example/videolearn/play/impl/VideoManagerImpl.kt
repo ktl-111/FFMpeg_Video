@@ -1,12 +1,13 @@
-package com.example.videolearn.play
+package com.example.videolearn.play.impl
 
 import android.media.MediaFormat
 import com.example.play.IPlayListener
 import com.example.play.PlayManager
-import com.example.play.Step
 import com.example.play.TrackInterceptor
 import com.example.play.utils.DecodeUtils
 import com.example.play.utils.FFMpegUtils
+import com.example.videolearn.play.Operate
+import com.example.videolearn.play.PlaybackControlApi
 import com.norman.android.hdrsample.opengl.GLEnvConfigSimpleChooser
 import com.norman.android.hdrsample.opengl.GLEnvContextManager
 import com.norman.android.hdrsample.opengl.GLEnvDisplay
@@ -33,15 +34,14 @@ import com.norman.android.hdrsample.util.TimeUtil
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.asCoroutineDispatcher
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.util.concurrent.Executors
 
-class VideoManagerImpl(private val path: String, private val operate: Operate, private val videoFormat: MediaFormat) : VideoPlaybackApi, TrackControlApi, VideoEditingApi {
-    private val TAG = "VideoManagerImpl"
-    private val mediaScope: CoroutineScope = CoroutineScope(Executors.newSingleThreadExecutor { runnable ->
+open class VideoManagerImpl<T : Operate>(protected val path: String, protected val operate: T, protected val videoFormat: MediaFormat) : PlaybackControlApi {
+    protected val TAG = "VideoManagerImpl"
+    protected val mediaScope: CoroutineScope = CoroutineScope(Executors.newSingleThreadExecutor { runnable ->
         val t = Thread(runnable)
         t.name = "video_$operate"
         if (t.isDaemon) t.isDaemon = false
@@ -50,7 +50,7 @@ class VideoManagerImpl(private val path: String, private val operate: Operate, p
     }.asCoroutineDispatcher() + CoroutineExceptionHandler { coroutineContext, throwable ->
         LogUtils.e(TAG, "CoroutineExceptionHandler ${throwable.message}")
     })
-    private val playManager: PlayManager
+    protected val playManager: PlayManager
 
     init {
         playManager = initPlayManager(path, operate)
@@ -59,23 +59,23 @@ class VideoManagerImpl(private val path: String, private val operate: Operate, p
 
     override fun start() {
         LogUtils.i(TAG, "start ${operate}")
-        if (operate is Operate.CuttingOperate) {
-            operate.onIs<Operate.CuttingOperate> { operate ->
+        if (operate is Operate.EditingOperate) {
+            operate.onIs<Operate.EditingOperate> { operate ->
                 DecodeUtils.startDecode(path, destPath = operate.destPath, startTime = operate.startTime, endTime = operate.startTime + operate.allTime, config = operate.outConfig, object : FFMpegUtils.VideoCuttingInterface {
                     override fun onStart() {
-                        operate.cuttingCallback.onStart()
+                        operate.editingCallback.onStart()
                     }
 
                     override fun onProgress(progress: Double) {
-                        operate.cuttingCallback.onCuttingProgress(progress)
+                        operate.editingCallback.onEditingProgress(progress)
                     }
 
                     override fun onFail(resultCode: Int) {
-                        operate.cuttingCallback.onFail(resultCode)
+                        operate.editingCallback.onFail(resultCode)
                     }
 
                     override fun onDone() {
-                        operate.cuttingCallback.onCuttingDone()
+                        operate.editingCallback.onEditingDone()
                     }
                 })
                 playManager.start()
@@ -98,11 +98,6 @@ class VideoManagerImpl(private val path: String, private val operate: Operate, p
     override fun pause() {
         LogUtils.i(TAG, "pause ${operate}")
         playManager.pause()
-    }
-
-    override fun seek(time: Long, nextStep: Step) {
-        LogUtils.i(TAG, "seek ${operate},time:${time},nextSetp:${nextStep}")
-        playManager.seekTo(time, nextStep)
     }
 
 
@@ -246,26 +241,12 @@ class VideoManagerImpl(private val path: String, private val operate: Operate, p
                     override fun onVideoConfig(witdh: Int, height: Int, duration: Double, fps: Double, rotation: Int) {
                     }
 
-                    var preTime = -1;
-
                     override fun onPlayProgress(frame: ByteBuffer?, time: Double) {
                         LogUtils.i(TAG, "onPlayProgress time:${time}")
                         runBlocking(mediaScope.coroutineContext) {
                             LogUtils.i(TAG, "onPlayProgress time:${time}")
-                            if (operate is Operate.TrackOperate) {
-                                val currTime = (time / 1000).toInt()
-                                if (preTime == currTime) {
-                                    return@runBlocking
-                                }
-                                preTime = currTime
-                            }
-                            if (operate is Operate.CuttingOperate) {
-                                if (!operate.callFirstSeek) {
-                                    operate.callFirstSeek = true
-                                    mediaScope.launch {
-                                        seek(operate.startTime, Step.PlayStep)
-                                    }
-                                }
+                            if (updateProgressPreCheck(time.toLong())) {
+                                return@runBlocking
                             }
 
                             LogUtils.i(TAG, "start gl parse operate:${operate}")
@@ -321,26 +302,10 @@ class VideoManagerImpl(private val path: String, private val operate: Operate, p
                                     }
                                 }
 
-                                is Operate.TrackOperate, is Operate.CuttingOperate -> {
+                                is Operate.TrackOperate, is Operate.EditingOperate -> {
                                     pboTarget.setTime(timeUs)
                                     pboTarget.setBufferCallback { buffer ->
-                                        when (operate) {
-                                            is Operate.CuttingOperate -> {
-                                                val result = DecodeUtils.writeData(buffer, time.toLong())
-                                                if (result == 10000) {
-                                                    DecodeUtils.endDecode()
-                                                    playManager.stop()
-                                                }
-                                            }
-
-                                            is Operate.TrackOperate -> {
-                                                operate.trackCallback.onVideoTrackResult(buffer, videoWidth, videoHeight, time.toLong())
-                                            }
-
-                                            else -> {
-                                                buffer.rewind()
-                                            }
-                                        }
+                                        updateProgressFrame(buffer, videoWidth, videoHeight, time.toLong())
                                     }
                                     frontTarget.startRender()
                                     pboTarget.startRender()
@@ -365,7 +330,7 @@ class VideoManagerImpl(private val path: String, private val operate: Operate, p
                 if (operate is Operate.TrackOperate) {
                     setTrackInterceptor(object : TrackInterceptor {
                         override fun onStart(duration: Double): LongArray {
-                            return operate.trackCallback.videoTrackInterval(duration.toLong())
+                            return operate.videoTrackCallback.videoTrackInterval(duration.toLong())
                         }
 
                     })
@@ -376,5 +341,7 @@ class VideoManagerImpl(private val path: String, private val operate: Operate, p
         }
     }
 
-    private val writedata = Executors.newSingleThreadExecutor()
+    protected open fun updateProgressPreCheck(time: Long): Boolean = false
+    protected open fun updateProgressFrame(buffer: ByteBuffer, width: Int, height: Int, time: Long) {}
+
 }

@@ -3,6 +3,9 @@ package com.example.videolearn.play
 import android.media.MediaExtractor
 import android.media.MediaFormat
 import android.util.Log
+import com.example.videolearn.play.impl.TrackControlImpl
+import com.example.videolearn.play.impl.VideoEditingImpl
+import com.example.videolearn.play.impl.VideoPlayBackImpl
 import com.norman.android.hdrsample.player.color.ColorSpace
 import com.norman.android.hdrsample.util.LogUtils
 import com.norman.android.hdrsample.util.MediaFormatUtil
@@ -50,19 +53,19 @@ class VideoManager(private val path: String) {
     }
 
     fun getPlayManager(operate: Operate.PlayOperate): VideoPlaybackApi {
-        return VideoManagerImpl(path = path, operate = operate, videoFormat = videoFormat!!).also {
+        return VideoPlayBackImpl(path = path, operate = operate, videoFormat = videoFormat!!).also {
             LogUtils.i(TAG, "getPlayManager")
         }
     }
 
     fun getTrackManager(operate: Operate.TrackOperate): TrackControlApi {
-        return VideoManagerImpl(path = path, operate = operate, videoFormat = videoFormat!!).also {
+        return TrackControlImpl(path = path, operate = operate, videoFormat = videoFormat!!).also {
             LogUtils.i(TAG, "getTrackManager")
         }
     }
 
-    fun getCuttingManager(operate: Operate.CuttingOperate): VideoEditingApi {
-        return VideoManagerImpl(path = path, operate = operate, videoFormat = videoFormat!!).also {
+    fun getCuttingManager(operate: Operate.EditingOperate): VideoEditingApi {
+        return VideoEditingImpl(path = path, operate = operate, videoFormat = videoFormat!!).also {
             LogUtils.i(TAG, "getCuttingManager")
         }
     }

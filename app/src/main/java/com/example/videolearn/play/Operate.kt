@@ -10,12 +10,13 @@ sealed class Operate(val outConfig: OutConfig, val textureIndex: Int) {
         override fun toString() = "PlayOperate(${hashCode()})"
     }
 
-    class CuttingOperate(outConfig: OutConfig = OutConfig(), val destPath: String, val startTime: Long, val allTime: Long, val cuttingCallback: CuttingCallback) : Operate(outConfig, 1) {
+    class EditingOperate(outConfig: OutConfig = OutConfig(), val destPath: String, val startTime: Long, val allTime: Long, val editingCallback: EditingCallback) : Operate(outConfig, 1) {
         internal var callFirstSeek = false
-        override fun toString() = "CuttingOperate(${hashCode()})"
+        internal var cuttingDone = false
+        override fun toString() = "EditingOperate(${hashCode()})"
     }
 
-    class TrackOperate(outConfig: OutConfig, val trackCallback: VideoTrackCallback) : Operate(outConfig, 2) {
+    class TrackOperate(outConfig: OutConfig, val videoTrackCallback: VideoTrackCallback) : Operate(outConfig, 2) {
         override fun toString() = "TrackOperate(${hashCode()})"
     }
 }

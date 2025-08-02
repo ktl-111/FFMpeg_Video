@@ -33,7 +33,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.example.play.config.OutConfig
 import com.example.videolearn.BaseActivity
-import com.example.videolearn.play.CuttingCallback
+import com.example.videolearn.play.EditingCallback
 import com.example.videolearn.play.Operate
 import com.example.videolearn.play.PlayCallback
 import com.example.videolearn.play.PlaybackControlApi
@@ -95,16 +95,16 @@ class GLVideoActivity : BaseActivity() {
         val destPath = outFile.absolutePath
         val startTime: Long = 0
         val allTime: Long = 5000
-        val cuttingManager = videoManager.getCuttingManager(Operate.CuttingOperate(OutConfig(fps = 24, scale = 0.3), destPath, startTime, allTime, object : CuttingCallback {
+        val cuttingManager = videoManager.getCuttingManager(Operate.EditingOperate(OutConfig(fps = 24, scale = 0.3), destPath, startTime, allTime, object : EditingCallback {
             override fun onStart() {
                 LogUtils.i(TAG, "cutting start")
             }
 
-            override fun onCuttingProgress(progress: Double) {
+            override fun onEditingProgress(progress: Double) {
                 LogUtils.i(TAG, "cutting onCuttingProgress:${progress}")
             }
 
-            override fun onCuttingDone() {
+            override fun onEditingDone() {
                 LogUtils.i(TAG, "cutting onCuttingDone")
             }
 
@@ -121,7 +121,7 @@ class GLVideoActivity : BaseActivity() {
         val videoFormat = videoManager.videoFormat
         val duration = MediaFormatUtil.getLong(videoFormat, MediaFormat.KEY_DURATION) / 1000.0 / 1000.0
         val trackManager = videoManager.getTrackManager(Operate.TrackOperate(OutConfig(scale = 0.1), object : VideoTrackCallback {
-            override fun onVideoTrackResult(byteBuffer: ByteBuffer, width: Int, height: Int, time: Long) {
+            override fun onVideoTrackUpdate(byteBuffer: ByteBuffer, width: Int, height: Int, time: Long) {
                 videoList.add(BitmapBean(byteBuffer.toBitmap(width, height), (time)))
             }
 

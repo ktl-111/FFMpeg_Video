@@ -9,13 +9,13 @@ interface PlayCallback {
 }
 
 interface VideoTrackCallback {
-    fun onVideoTrackResult(byteBuffer: ByteBuffer, width: Int, height: Int, time: Long)
+    fun onVideoTrackUpdate(byteBuffer: ByteBuffer, width: Int, height: Int, time: Long)
     fun videoTrackInterval(videoDuration: Long): LongArray
 }
 
-interface CuttingCallback {
+interface EditingCallback {
     fun onStart()
-    fun onCuttingProgress(progress: Double)
-    fun onCuttingDone()
+    fun onEditingProgress(progress: Double)
+    fun onEditingDone()
     fun onFail(errorCode: Int)
 }

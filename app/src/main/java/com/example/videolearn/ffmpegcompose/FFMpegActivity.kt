@@ -69,10 +69,9 @@ import com.example.play.utils.FFMpegUtils
 import com.example.play.utils.LogProxy
 import com.example.play.utils.MediaScope
 import com.example.videolearn.ffmpegcompose.bean.VideoBean
-import com.example.videolearn.play.CuttingCallback
+import com.example.videolearn.play.EditingCallback
 import com.example.videolearn.play.Operate
 import com.example.videolearn.play.PlayCallback
-import com.example.videolearn.play.PlaybackControlApi
 import com.example.videolearn.play.VideoControlApi
 import com.example.videolearn.play.VideoManager
 import com.example.videolearn.play.VideoPlaybackApi
@@ -250,7 +249,7 @@ class FFMpegActivity : AppCompatActivity(), LogProxy {
     private fun resume() {
         Log.i(TAG, "resume: ")
         videoApiMutableMap.values.forEach {
-            if (it is PlaybackControlApi) {
+            if (it is VideoPlaybackApi) {
                 it.resume()
             }
         }
@@ -259,7 +258,7 @@ class FFMpegActivity : AppCompatActivity(), LogProxy {
     private fun pause() {
         Log.i(TAG, "pause: ")
         videoApiMutableMap.values.forEach {
-            if (it is PlaybackControlApi) {
+            if (it is VideoPlaybackApi) {
                 it.pause()
             }
         }
@@ -344,17 +343,17 @@ class FFMpegActivity : AppCompatActivity(), LogProxy {
             val allTime = (5_000).toLong()
             val currentTimeMillis = System.currentTimeMillis()
             Log.i(TAG, "cutting file:${outFile.absolutePath} startTime:${startTime}")
-            videoManager.getCuttingManager(Operate.CuttingOperate(outConfig = OutConfig(fps = 24, scale = 0.3), destPath = destPath, startTime = startTime, allTime = allTime, cuttingCallback = object : CuttingCallback {
+            videoManager.getCuttingManager(Operate.EditingOperate(outConfig = OutConfig(fps = 24, scale = 0.3), destPath = destPath, startTime = startTime, allTime = allTime, editingCallback = object : EditingCallback {
                 override fun onStart() {
                 }
 
-                override fun onCuttingProgress(progress: Double) {
+                override fun onEditingProgress(progress: Double) {
                     MediaScope.launch(Dispatchers.Main) {
                         mCuttingProgress.value = progress;
                     }
                 }
 
-                override fun onCuttingDone() {
+                override fun onEditingDone() {
                     val cost = System.currentTimeMillis() - currentTimeMillis
                     Log.i(TAG, "onDone: $cost")
                     MediaScope.launch(Dispatchers.Main) {
@@ -367,7 +366,6 @@ class FFMpegActivity : AppCompatActivity(), LogProxy {
                 }
 
             })).also {
-                videoApiMutableMap["cutting"] = it
                 it.start()
             }
         }
@@ -418,8 +416,8 @@ class FFMpegActivity : AppCompatActivity(), LogProxy {
         }
         videoList.clear()
         videoList.addAll(list)
-        videoManager.getTrackManager(Operate.TrackOperate(outConfig = OutConfig(scale = 0.1), trackCallback = object : VideoTrackCallback {
-            override fun onVideoTrackResult(byteBuffer: ByteBuffer, width: Int, height: Int, time: Long) {
+        videoManager.getTrackManager(Operate.TrackOperate(outConfig = OutConfig(scale = 0.1), videoTrackCallback = object : VideoTrackCallback {
+            override fun onVideoTrackUpdate(byteBuffer: ByteBuffer, width: Int, height: Int, time: Long) {
                 val bitmap = byteBuffer.toBitmap(width, height)
                 val index = (time / 1000).toInt()
                 val videoBean = videoList[index]
