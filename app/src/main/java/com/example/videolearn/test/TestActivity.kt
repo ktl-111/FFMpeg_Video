@@ -1,9 +1,13 @@
 package com.example.videolearn.test
 
 import android.os.Bundle
+import android.os.Handler
 import android.view.SurfaceView
 import android.view.View
+import androidx.activity.compose.setContent
 import androidx.appcompat.app.AppCompatActivity
+import androidx.compose.material.AlertDialog
+import androidx.lifecycle.ViewModelProvider
 import com.example.videolearn.R
 import com.example.videolearn.utils.ResultUtils
 
