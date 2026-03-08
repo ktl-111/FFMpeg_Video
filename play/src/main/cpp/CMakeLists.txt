@@ -40,6 +40,12 @@ add_library(ffmpegplayer SHARED
         ${CONFIGESOURCE}
         ${YUVSOURCE})
 
+# 方法1：添加链接器选项 - 推荐用于CMake 3.13+
+target_link_options(ffmpegplayer PRIVATE "-Wl,-z,max-page-size=16384")
+
+# 同时添加common-page-size以确保完全对齐
+target_link_options(ffmpegplayer PRIVATE "-Wl,-z,common-page-size=16384")
+
 target_link_libraries(
         ffmpegplayer
         log
