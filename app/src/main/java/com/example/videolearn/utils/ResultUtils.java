@@ -1,7 +1,6 @@
 package com.example.videolearn.utils;
 
 import android.content.Intent;
-import android.os.Handler;
 
 import androidx.fragment.app.Fragment;
 import androidx.fragment.app.FragmentActivity;

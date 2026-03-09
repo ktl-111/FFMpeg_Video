@@ -26,7 +26,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.example.videolearn.ffmpegcompose.FFMpegActivity
 import com.example.videolearn.live.LiveActivity
-import com.example.videolearn.recoder.TextureViewRecordingActivity
 import com.example.videolearn.shotscreen.ShotScreenActivity
 import com.example.videolearn.test.ParseDataActivity
 import com.example.videolearn.test.TestActivity
@@ -40,16 +39,13 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
-            RootView()
+            rootView()
         }
     }
 
     @Composable
-    private fun RootView() {
+    private fun rootView() {
         Column {
-            button("Recorder") {
-                startActivity(Intent(this@MainActivity, TextureViewRecordingActivity::class.java))
-            }
             button("test") {
                 test()
             }
